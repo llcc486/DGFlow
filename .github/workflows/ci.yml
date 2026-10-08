@@ -1,0 +1,150 @@
+name: ci
+
+# The base matrix checks the Python fallback. Dedicated jobs require the
+# frontend, CPU CNN training and a freshly built Lego-capable Rust extension.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.os }} / py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Lint
+        run: python -m ruff check src tests
+
+      - name: Test
+        run: python -m pytest -q
+
+  frontend:
+    name: Frontend state and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Test comparison and cache state
+        run: npm test
+      - name: Build production frontend
+        run: npm run build
+
+  cnn:
+    name: Required CPU Torch and paper CNN paths
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ".[dev]"
+      - name: Require the CPU Torch backend
+        run: |
+          python - <<'PY'
+          import torch
+          from dgfl.training.paper_models import build_model
+          assert torch.version.cuda is None, 'CI must use CPU Torch wheels'
+          assert next(build_model('paper_cnn_mnist').parameters()).device.type == 'cpu'
+          print('Required CPU Torch:', torch.__version__)
+          PY
+      - name: Test training, full CNN updates and Torch parity
+        run: python -m pytest -q tests/training --junitxml=cnn-results.xml
+      - name: Fail if any required training test was skipped
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse('cnn-results.xml').findall('.//testcase')
+          assert cases, 'No training tests were collected'
+          assert not any(case.find('skipped') is not None for case in cases), 'Required training tests were skipped'
+          PY
+
+  native-lego:
+    name: Required native Rust and Lego proof paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/dgfl-native -> target
+      - name: Install build and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" "maturin>=1.8,<2"
+      - name: Build native extension from locked Rust sources
+        run: python -m maturin build --release --locked --manifest-path native/dgfl-native/Cargo.toml --out "${{ runner.temp }}/dgfl-native-wheels"
+      - name: Install the freshly built extension
+        run: python -m pip install --force-reinstall "${{ runner.temp }}"/dgfl-native-wheels/*.whl
+      - name: Require native arithmetic and persistent Lego parameters
+        run: |
+          python - <<'PY'
+          import dgfl_native
+          from dgfl.crypto.backend import NATIVE_EXTENSION
+          from dgfl.crypto.lego_registry import available
+          assert NATIVE_EXTENSION, 'Native arithmetic fallback must not hide a broken build'
+          assert available(), 'Lego proving/verifying and persistent parameter APIs are required'
+          assert hasattr(dgfl_native.LegoVerifier, 'verify_linked'), 'Full native linked verification is required'
+          assert hasattr(dgfl_native, 'VerifiedLego'), 'Checked ciphertext reuse is required'
+          assert hasattr(dgfl_native, 'PublicAggregateVerifier'), 'Complete aggregate proof verification is required'
+          print('Required native extension:', dgfl_native.__file__)
+          PY
+      - name: Test native interoperability, Lego binding and role integration
+        run: >-
+          python -m pytest -q
+          tests/crypto/test_backend.py
+          tests/crypto/test_acceleration.py::test_native_gt_and_public_fixed_tables_match_upstream
+          tests/crypto/test_lego.py tests/crypto/test_lego_registry.py
+          tests/crypto/test_aggregate_native.py tests/crypto/test_partial_decryption.py
+          tests/integration/test_lego_roles.py tests/experiments/test_runner_lego.py
+          --junitxml=native-lego-results.xml
+      - name: Fail if any required native or Lego test was skipped
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse('native-lego-results.xml').findall('.//testcase')
+          assert cases, 'No native/Lego tests were collected'
+          assert not any(case.find('skipped') is not None for case in cases), 'Required native/Lego tests were skipped'
+          PY

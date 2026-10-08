@@ -1,0 +1,17 @@
+[
+  {
+    "path": "docs/research/evidence/combine-optimization-20261004/baseline-source.zip",
+    "source_files": 30,
+    "sha256": "8b8382187b31589c6efe6625c5fbca6921d19e515fffffd623415b229552f32c"
+  },
+  {
+    "path": "docs/research/evidence/combine-optimization-20261004/checked-source.zip",
+    "source_files": 30,
+    "sha256": "7a9621ce47de367859951ecca37a7802ef5fb79d9cd58824d18b79aaa6b3f5cc"
+  },
+  {
+    "path": "dist/native-baseline-20261004/dgfl_native-0.2.0-cp312-cp312-win_amd64.whl",
+    "sha256": "bc746190856f8153b891611210048995e012fb1ab52507f160ad8c792c35a613",
+    "delivery": "separate local wheel, excluded from complete source ZIP"
+  }
+]

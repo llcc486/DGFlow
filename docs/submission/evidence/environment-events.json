@@ -1,0 +1,8 @@
+{
+  "source": "Windows System log, Microsoft-Windows-Power-Troubleshooter, event 1",
+  "sleep_start_utc": "2026-10-01T10:01:59.535032800Z",
+  "wake_utc": "2026-10-01T12:18:17.387760100Z",
+  "affected_case": "encrypted_sign_flip_43",
+  "affected_run_id": "f0af64bd9b6d44bcbde71d1db89cf112",
+  "handling": "Preserve all raw durations and outcomes. This attack comparison is used for acceptance/accuracy only, not a speed claim. No sleep duration is subtracted from recorded timings."
+}

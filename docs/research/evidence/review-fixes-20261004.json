@@ -1,0 +1,37 @@
+{
+  "release_id": "dgflow-20261004-review1",
+  "date": "2026-10-04",
+  "environment": {
+    "os": "Windows",
+    "python": "3.12.2",
+    "torch": "2.5.1+cpu",
+    "native": "dgfl-native 0.2.0 built from current Cargo.lock"
+  },
+  "python": {
+    "passed": 732,
+    "skipped": 12,
+    "failed": 0
+  },
+  "cnn_and_scheduling": {
+    "passed": 114,
+    "skipped": 0
+  },
+  "native_required": {
+    "passed": 44,
+    "skipped": 0,
+    "wheel_sha256": "cbfb66a7e73a2d26f5d335bbe864fa639429e5b735a1bfb5a6f3a397b0b3a4b0"
+  },
+  "frontend": {
+    "passed": 11,
+    "production_build": true
+  },
+  "control_security": {
+    "passed": 47
+  },
+  "freeze_regressions": {
+    "passed": 5
+  },
+  "ruff": "passed",
+  "remote_ci": "not_run",
+  "performance_650_dimension": "not_rerun"
+}

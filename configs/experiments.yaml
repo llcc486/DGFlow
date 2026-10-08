@@ -1,0 +1,38 @@
+# Predeclared seeds. Do not delete adverse or failed outcomes from the report.
+cases:
+  - name: plain_clean_42
+    config: {mode: plain, rounds: 3, seed: 42, attack: none}
+  - name: optimized_clean_42
+    config: {mode: optimized, rounds: 3, seed: 42, attack: none}
+  - name: dgflow_clean_42
+    config: {mode: dgflow, rounds: 1, seed: 42, attack: none}
+  - name: plain_clean_43
+    config: {mode: plain, rounds: 1, seed: 43, attack: none}
+  - name: optimized_clean_43
+    config: {mode: optimized, rounds: 1, seed: 43, attack: none}
+  - name: dgflow_clean_43
+    config: {mode: dgflow, rounds: 1, seed: 43, attack: none}
+  - name: plain_clean_44
+    config: {mode: plain, rounds: 1, seed: 44, attack: none}
+  - name: optimized_clean_44
+    config: {mode: optimized, rounds: 1, seed: 44, attack: none}
+  - name: dgflow_clean_44
+    config: {mode: dgflow, rounds: 1, seed: 44, attack: none}
+  - name: encrypted_sign_flip_42
+    config: {mode: encrypted, rounds: 1, seed: 42, attack: sign_flip, malicious_clients: 1}
+  - name: optimized_sign_flip_42
+    config: {mode: optimized, rounds: 1, seed: 42, attack: sign_flip, malicious_clients: 1}
+  - name: encrypted_sign_flip_43
+    config: {mode: encrypted, rounds: 1, seed: 43, attack: sign_flip, malicious_clients: 1}
+  - name: optimized_sign_flip_43
+    config: {mode: optimized, rounds: 1, seed: 43, attack: sign_flip, malicious_clients: 1}
+  - name: encrypted_sign_flip_44
+    config: {mode: encrypted, rounds: 1, seed: 44, attack: sign_flip, malicious_clients: 1}
+  - name: optimized_sign_flip_44
+    config: {mode: optimized, rounds: 1, seed: 44, attack: sign_flip, malicious_clients: 1}
+  - name: optimized_tamper_42
+    config: {mode: optimized, rounds: 1, seed: 42, attack: tamper_proof, malicious_clients: 1}
+  - name: optimized_non_iid_42
+    config: {mode: optimized, rounds: 1, seed: 42, attack: none, non_iid: true}
+  - name: optimized_label_flip_42
+    config: {mode: optimized, rounds: 1, seed: 42, attack: label_flip, malicious_clients: 1}

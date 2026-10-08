@@ -1,0 +1,295 @@
+{
+  "scope": "FULL proof generation/checked verification including range, squared norm, ciphertext and registered-key bindings",
+  "settings": {
+    "dimension": 650,
+    "bits": 8,
+    "workers": 4,
+    "samples": 5
+  },
+  "setup": {
+    "wall_ms": 235.2880000253208,
+    "cpu_ms": 703.125
+  },
+  "setup_kind": "local development trusted setup; not a ceremony",
+  "crs_hash": "18f31216ec52268e5e652b6e3f1d97d809b30ae70a2e89346a95aa4441dbf718",
+  "samples": [
+    {
+      "sample": 1,
+      "generation": {
+        "baseline": {
+          "wall_ms": 4042.4840000341646,
+          "cpu_ms": 3906.25
+        },
+        "lego": {
+          "wall_ms": 354.68290001153946,
+          "cpu_ms": 656.25
+        }
+      },
+      "verification": {
+        "baseline": {
+          "deterministic": {
+            "wall_ms": 1230.8787999791093,
+            "cpu_ms": 1062.5
+          },
+          "randomized": {
+            "wall_ms": 658.9998999843374,
+            "cpu_ms": 640.625
+          }
+        },
+        "lego": {
+          "deterministic": {
+            "wall_ms": 610.2939000120386,
+            "cpu_ms": 609.375
+          },
+          "randomized": {
+            "wall_ms": 224.44840002572164,
+            "cpu_ms": 234.375
+          }
+        }
+      },
+      "proof_bytes": {
+        "baseline": 242447,
+        "lego": 144777
+      },
+      "honest_full_proofs_accepted": true,
+      "false_norm_rejected": true
+    },
+    {
+      "sample": 2,
+      "generation": {
+        "lego": {
+          "wall_ms": 342.43920003063977,
+          "cpu_ms": 703.125
+        },
+        "baseline": {
+          "wall_ms": 4108.802600007039,
+          "cpu_ms": 3984.375
+        }
+      },
+      "verification": {
+        "lego": {
+          "deterministic": {
+            "wall_ms": 598.1397000141442,
+            "cpu_ms": 578.125
+          },
+          "randomized": {
+            "wall_ms": 222.4186999956146,
+            "cpu_ms": 203.125
+          }
+        },
+        "baseline": {
+          "deterministic": {
+            "wall_ms": 1214.9565999861807,
+            "cpu_ms": 1187.5
+          },
+          "randomized": {
+            "wall_ms": 640.9596000448801,
+            "cpu_ms": 609.375
+          }
+        }
+      },
+      "proof_bytes": {
+        "lego": 144777,
+        "baseline": 242447
+      },
+      "honest_full_proofs_accepted": true,
+      "false_norm_rejected": true
+    },
+    {
+      "sample": 3,
+      "generation": {
+        "baseline": {
+          "wall_ms": 4083.4138999925926,
+          "cpu_ms": 3921.875
+        },
+        "lego": {
+          "wall_ms": 338.74330000253394,
+          "cpu_ms": 703.125
+        }
+      },
+      "verification": {
+        "baseline": {
+          "deterministic": {
+            "wall_ms": 1211.7462999885902,
+            "cpu_ms": 1156.25
+          },
+          "randomized": {
+            "wall_ms": 647.852799971588,
+            "cpu_ms": 609.375
+          }
+        },
+        "lego": {
+          "deterministic": {
+            "wall_ms": 649.6093000168912,
+            "cpu_ms": 609.375
+          },
+          "randomized": {
+            "wall_ms": 228.66959997918457,
+            "cpu_ms": 203.125
+          }
+        }
+      },
+      "proof_bytes": {
+        "baseline": 242447,
+        "lego": 144777
+      },
+      "honest_full_proofs_accepted": true,
+      "false_norm_rejected": true
+    },
+    {
+      "sample": 4,
+      "generation": {
+        "lego": {
+          "wall_ms": 337.5512000056915,
+          "cpu_ms": 656.25
+        },
+        "baseline": {
+          "wall_ms": 4215.9009000170045,
+          "cpu_ms": 4078.125
+        }
+      },
+      "verification": {
+        "lego": {
+          "deterministic": {
+            "wall_ms": 605.8827999513596,
+            "cpu_ms": 609.375
+          },
+          "randomized": {
+            "wall_ms": 230.09209998417646,
+            "cpu_ms": 234.375
+          }
+        },
+        "baseline": {
+          "deterministic": {
+            "wall_ms": 1215.4113000142388,
+            "cpu_ms": 1171.875
+          },
+          "randomized": {
+            "wall_ms": 668.3531000162475,
+            "cpu_ms": 609.375
+          }
+        }
+      },
+      "proof_bytes": {
+        "lego": 144777,
+        "baseline": 242447
+      },
+      "honest_full_proofs_accepted": true,
+      "false_norm_rejected": true
+    },
+    {
+      "sample": 5,
+      "generation": {
+        "baseline": {
+          "wall_ms": 4137.42819998879,
+          "cpu_ms": 3843.75
+        },
+        "lego": {
+          "wall_ms": 342.41990000009537,
+          "cpu_ms": 718.75
+        }
+      },
+      "verification": {
+        "baseline": {
+          "deterministic": {
+            "wall_ms": 1207.0182000170462,
+            "cpu_ms": 1187.5
+          },
+          "randomized": {
+            "wall_ms": 639.7348000318743,
+            "cpu_ms": 640.625
+          }
+        },
+        "lego": {
+          "deterministic": {
+            "wall_ms": 607.9671999905258,
+            "cpu_ms": 609.375
+          },
+          "randomized": {
+            "wall_ms": 223.17770001245663,
+            "cpu_ms": 203.125
+          }
+        }
+      },
+      "proof_bytes": {
+        "baseline": 242447,
+        "lego": 144777
+      },
+      "honest_full_proofs_accepted": true,
+      "false_norm_rejected": true
+    }
+  ],
+  "medians_wall_ms": {
+    "generation": {
+      "baseline": 4108.802600007039,
+      "lego": 342.41990000009537
+    },
+    "verification": {
+      "baseline": {
+        "deterministic": 1214.9565999861807,
+        "randomized": 647.852799971588
+      },
+      "lego": {
+        "deterministic": 607.9671999905258,
+        "randomized": 224.44840002572164
+      }
+    }
+  },
+  "medians_cpu_ms": {
+    "generation": {
+      "baseline": 3921.875,
+      "lego": 703.125
+    },
+    "verification": {
+      "baseline": {
+        "deterministic": 1171.875,
+        "randomized": 609.375
+      },
+      "lego": {
+        "deterministic": 609.375,
+        "randomized": 203.125
+      }
+    }
+  },
+  "target": {
+    "generation_and_both_verification_modes_under_1000ms_all_samples": true,
+    "max_generation_ms": 354.68290001153946,
+    "max_randomized_verification_ms": 230.09209998417646,
+    "max_deterministic_verification_ms": 649.6093000168912
+  },
+  "source_sha256": {
+    "src/dgfl/crypto/backend.py": "0242efabdcfd2695f822a236cef19b678f2c25059a5c5f0e3ab6180945e57875",
+    "src/dgfl/crypto/ipa.py": "3cb854d341bcdec0f99d8bc273ce65e67f93455d1b1e2034258455f6d5fec67c",
+    "src/dgfl/crypto/compact.py": "924a5bac1eae8c52931f30a5f142eddd274d5e65519182589a3ceaa365c519bd",
+    "src/dgfl/crypto/protocol.py": "2eeb540c9df0f2ac15dd081fa00e3bee10b6d4ab95a3bc57920329ab6c8b8a67",
+    "src/dgfl/crypto/lego.py": "4cfb050151dd708369dd6e39351e0083bf6a20774f3127c75a6eb0d76d45f878",
+    "native/dgfl-native/src/lib.rs": "65af41fcf68a93dcbaee39a3c4a1f5940288c05314da093f5755495c87fa661c",
+    "native/dgfl-native/src/lego.rs": "a5d8e93269f24ecf1bae61cbaf14e9b61594460ab5d4586de0f6260196346158",
+    "native/dgfl-native/src/sigma.rs": "0f0b8b7976c5d2e348867f37e7ad39bbf73e1c0a395fbe5bb05b25728ee6fd57",
+    "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+    "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4",
+    "native/dgfl-native/pyproject.toml": "b55946356672e9167faf49808fef878f86153ebe29e75f3799cc1a0b307569be",
+    "scripts/benchmark_lego_proof.py": "3bd89530aa488a957942b04394968feda3d90346576c7645a90c16d3f5abfbc1",
+    "tests/crypto/test_lego.py": "544dc3cb2ef6951ea54914a42680c2c6040bf45690de71fac76092432b5c8644"
+  },
+  "baseline_sha256": {
+    "src/dgfl/crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+    "src/dgfl/crypto/backend.py": "0242efabdcfd2695f822a236cef19b678f2c25059a5c5f0e3ab6180945e57875",
+    "src/dgfl/crypto/compact.py": "924a5bac1eae8c52931f30a5f142eddd274d5e65519182589a3ceaa365c519bd",
+    "src/dgfl/crypto/ipa.py": "3cb854d341bcdec0f99d8bc273ce65e67f93455d1b1e2034258455f6d5fec67c",
+    "src/dgfl/crypto/protocol.py": "2eeb540c9df0f2ac15dd081fa00e3bee10b6d4ab95a3bc57920329ab6c8b8a67",
+    "src/dgfl/transport/binary.py": "a2b08df507294bb31c47cf8b0e3e340cf5af4ad4bd8e07a51ba0e24055504ab4"
+  },
+  "loaded_native_artifacts": {
+    "tmp/proof-ms-native-final/dgfl_native/dgfl_native.cp312-win_amd64.pyd": "a94803cd8143fb6e48cbf9fa9ed0e99bc6bb6d87c3faabb463a3363fa9768d3a"
+  },
+  "python": "3.12.2 (tags/v3.12.2:6abddd9, Feb  6 2024, 21:26:36) [MSC v.1937 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "curve_package_version": "0.5.0",
+  "limitations": [
+    "local synthetic benchmark excludes DKG/training/RPC",
+    "CRS and public bases prepared offline and retained; every proof/context/key is fresh",
+    "experimental composition has not received an external soundness audit",
+    "trusted setup required; existing task policy does not deploy this backend"
+  ]
+}

@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "created_utc": "2026-10-08T02:43:59.159852+00:00",
+  "release_id": "dgflow-20261008-p1p2-fixes",
+  "scope": "Repair the six actionable P1/P2 audit findings. Preserve reverted aggregation, cryptographic relations, local training, main identities, CRS and existing run records.",
+  "findings": {
+    "A01": {
+      "status": "fixed",
+      "change": "Strict shared request/result contract accepts validated deployment resolution and historical defaults; request declarations remain unchanged, resolved configurations are pinned for later polls and resumes.",
+      "files": [
+        "src/dgfl/experiments/evidence.py",
+        "scripts/run_experiments.py",
+        "scripts/build_report.py"
+      ],
+      "coverage": "Actual RunManager.start configuration, two suite cases, resume without new runs, report loader, historical 18+2 submission records, configuration/topology/owner/run-ID mismatch rejection."
+    },
+    "A02": {
+      "status": "fixed",
+      "change": "Read-only historical stage schema compatibility keeps prepare/commit/metrics children outside the subtotal.",
+      "files": [
+        "web/src/lib/format.js"
+      ],
+      "actual_historical_record": {
+        "run_id": "587e7b955aa6438ebec8d3a29e6364ae",
+        "round": 10,
+        "recorded_duration_s": 46.798643499998434,
+        "before_stage_subtotal_s": 56.29537849999906,
+        "after_stage_subtotal_s": 46.7842399000001,
+        "correct_stage_subtotal_s": 46.7842399000001,
+        "children_still_visible": true
+      }
+    },
+    "A03": {
+      "status": "fixed",
+      "change": "Runtime-scoped OS lifecycle lock covers initialize/configure/start/stop; demo obtains controller ownership before role creation.",
+      "files": [
+        "src/dgfl/deployment.py",
+        "src/dgfl/cli.py"
+      ],
+      "coverage": "Real OS cross-process contention, independent runtimes, reentrancy, exception/crash release, competing startup PID preservation, and control API reconfiguration."
+    },
+    "A04": {
+      "status": "fixed",
+      "change": "Current protocol consistently describes single-owner proof verification, owner trust assumptions, configurable topology/thresholds, binary transcript encoding, actual model limits and exact native GT membership checks.",
+      "files": [
+        "docs/protocol/protocol-v1.md",
+        "docs/protocol/proof-construction.md",
+        "docs/research/hierarchical-topology-20261006.md"
+      ]
+    },
+    "A05": {
+      "status": "fixed",
+      "change": "Updated package scope and release label; dynamic default labels; explicitly exclude locally supplied reference papers from source delivery. Final freeze and archive hash verification run after this evidence is saved to avoid self-reference; see the archive-side release-verification.json for the completed result.",
+      "files": [
+        "SOURCE-PACKAGE.md",
+        "scripts/freeze_source.py"
+      ],
+      "archive": "dist/source-release-p1p2-20261008/source.zip"
+    },
+    "A06": {
+      "status": "fixed_with_component_validation",
+      "change": "Authenticated completion acknowledgement after full digest/decoding; bounded LRU reclaims acknowledged responses only, preserves active download sessions and independent execution guards.",
+      "files": [
+        "src/dgfl/transport/chunking.py",
+        "src/dgfl/transport/client.py",
+        "src/dgfl/services/node.py"
+      ],
+      "coverage": "41 consecutive and 24 parallel completed downloads; incomplete 16-slot limit; forged/incomplete ACK; independent sessions; lost replies and retries; restart; disk and metadata limits.",
+      "compatibility": "New clients accept v1/v2; new nodes return v2. Update controller and roles together. Evicted or expired results fail closed on retry without reexecution.",
+      "limitation": "The n=100,w=17 production-sized topology was not benchmarked; capacity behavior is validated with scaled component messages."
+    }
+  },
+  "verification": {
+    "python_full_suite": {
+      "passed": 2185,
+      "skipped": 12,
+      "failed": 0,
+      "junit": "tmp/p1p2-fixes-20261008/python-results.xml",
+      "skip_groups": {
+        "legacy_inapplicable_compact_format_cases": 6,
+        "windows_symlink_permissions": 2,
+        "optional_pypdf_missing": 4
+      }
+    },
+    "frontend": {
+      "passed": 102,
+      "failed": 0,
+      "build": "passed"
+    },
+    "ruff": "passed for src, tests and changed Python scripts",
+    "focused_checks": {
+      "suite_contract_and_evidence": 65,
+      "deployment": 163,
+      "transport": 111,
+      "final_freeze_source": 5
+    },
+    "isolated_real_role_smoke": {
+      "accepted_clients": [
+        "client1",
+        "client2"
+      ],
+      "authenticated_health": {
+        "aggregator1": {
+          "node_id": "aggregator1",
+          "status": "online"
+        },
+        "aggregator2": {
+          "node_id": "aggregator2",
+          "status": "online"
+        },
+        "authority1": {
+          "node_id": "authority1",
+          "status": "online"
+        },
+        "authority2": {
+          "node_id": "authority2",
+          "status": "online"
+        },
+        "client1": {
+          "node_id": "client1",
+          "status": "online"
+        },
+        "client2": {
+          "node_id": "client2",
+          "status": "online"
+        }
+      },
+      "cleanup": {
+        "missing": [],
+        "refused": [],
+        "stopped": [
+          "aggregator1",
+          "aggregator2",
+          "authority1",
+          "authority2",
+          "client1",
+          "client2"
+        ]
+      },
+      "control": "in-process TestClient; no control listening socket",
+      "create_requests": 2,
+      "dataset_files": {
+        "metadata.json": "e8025a1aab5f8de7368e9ca46272fffb1fc1c84b40c2dac9e49305e0b5035f81",
+        "raw\\t10k-images-idx3-ubyte.gz": "8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6",
+        "raw\\t10k-labels-idx1-ubyte.gz": "f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6",
+        "raw\\train-images-idx3-ubyte.gz": "440fcabf73cc546fa21475e81ea370265605f56be210a4024d2ca8f203523609",
+        "raw\\train-labels-idx1-ubyte.gz": "3552534a0a558bbed6aed32b30c495cca23d567ec52cac8be1a0730e8010255c"
+      },
+      "equivalent_model_hash": "f6c88638aace6b2060cc5eae423004c5b5ef8a54de1ebea9ce9ee90e22de0766",
+      "first_exit_code": 0,
+      "measurement": "wall times recorded for completeness only; concurrent regression testing was active",
+      "passed": true,
+      "ports": {
+        "aggregator1": 63037,
+        "aggregator2": 63038,
+        "authority1": 63035,
+        "authority2": 63036,
+        "client1": 63039,
+        "client2": 63040
+      },
+      "records": {
+        "plain_smoke": {
+          "client_authorities": {
+            "client1": "authority1",
+            "client2": "authority2"
+          },
+          "completed_rounds": 1,
+          "elapsed_s": 0.6077228000067407,
+          "resolved_counts": {
+            "aggregator_count": 2,
+            "authority_count": 2,
+            "client_count": 2
+          },
+          "run_id": "ac0f577b2297491f883902a7a5cde08d",
+          "status": "completed"
+        },
+        "secure_smoke": {
+          "client_authorities": {
+            "client1": "authority1",
+            "client2": "authority2"
+          },
+          "completed_rounds": 1,
+          "elapsed_s": 2.295533200012869,
+          "resolved_counts": {
+            "aggregator_count": 2,
+            "authority_count": 2,
+            "client_count": 2
+          },
+          "run_id": "d29fd1dbbdd74e9f913d6b93d9d3d304",
+          "status": "completed"
+        }
+      },
+      "remaining_pid_records": [],
+      "resume_created_runs": 0,
+      "resume_exit_code": 0,
+      "runtime": "tmp\\p1p2-fixes-20261008\\live-smoke\\runtime",
+      "scope": "isolated two-case real-role smoke; not a scale/performance benchmark",
+      "started": [
+        "authority1",
+        "authority2",
+        "aggregator1",
+        "aggregator2",
+        "client1",
+        "client2"
+      ],
+      "stopped": [
+        "aggregator1",
+        "aggregator2",
+        "authority1",
+        "authority2",
+        "client1",
+        "client2"
+      ]
+    }
+  },
+  "source_changes_against_rollback_baseline": [
+    "dgfl/cli.py",
+    "dgfl/deployment.py",
+    "dgfl/experiments/evidence.py",
+    "dgfl/services/node.py",
+    "dgfl/transport/chunking.py",
+    "dgfl/transport/client.py"
+  ],
+  "current_source_sha256": {
+    "dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+    "dgfl/cli.py": "262b881b1ea8f4a99deea259448d722d93f9022b590a5b6900a2275d969796fb",
+    "dgfl/crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+    "dgfl/crypto/backend.py": "3c06d903407b4c8e4bc66a9f1b1cc6b7439e8907395049367589da5883a60e69",
+    "dgfl/crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+    "dgfl/crypto/cuda/field.cuh": "5082ebfc97d007cd6514c5d00d7a5bf872d8783162b28b16c5ff2425e7842748",
+    "dgfl/crypto/cuda/g1.cuh": "5c61db5010316ea77450aa4eef9170b78e9e2e8a59a95f0f74bad3c8dca7cadf",
+    "dgfl/crypto/cuda/gt.cuh": "d1d64e7989463de4767e662f026d65954deaf3f2c5c0feb191e0698354a4fa30",
+    "dgfl/crypto/cuda_scheduler.py": "b80eaf5df5dc609dc8c494bac3ebb33b75b92183f47a78a0ebb39704a6e09643",
+    "dgfl/crypto/gpu.py": "e52596520da357521c9591d822c7692e16f7c275342c2220fb484235dc7cc0a5",
+    "dgfl/crypto/gpu_profile.py": "502b3408fbb57e5d31bb64494c6359cb4e7f7c0ad622773b4eaee506fa7157ba",
+    "dgfl/crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+    "dgfl/crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+    "dgfl/crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+    "dgfl/crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+    "dgfl/crypto/protocol.py": "3bced67cadbc7d7c4f0852c96007da030b713c67506ea87980523eaf553f74ea",
+    "dgfl/deployment.py": "b57ffd359887b6b610b12cd5e28c1def0333721a37a64cbe829def22a2ccd8f5",
+    "dgfl/experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+    "dgfl/experiments/evidence.py": "b47bd9628041193476b408b9a57e67b64edadca4c97e304ef783b2b18ae14ce0",
+    "dgfl/experiments/hardware.py": "b1f755c61ad82b8dfa3ce5abb5c0a113b022c1ec482d04accd4ce70320a57307",
+    "dgfl/experiments/resources.py": "4c61be0c2d437da8d4815d65273105521bdcf8bca426b4761677d17bdffb0107",
+    "dgfl/experiments/runner.py": "0c84c0cf580af1b88bb682b36c18c37d1a3a7ac9950cb7592d0918bdc7b48dc7",
+    "dgfl/experiments/telemetry.py": "2c230093c95bfa4de1c90bc76265194fb8cbde43afa746624420e8dfdf3f1f2f",
+    "dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+    "dgfl/services/control.py": "eea0cac8a66432a8791cc0ef5df51740012b061944909f2d66d72922b3185db1",
+    "dgfl/services/node.py": "3489e6544770854df5a74b2f39d89aa87919a3454c87b5c5244a9e6e5600d455",
+    "dgfl/services/roles.py": "c4470d202a87d6da2869962129f8380689cff0bfc15edc9bee94e2973b353df6",
+    "dgfl/system_info.py": "7a89f8f4d9ecec35fdb72117af7be01680316e779eb290f282a94ee00174eaef",
+    "dgfl/topology.py": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+    "dgfl/training/__init__.py": "3b3832e90d3052d1fa5d8b0aaa19558513409cef1a4d1921aa70bfb9039b244d",
+    "dgfl/training/cifar10.py": "3e0221517276f3121ad17dfb974a042232b39673971eac313a2f024db07e1c71",
+    "dgfl/training/data.py": "d2399243e529758738078dd29486d271509b3c1dc78e9886abf3ad3e5b816514",
+    "dgfl/training/datasets.py": "e5ae4aadd0aa267c4c8a5fdb0f27ff022f0acb66fb601f7f25c52eea4c7fd4b8",
+    "dgfl/training/model.py": "cd4eb16093f17490dca5c422f1f8b95493da69c356493069b6a05a8142fc842b",
+    "dgfl/training/paper_models.py": "f5861fba21c81a11f017a1ceb02d83cdfb6c8adf268b4d1cc4bda809564e2655",
+    "dgfl/transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+    "dgfl/transport/binary.py": "917c4e82f3af06f6dba6a14ffb2e755889e96f9a52d49ebb041e34a766f91946",
+    "dgfl/transport/chunking.py": "46db16b945b285adaad54e36b5600dddcdf44909e61feeff2152dc1d274028dc",
+    "dgfl/transport/client.py": "fa83151a69289533e9a6ba2431124c283dee6b976059736087d9c0927e848264",
+    "dgfl/transport/security.py": "8b555dd967ea7a09ad6f147bcacf09873b0dadb242c0fbbb56b132879aa7dae8",
+    "dgfl/validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+    "dgfl/validation/policy.py": "8dc003e2815e0c1bb4eb5533aca1b113de050bf45360dc32c19362e6bda6ee8f",
+    "dgflow_lab.egg-info/dependency_links.txt": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "dgflow_lab.egg-info/entry_points.txt": "4c01a1d8bb80dfc2919818215a74d8bd3689f13339421fcd7481b52713ca0a93",
+    "dgflow_lab.egg-info/PKG-INFO": "fbedf35de34fe73dc213a8aeaa739388787c9b3205780a64d7071157b3a45f86",
+    "dgflow_lab.egg-info/requires.txt": "b7d959c4cf5542a69de6254eff35d9e268c619f85897d8cffaa632667d33f4e4",
+    "dgflow_lab.egg-info/SOURCES.txt": "8c0fa112840ec81c22a9c83940790363f457d101640760dd2d1175449e3ef784",
+    "dgflow_lab.egg-info/top_level.txt": "0aa4a26ff39da0cc03d647262de18357cc01a95480b604b1946c52c3039e2bdc"
+  },
+  "unchanged_algorithm_assertion": "All baseline crypto files, training files, services/roles.py and experiments/runner.py retain identical SHA-256. Rust/CUDA sources were not edited.",
+  "primary_runtime": "No primary role/control restart, topology change, identity replacement, CRS regeneration or historical result rewrite.",
+  "remaining_scope": [
+    "Paper CNN is not connected to secure federation.",
+    "No distributed cryptographic round resume, malicious-edge BFT or complete composition proof.",
+    "No new claim about three-host or maximum-topology performance."
+  ]
+}

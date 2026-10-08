@@ -1,0 +1,20 @@
+{
+  "mode": "optimized",
+  "execution": "parallel",
+  "rpc_workers": 6,
+  "proof_suite": "compact_norm_v1",
+  "verification": "randomized",
+  "verification_workers": 2,
+  "proof_block_size": 128,
+  "rounds": 1,
+  "seed": 42,
+  "attack": "none",
+  "malicious_clients": 0,
+  "non_iid": false,
+  "offline_aggregators": 0,
+  "train_limit": 1200,
+  "test_limit": 400,
+  "local_epochs": 1,
+  "backend": "numpy",
+  "grid": 8
+}

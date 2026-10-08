@@ -1,0 +1,26 @@
+{
+  "native_directory": "<workspace>\\tmp\\speed-optimization-20261006\\native-current",
+  "native_binary": "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd",
+  "native_sha256": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c",
+  "native_source_sha256": {
+    "native/dgfl-native/src/batch.rs": "be5b211de837f49fde468d14b2eef0ddde6e8ea3acd5a16802727bad6f44654e",
+    "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+    "native/dgfl-native/src/lib.rs": "93dfb6413b02142675950a7844de3122f6899f348bf1269d4b03bce8c2ec602f",
+    "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4"
+  },
+  "wheel_sha256": "59524845a957220e083efb58f6ec7365e75e66901da056fda26ba4e565e65bd2",
+  "tested_capabilities": [
+    "g1_sum_pairing_vector",
+    "g2_msm_pairing_vector",
+    "checked_g1_coordinates_batch"
+  ],
+  "tests": "106 passed",
+  "python": "CPython 3.12",
+  "workers": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "maximum_dimension": 20000
+}

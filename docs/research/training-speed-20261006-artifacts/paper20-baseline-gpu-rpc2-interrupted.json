@@ -1,0 +1,41 @@
+{
+  "scope": "interrupted role benchmark; no completed timing result",
+  "reason": "tool handle missing; no matching benchmark or role processes observed",
+  "run_id": "1f834184970f4bfaa9ef762a0209970b",
+  "last_saved_status": "running",
+  "completed_rounds": 0,
+  "cleanup": {
+    "stopped": [],
+    "missing": [
+      "authority1",
+      "authority2",
+      "authority3",
+      "aggregator1",
+      "aggregator2",
+      "aggregator3",
+      "aggregator4",
+      "client1",
+      "client2",
+      "client4",
+      "client5",
+      "client6",
+      "client7",
+      "client8",
+      "client9",
+      "client10",
+      "client11",
+      "client12",
+      "client13",
+      "client14",
+      "client15",
+      "client16",
+      "client17",
+      "client18",
+      "client19",
+      "client20"
+    ],
+    "refused": [
+      "client3"
+    ]
+  }
+}

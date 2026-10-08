@@ -1,0 +1,150 @@
+{
+  "benchmark_script_sha256": "b46877d2ef254a3baeb6ed17c5d70192ceebc0aa44147052b79bab12f3e28ba9",
+  "cleanup": {
+    "extra_children": [],
+    "roles": {
+      "missing": [],
+      "refused": [],
+      "stopped": []
+    }
+  },
+  "controller_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "error": "authority1: port 50101 unavailable",
+  "hardware": {
+    "errors": [],
+    "interval_seconds": 1,
+    "metadata": {
+      "cpu": {
+        "available": true,
+        "frequency_limit_measurement": "CallNtPowerInformation MhzLimit mean; OS-reported thermal throttle limit",
+        "frequency_measurement": "estimated interval-average effective MHz = OS MaxMhz reference × % Processor Performance / 100; _Total across logical processors; heterogeneous-core aggregate estimate, not individual-core instantaneous clocks",
+        "nominal_frequency_measurement": "CallNtPowerInformation MaxMhz reference mean; OS maximum specified MHz; not an instantaneous turbo measurement",
+        "os_reported_current_frequency_measurement": "CallNtPowerInformation CurrentMhz mean; power-management reading may remain fixed on Intel HWP; not an instantaneous turbo measurement",
+        "reported_frequency_measurement": "PDH Processor Frequency as reported by the platform; kept separate from the nominal reference and effective estimate",
+        "scope": "whole local CPU across logical processors, including other applications",
+        "source": "Windows PDH English counters + CallNtPowerInformation"
+      },
+      "gpu": {
+        "available": true,
+        "device_index": 0,
+        "driver_version": "616.56",
+        "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+        "scope": "whole local physical GPU, including other applications; NVML utilization is a driver sampling-window measurement",
+        "source": "NVIDIA NVML driver",
+        "uuid": "GPU-1f2fef89-25eb-881c-45d3-f6280dbfe368"
+      }
+    },
+    "samples": []
+  },
+  "implementation_at_start": {
+    "dependencies": {
+      "cryptography": "50.0.2",
+      "dgfl-native": "0.2.0",
+      "fastapi": "0.142.2",
+      "httpx": "0.28.1",
+      "numpy": "2.5.3",
+      "py-arkworks-bls12381": "0.5.0"
+    },
+    "machine": "AMD64",
+    "native": {
+      "build_input_sha256": {},
+      "enabled": true,
+      "evidence_scope": "controller imported extension paths and their current on-disk digests, plus checked loaded APIs; installed metadata does not attest node imports or an in-memory image after file replacement",
+      "installed_artifact_sha256": {
+        "dgfl_native/dgfl_native.cp312-win_amd64.pyd": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "loaded_artifact_sha256": {
+        "dgfl_native.dgfl_native": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "loaded_capabilities": {
+        "aggregate_verification_native": true,
+        "lego_norm_v1": true
+      },
+      "package_version": "0.2.0"
+    },
+    "platform": "Windows",
+    "python": "3.12.2",
+    "source_files": {
+      "__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+      "cli.py": "359523ade94a70e4611746f3ff1f4795fdb28a20c52f350fab6aebc9fd2ead1a",
+      "crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+      "crypto/backend.py": "82e5a04249091586a7c398229c82f30b6a4da04c183b43a7423e58308374bccb",
+      "crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+      "crypto/cuda_scheduler.py": "b80eaf5df5dc609dc8c494bac3ebb33b75b92183f47a78a0ebb39704a6e09643",
+      "crypto/gpu.py": "18073d2d82740476f5c8b9066b4f7f353d30adcb51e157648d4e4a987ec72a5a",
+      "crypto/gpu_profile.py": "502b3408fbb57e5d31bb64494c6359cb4e7f7c0ad622773b4eaee506fa7157ba",
+      "crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+      "crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+      "crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+      "crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+      "crypto/protocol.py": "5d33d1929b63e949e42f752857111ec32bd90f9f50fc984378a8181b05c6a91e",
+      "deployment.py": "40bb9dca20aa388251cc9813692a5b782fc717d9018a8c4fdfef3cfad449e24d",
+      "experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+      "experiments/evidence.py": "88587fd057e9a0d38086401f4a4181b93c016d031eb6ba96b482d93d17f6bcd1",
+      "experiments/hardware.py": "b1f755c61ad82b8dfa3ce5abb5c0a113b022c1ec482d04accd4ce70320a57307",
+      "experiments/runner.py": "c4654583f33b123d00f0d0cb59bbdb956c0461863389be19f15ae2c21c964607",
+      "experiments/telemetry.py": "3797f65311a1170390e2ef74eeaf7c86a46d1b100c668eafd55912bb5c60d269",
+      "services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+      "services/control.py": "4f0aa74ef79fbf8d191941ffa492efbfbd9ddb39a5a08aa84731642dc5fd87c9",
+      "services/node.py": "66294a4c25b62735bc941b146c7634e14f70eb1ac9eab5a6ed8551cf31e0915c",
+      "services/roles.py": "7a1d2a7e220d9838a9b1f1a711396a6f521f386d0f784841de8edafb522a7561",
+      "topology.py": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+      "training/__init__.py": "979cf13d7187c5dbf4a21bdfa9db81c4bb6abd8719f14cd2777b953476c014da",
+      "training/data.py": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012",
+      "training/model.py": "113c26807cdf92cfcfa25e81da537abdb8f64d43a53b74cae1bf66eb8180ffed",
+      "training/paper_models.py": "c2b9904988ffda39b0216a05003f13eb23df3d52c7aaa386b3ee5171d89853d9",
+      "transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+      "transport/binary.py": "917c4e82f3af06f6dba6a14ffb2e755889e96f9a52d49ebb041e34a766f91946",
+      "transport/chunking.py": "f5d2f7e1f96e00c7ee2cb5fc606c6d53330a04d44d14a9e0a8142859d8a71b81",
+      "transport/client.py": "7d51d151c082eab7b2abf0ab7d48deba218a5ab8abcce13c6a58d2ee8d49e2a3",
+      "transport/security.py": "8b555dd967ea7a09ad6f147bcacf09873b0dadb242c0fbbb56b132879aa7dae8",
+      "validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+      "validation/policy.py": "8dc003e2815e0c1bb4eb5533aca1b113de050bf45360dc32c19362e6bda6ee8f"
+    },
+    "source_sha256": "67498f6025fcc5741c211162d413eebbc8d1c0a1efa54453e0809182a7d90f99"
+  },
+  "initialization_s": 0.40294359999825247,
+  "limitations": [
+    "local repeated rounds; no claim of multi-machine or statistical significance",
+    "cold parameter import and new role startup reported separately from round times",
+    "fresh DKG shares and proof randomness differ between runs; model equivalence checked separately"
+  ],
+  "main_cluster_idle_at_start": true,
+  "native_dir": "tmp/speed-optimization-20261006/baseline/native-import",
+  "scope": "complete 650-dimensional MNIST rounds, fresh real mTLS roles",
+  "source_dir": "tmp/speed-optimization-20261006/baseline/src",
+  "topology": {
+    "aggregator_count": 3,
+    "aggregator_threshold": 2,
+    "authority_count": 3,
+    "authority_threshold": 2,
+    "client_count": 6
+  },
+  "total_setup_run_cleanup_s": 0.41004859999520704,
+  "unrelated_active_runs": []
+}

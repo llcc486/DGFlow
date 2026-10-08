@@ -1,0 +1,368 @@
+{
+  "schema_version": 1,
+  "scope": "fresh RAM proofs; complete verification and permitted inner-product screening; no DKG/services/RPC/authorization signing",
+  "settings": {
+    "dimension": 650,
+    "bits": 8,
+    "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+    "samples": 1,
+    "batch_samples": 1,
+    "clients": 6,
+    "authorities": 3,
+    "authority_native_thread_budget": 2,
+    "native_workers": [
+      1,
+      2,
+      4
+    ],
+    "verification_workers": [
+      1,
+      2
+    ]
+  },
+  "cold_trusted_prover_parameter_load_ms": 2356.3710000016727,
+  "cold_prepared_verifier_import_ms": {
+    "1": 74.92939999792725,
+    "2": 75.07529999566032,
+    "4": 78.78160000109347
+  },
+  "cold_three_authority_interpreter_startup_ms": 288.84889999608276,
+  "micro_samples": [
+    {
+      "sample": 1,
+      "public_statement_sha256": "95c16e73449801d79a59f193a8be7ee816ee728c50ac2ee9432d4dfbce4234e2",
+      "fresh_fixture_generation_ms": 730.0826999999117,
+      "complete_verification": [
+        {
+          "verification": "deterministic",
+          "native_threads": 1,
+          "milliseconds": {
+            "order": [
+              "reference",
+              "native"
+            ],
+            "reference": 588.9947000032407,
+            "native": 547.0140000034007
+          },
+          "both_complete_proofs_accepted": true
+        },
+        {
+          "verification": "deterministic",
+          "native_threads": 2,
+          "milliseconds": {
+            "order": [
+              "native",
+              "reference"
+            ],
+            "native": 281.7390999989584,
+            "reference": 600.2226999989944
+          },
+          "both_complete_proofs_accepted": true
+        },
+        {
+          "verification": "deterministic",
+          "native_threads": 4,
+          "milliseconds": {
+            "order": [
+              "reference",
+              "native"
+            ],
+            "reference": 615.4277000023285,
+            "native": 156.26329999940936
+          },
+          "both_complete_proofs_accepted": true
+        },
+        {
+          "verification": "randomized",
+          "native_threads": 1,
+          "milliseconds": {
+            "order": [
+              "native",
+              "reference"
+            ],
+            "native": 201.5910999980406,
+            "reference": 234.48500000085915
+          },
+          "both_complete_proofs_accepted": true
+        },
+        {
+          "verification": "randomized",
+          "native_threads": 2,
+          "milliseconds": {
+            "order": [
+              "reference",
+              "native"
+            ],
+            "reference": 235.82799999712734,
+            "native": 107.71220000606263
+          },
+          "both_complete_proofs_accepted": true
+        },
+        {
+          "verification": "randomized",
+          "native_threads": 4,
+          "milliseconds": {
+            "order": [
+              "native",
+              "reference"
+            ],
+            "native": 58.81080000108341,
+            "reference": 239.74230000021635
+          },
+          "both_complete_proofs_accepted": true
+        }
+      ],
+      "ciphertext_msm": {
+        "native_threads": 4,
+        "milliseconds": {
+          "order": [
+            "decode",
+            "reuse"
+          ],
+          "decode": 38.651499999105,
+          "reuse": 0.9747000003699213
+        },
+        "exact_result_equal": true
+      },
+      "authorized_inner_product": {
+        "native_threads": 4,
+        "milliseconds": {
+          "order": [
+            "decode",
+            "reuse"
+          ],
+          "decode": 46.39079999469686,
+          "reuse": 8.681400002387818
+        },
+        "public_log_precompute_ms": 10.29479999851901,
+        "exact_result_equal": true
+      },
+      "wrong_norm_rejected": true
+    }
+  ],
+  "micro_summary": {
+    "complete_verification": [
+      {
+        "native_threads": 1,
+        "verification": "deterministic",
+        "reference_median_ms": 588.9947000032407,
+        "native_median_ms": 547.0140000034007,
+        "median_paired_speed_ratio": 1.0767452021329966
+      },
+      {
+        "native_threads": 1,
+        "verification": "randomized",
+        "reference_median_ms": 234.48500000085915,
+        "native_median_ms": 201.5910999980406,
+        "median_paired_speed_ratio": 1.1631713900223684
+      },
+      {
+        "native_threads": 2,
+        "verification": "deterministic",
+        "reference_median_ms": 600.2226999989944,
+        "native_median_ms": 281.7390999989584,
+        "median_paired_speed_ratio": 2.130420307302797
+      },
+      {
+        "native_threads": 2,
+        "verification": "randomized",
+        "reference_median_ms": 235.82799999712734,
+        "native_median_ms": 107.71220000606263,
+        "median_paired_speed_ratio": 2.189427009975227
+      },
+      {
+        "native_threads": 4,
+        "verification": "deterministic",
+        "reference_median_ms": 615.4277000023285,
+        "native_median_ms": 156.26329999940936,
+        "median_paired_speed_ratio": 3.938402043247869
+      },
+      {
+        "native_threads": 4,
+        "verification": "randomized",
+        "reference_median_ms": 239.74230000021635,
+        "native_median_ms": 58.81080000108341,
+        "median_paired_speed_ratio": 4.076501254800136
+      }
+    ],
+    "ciphertext_msm": {
+      "decode_median_ms": 38.651499999105,
+      "reuse_median_ms": 0.9747000003699213,
+      "median_paired_speed_ratio": 39.65476555292486
+    },
+    "authorized_inner_product": {
+      "decode_median_ms": 46.39079999469686,
+      "reuse_median_ms": 8.681400002387818,
+      "median_paired_speed_ratio": 5.343700322751754
+    }
+  },
+  "batch_public_statement_sha256": [
+    "41eba48815863d6251c0b0497abfce3c749bc62c9ce4995994b325ffd287adf4"
+  ],
+  "batch_samples": [
+    {
+      "sample": 1,
+      "verification_workers": 1,
+      "verification": "deterministic",
+      "native_threads_per_worker": 2,
+      "three_authority_pipeline_ms": 2002.8086999955121,
+      "each_authority_pipeline_ms": [
+        1981.5244999990682,
+        2002.8086999955121,
+        1981.2767999974312
+      ],
+      "cold_public_process_startup_ms": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "warmup_public_job_ms": [
+        553.4253000005265,
+        565.0881999972626,
+        545.6397000016295
+      ],
+      "warmup_parameter_load_sum_ms": [
+        82.5265000021318,
+        86.74489999975776,
+        82.0464999997057
+      ],
+      "proof_verify_sum_ms": 5619.827299997269,
+      "inner_product_sum_ms": 328.84800000465475,
+      "warm_parameter_load_sum_ms": 1.4826000115135685,
+      "complete_jobs": 18,
+      "all_18_proofs_and_authorized_scores_correct": true,
+      "all_checked_ciphertexts_reused": true
+    },
+    {
+      "sample": 1,
+      "verification_workers": 1,
+      "verification": "randomized",
+      "native_threads_per_worker": 2,
+      "three_authority_pipeline_ms": 776.3533000033931,
+      "each_authority_pipeline_ms": [
+        761.646799997834,
+        776.3533000033931,
+        761.6466999970726
+      ],
+      "cold_public_process_startup_ms": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "warmup_public_job_ms": [
+        129.19659999897704,
+        121.83530000038445,
+        118.68509999476373
+      ],
+      "warmup_parameter_load_sum_ms": [
+        0.09680000221123919,
+        0.08090000483207405,
+        0.08380000508623198
+      ],
+      "proof_verify_sum_ms": 2112.664800006314,
+      "inner_product_sum_ms": 168.54840001178673,
+      "warm_parameter_load_sum_ms": 1.5584000066155568,
+      "complete_jobs": 18,
+      "all_18_proofs_and_authorized_scores_correct": true,
+      "all_checked_ciphertexts_reused": true
+    },
+    {
+      "sample": 1,
+      "verification_workers": 2,
+      "verification": "deterministic",
+      "native_threads_per_worker": 1,
+      "three_authority_pipeline_ms": 1977.2312000059173,
+      "each_authority_pipeline_ms": [
+        1915.964099993289,
+        1955.5074999952922,
+        1977.2312000059173
+      ],
+      "cold_public_process_startup_ms": [
+        348.24400000070455,
+        345.85149999475107,
+        339.81629999470897
+      ],
+      "warmup_public_job_ms": [
+        1238.0043000011938,
+        1235.0730000034673,
+        1136.168600001838
+      ],
+      "warmup_parameter_load_sum_ms": [
+        172.00389999925392,
+        162.97839999606367,
+        154.25790000153938
+      ],
+      "proof_verify_sum_ms": 11212.29800000583,
+      "inner_product_sum_ms": 371.52869998681126,
+      "warm_parameter_load_sum_ms": 1.666099989961367,
+      "complete_jobs": 18,
+      "all_18_proofs_and_authorized_scores_correct": true,
+      "all_checked_ciphertexts_reused": true
+    },
+    {
+      "sample": 1,
+      "verification_workers": 2,
+      "verification": "randomized",
+      "native_threads_per_worker": 1,
+      "three_authority_pipeline_ms": 752.5548999983585,
+      "each_authority_pipeline_ms": [
+        748.1847000017297,
+        752.5548999983585,
+        752.4415000007139
+      ],
+      "cold_public_process_startup_ms": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "warmup_public_job_ms": [
+        245.2761000022292,
+        228.50949999701697,
+        241.41209999652347
+      ],
+      "warmup_parameter_load_sum_ms": [
+        0.17690000095171854,
+        0.1812999980757013,
+        0.18980000459123403
+      ],
+      "proof_verify_sum_ms": 4108.18750000908,
+      "inner_product_sum_ms": 246.90329997974914,
+      "warm_parameter_load_sum_ms": 1.6351000012946315,
+      "complete_jobs": 18,
+      "all_18_proofs_and_authorized_scores_correct": true,
+      "all_checked_ciphertexts_reused": true
+    }
+  ],
+  "all_correctness_checks_passed": true,
+  "source_sha256": {
+    "scripts/benchmark_validation_authorization.py": "ef2855916ffcb76006e2f538b20e0840e84bd5e80e87b626f276f75638d28a22",
+    "src/dgfl/crypto/backend.py": "b1a487458e6c6db5faac64af7eeeb988df935f69d8a334d19b5f0c1f8513be1e",
+    "src/dgfl/crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+    "src/dgfl/crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+    "src/dgfl/crypto/protocol.py": "a2dda4c1f8280ce3c9a1590a1f51455694fbc3377ed15576421e016984fe5dc5",
+    "src/dgfl/crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+    "src/dgfl/crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+    "src/dgfl/services/roles.py": "b41ce1390c9a4bd852b049aaee635c268a18cd47e0013f0f318b4b016a99bbdd",
+    "src/dgfl/validation/policy.py": "449cb484cb17c2cd045c51f9e2af79318b8dad7ac8cdcd565bbc8b2e4db40c1d",
+    "src/dgfl/transport/binary.py": "d66092d05e58de4311e68cd0e0463f99f8682a3e56701ea953f7df75d90de686",
+    "native/dgfl-native/src/lib.rs": "326aed9235cb8076136adb52926bdeafd5f7740c7b66787a9af7ae0338ce3ace",
+    "native/dgfl-native/src/lego.rs": "5fe7f64c8f3ced63281481e0bbc9c5b6d65299e8cecc7245a87b36e6d4192a01",
+    "native/dgfl-native/src/linked.rs": "69a17ef6a8be9127d7c4cae7082f23a7c09c6104d54d5e3c8b1f166f52af87ae",
+    "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+    "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4"
+  },
+  "loaded_native_artifacts_sha256": {
+    "dgfl_native.cp312-win_amd64.pyd": "07ece1bcc5cfb79bd9fa1f2052b22b3b7d2d984ed721e71560cdf8e6cf8e76ce"
+  },
+  "python": "3.12.2 (tags/v3.12.2:6abddd9, Feb  6 2024, 21:26:36) [MSC v.1937 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "limitations": [
+    "synthetic authorized reference and legal degree-one function keys; no DKG/share generation included",
+    "single-client pairs alternate reference/native order; every sample has new keys/context/ciphertext/proof",
+    "the same fresh six public proofs are compared across worker/mode settings; this is not four independent training rounds",
+    "three-authority pipeline is maximum concurrently measured local authority wall time; excludes transport and signing",
+    "warmup, VK/PK import, BSGS precomputation and process bootstrap are separately reported",
+    "CPU scheduling and power state can vary; publish paired sample ratios alongside medians",
+    "trusted setup and experimental proof-composition assumptions remain unchanged"
+  ]
+}

@@ -1,0 +1,19 @@
+# Copy this file and replace addresses with the three machines' LAN IPv4 addresses.
+# Run init once on A, export bundles, and copy only the matching bundle to B/C.
+# Each node has a fixed distinct port. No discovery service is required.
+# Default topology: n=6 clients, w=3 authorities, v=4 aggregators; both thresholds 2.
+coordinator: {host: 192.168.10.11, machine: A}
+nodes:
+  authority1: {host: 192.168.10.11, machine: A}
+  authority2: {host: 192.168.10.12, machine: B}
+  authority3: {host: 192.168.10.13, machine: C}
+  aggregator1: {host: 192.168.10.11, machine: A}
+  aggregator2: {host: 192.168.10.12, machine: B}
+  aggregator3: {host: 192.168.10.13, machine: C}
+  aggregator4: {host: 192.168.10.11, machine: A}
+  client1: {host: 192.168.10.11, machine: A}
+  client2: {host: 192.168.10.12, machine: B}
+  client3: {host: 192.168.10.13, machine: C}
+  client4: {host: 192.168.10.11, machine: A}
+  client5: {host: 192.168.10.12, machine: B}
+  client6: {host: 192.168.10.13, machine: C}

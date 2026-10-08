@@ -1,0 +1,975 @@
+{
+  "scope": "complete real-role rounds at matched workload; fresh randomized keys and proofs",
+  "equivalence": "every quantized model hash and approved client set agrees across all reports",
+  "workload_fields_checked": [
+    "client_count",
+    "authority_count",
+    "aggregator_count",
+    "authority_threshold",
+    "aggregator_threshold",
+    "rounds",
+    "seed",
+    "mode",
+    "proof_suite",
+    "proof_crs_hash",
+    "non_iid",
+    "train_limit",
+    "test_limit",
+    "local_epochs",
+    "backend",
+    "grid",
+    "execution",
+    "rpc_workers",
+    "verification",
+    "verification_workers",
+    "verification_threads",
+    "batch_strategy",
+    "attack",
+    "malicious_clients",
+    "offline_aggregators",
+    "min_cosine",
+    "max_norm_ratio"
+  ],
+  "cases": {
+    "old_gpu": {
+      "source_report": "tmp\\speed-optimization-20261006\\baseline-gpu-after-b.json",
+      "report_sha256": "dc3356a7f4967b05430a960d471b33d57ef63ec5d86d5e468ed78e3addac4cd4",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 46.15391789999558,
+      "round_total_s": 41.11391600003117,
+      "round_duration_s": [
+        18.837591300019994,
+        11.52159920000122,
+        10.754725500009954
+      ],
+      "steady_round_mean_s": 11.138162350005587,
+      "stage_mean_s": {
+        "dkg_s": 2.501153366659613,
+        "client_stage_s": 1.1797515000022638,
+        "validation_s": 0.9686840666690841,
+        "aggregation_s": 9.042848566663451,
+        "aggregate_key_s": 2.212361299985787,
+        "partial_decryption_s": 2.168665566656273,
+        "combine_and_confirmation_s": 4.502038466656813,
+        "combine_dkg_constants_s": 1.0060232666534528
+      },
+      "source_sha256": "67498f6025fcc5741c211162d413eebbc8d1c0a1efa54453e0809182a7d90f99",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "cleanup_verified": true,
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "cloud_strategy": "all",
+      "cloud_selection": [
+        null,
+        null,
+        null
+      ]
+    },
+    "old_cpu": {
+      "source_report": "tmp\\speed-optimization-20261006\\baseline-cpu-after.json",
+      "report_sha256": "a5a56a88b07b797f27bc3f31cf77add0d76d27fa21a447e114cbc7ee77e59457",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "cpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 57.13518920002389,
+      "round_total_s": 53.06538059999002,
+      "round_duration_s": [
+        23.12071499999729,
+        15.333996600005776,
+        14.610668999986956
+      ],
+      "steady_round_mean_s": 14.972332799996366,
+      "stage_mean_s": {
+        "dkg_s": 2.487716100004036,
+        "client_stage_s": 1.149124566669343,
+        "validation_s": 0.9566112000029534,
+        "aggregation_s": 13.07663393333011,
+        "aggregate_key_s": 2.2406442000065,
+        "partial_decryption_s": 2.2736098333261907,
+        "combine_and_confirmation_s": 8.398825466671648,
+        "combine_dkg_constants_s": 1.1065826333360747
+      },
+      "source_sha256": "67498f6025fcc5741c211162d413eebbc8d1c0a1efa54453e0809182a7d90f99",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "cleanup_verified": true,
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "cloud_strategy": "all",
+      "cloud_selection": [
+        null,
+        null,
+        null
+      ]
+    },
+    "new_gpu_all": {
+      "source_report": "tmp\\speed-optimization-20261006\\phase2-gpu-all-a.json",
+      "report_sha256": "897243ab922ad474674e23ccfaaa3886c25a5995e5b2dd06219dd18999645a41",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "cloud_strategy": "all",
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 39.5814931000059,
+      "round_total_s": 35.09716300002765,
+      "round_duration_s": [
+        16.309588900010567,
+        9.341135000024224,
+        9.446439099992858
+      ],
+      "steady_round_mean_s": 9.393787050008541,
+      "stage_mean_s": {
+        "dkg_s": 2.2451117666690457,
+        "client_stage_s": 1.1501660333403076,
+        "validation_s": 0.8826460000030542,
+        "aggregation_s": 7.407338366669137,
+        "aggregate_key_s": 2.0441020333382767,
+        "partial_decryption_s": 1.542409733335565,
+        "combine_and_confirmation_s": 3.669149833333601,
+        "combine_dkg_constants_s": 0.5685110000097969
+      },
+      "source_sha256": "65286c98ccd467423947ae7030ad4934b372dcc1753731c84f1b8803fc74ded2",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "cleanup_verified": true,
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "cloud_strategy": "all",
+      "cloud_selection": [
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2",
+              "aggregator3"
+            ]
+          ],
+          "coordinator_verifies_before_finish": false,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2,
+            3
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "strategy": "all",
+          "unavailable_clouds": []
+        },
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2",
+              "aggregator3"
+            ]
+          ],
+          "coordinator_verifies_before_finish": false,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2,
+            3
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "strategy": "all",
+          "unavailable_clouds": []
+        },
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2",
+              "aggregator3"
+            ]
+          ],
+          "coordinator_verifies_before_finish": false,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2,
+            3
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "strategy": "all",
+          "unavailable_clouds": []
+        }
+      ]
+    },
+    "new_gpu_threshold": {
+      "source_report": "tmp\\speed-optimization-20261006\\phase2-gpu-threshold-a.json",
+      "report_sha256": "3dcb910bf45b63a4b3506aae46e0b23fe85a35d29aaf6ee3c8133a2369d9daed",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "cloud_strategy": "threshold",
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 38.03059520001989,
+      "round_total_s": 33.480024199932814,
+      "round_duration_s": [
+        16.055877499980852,
+        8.931591299973661,
+        8.4925553999783
+      ],
+      "steady_round_mean_s": 8.71207334997598,
+      "stage_mean_s": {
+        "dkg_s": 2.138526633323636,
+        "client_stage_s": 0.9955634999981461,
+        "validation_s": 0.9009673666732851,
+        "aggregation_s": 7.111361433334726,
+        "aggregate_key_s": 1.64511839998886,
+        "partial_decryption_s": 1.2203577000085108,
+        "combine_and_confirmation_s": 4.123657533326575,
+        "combine_dkg_constants_s": 0.529705833333234
+      },
+      "source_sha256": "65286c98ccd467423947ae7030ad4934b372dcc1753731c84f1b8803fc74ded2",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "cleanup_verified": true,
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "cloud_strategy": "threshold",
+      "cloud_selection": [
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2"
+            ]
+          ],
+          "coordinator_verifies_before_finish": true,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2"
+          ],
+          "strategy": "threshold",
+          "unavailable_clouds": []
+        },
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2"
+            ]
+          ],
+          "coordinator_verifies_before_finish": true,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2"
+          ],
+          "strategy": "threshold",
+          "unavailable_clouds": []
+        },
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2"
+            ]
+          ],
+          "coordinator_verifies_before_finish": true,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2"
+          ],
+          "strategy": "threshold",
+          "unavailable_clouds": []
+        }
+      ]
+    },
+    "new_cpu_all": {
+      "source_report": "tmp\\speed-optimization-20261006\\phase2-cpu-all-a.json",
+      "report_sha256": "b7bc998b498ab161031266c9af7894d8be5029c5ef968a025f4a4b4c93588bf7",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "cloud_strategy": "all",
+        "compute_device": "cpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 47.97625390000758,
+      "round_total_s": 44.69098980000126,
+      "round_duration_s": [
+        19.54089269999531,
+        12.477930599998217,
+        12.672166500007734
+      ],
+      "steady_round_mean_s": 12.575048550002975,
+      "stage_mean_s": {
+        "dkg_s": 2.1470017333340365,
+        "client_stage_s": 1.0635923666704912,
+        "validation_s": 0.8976968666635609,
+        "aggregation_s": 10.777021233341657,
+        "aggregate_key_s": 1.9424659000069369,
+        "partial_decryption_s": 1.4237019666761626,
+        "combine_and_confirmation_s": 7.268452099999801,
+        "combine_dkg_constants_s": 0.606230099995931
+      },
+      "source_sha256": "65286c98ccd467423947ae7030ad4934b372dcc1753731c84f1b8803fc74ded2",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "cleanup_verified": true,
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "cloud_strategy": "all",
+      "cloud_selection": [
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2",
+              "aggregator3"
+            ]
+          ],
+          "coordinator_verifies_before_finish": false,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2,
+            3
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "strategy": "all",
+          "unavailable_clouds": []
+        },
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2",
+              "aggregator3"
+            ]
+          ],
+          "coordinator_verifies_before_finish": false,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2,
+            3
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "strategy": "all",
+          "unavailable_clouds": []
+        },
+        {
+          "attempted_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "batches": [
+            [
+              "aggregator1",
+              "aggregator2",
+              "aggregator3"
+            ]
+          ],
+          "coordinator_verifies_before_finish": false,
+          "eligible_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "required_authorities": [
+            "authority1",
+            "authority2",
+            "authority3"
+          ],
+          "selected_cloud_ids": [
+            1,
+            2,
+            3
+          ],
+          "selected_clouds": [
+            "aggregator1",
+            "aggregator2",
+            "aggregator3"
+          ],
+          "strategy": "all",
+          "unavailable_clouds": []
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "small local repeated sample; no population-wide statistical claim",
+    "steady means omit first-round AuthSetup; task elapsed includes data/proof preparation",
+    "aggregation subphase times are nested and must not be added to the aggregation total"
+  ]
+}

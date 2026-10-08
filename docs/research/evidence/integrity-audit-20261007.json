@@ -1,0 +1,657 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-10-07T09:38:43.740403+00:00",
+  "scope": "Current local source and built frontend: full Python/frontend regression, fault injection, and isolated real CIFAR-10 Lego proof/threshold aggregation. This is an engineering audit, not an independent security proof or a paper-scale reproduction.",
+  "result": "passed_with_documented_limits",
+  "implementation": {
+    "source_sha256": "e706cf6781576c91c8f89bc7be85e04a2c8945dc228c8ab57dc07823dd89d482",
+    "source_files": {
+      "__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+      "cli.py": "bff39b80688e7545d446380f9b34055ae5a1a43d72fa534e0757c6ea9ba62a8e",
+      "crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+      "crypto/backend.py": "3c06d903407b4c8e4bc66a9f1b1cc6b7439e8907395049367589da5883a60e69",
+      "crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+      "crypto/cuda_scheduler.py": "b80eaf5df5dc609dc8c494bac3ebb33b75b92183f47a78a0ebb39704a6e09643",
+      "crypto/gpu.py": "e52596520da357521c9591d822c7692e16f7c275342c2220fb484235dc7cc0a5",
+      "crypto/gpu_profile.py": "502b3408fbb57e5d31bb64494c6359cb4e7f7c0ad622773b4eaee506fa7157ba",
+      "crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+      "crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+      "crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+      "crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+      "crypto/protocol.py": "3bced67cadbc7d7c4f0852c96007da030b713c67506ea87980523eaf553f74ea",
+      "deployment.py": "c4db29b9f973a3e267f4853d1c807e6860f49bcf6e681f581e645f6fdebe5e8b",
+      "experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+      "experiments/evidence.py": "88587fd057e9a0d38086401f4a4181b93c016d031eb6ba96b482d93d17f6bcd1",
+      "experiments/hardware.py": "b1f755c61ad82b8dfa3ce5abb5c0a113b022c1ec482d04accd4ce70320a57307",
+      "experiments/resources.py": "4c61be0c2d437da8d4815d65273105521bdcf8bca426b4761677d17bdffb0107",
+      "experiments/runner.py": "0c84c0cf580af1b88bb682b36c18c37d1a3a7ac9950cb7592d0918bdc7b48dc7",
+      "experiments/telemetry.py": "2c230093c95bfa4de1c90bc76265194fb8cbde43afa746624420e8dfdf3f1f2f",
+      "services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+      "services/control.py": "eea0cac8a66432a8791cc0ef5df51740012b061944909f2d66d72922b3185db1",
+      "services/node.py": "d3bc8fd128cb1b06336b2fe44ccd56b69997c0ab320eff11d43bbaf6d367f8e9",
+      "services/roles.py": "c4470d202a87d6da2869962129f8380689cff0bfc15edc9bee94e2973b353df6",
+      "system_info.py": "7a89f8f4d9ecec35fdb72117af7be01680316e779eb290f282a94ee00174eaef",
+      "topology.py": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+      "training/__init__.py": "3b3832e90d3052d1fa5d8b0aaa19558513409cef1a4d1921aa70bfb9039b244d",
+      "training/cifar10.py": "3e0221517276f3121ad17dfb974a042232b39673971eac313a2f024db07e1c71",
+      "training/data.py": "d2399243e529758738078dd29486d271509b3c1dc78e9886abf3ad3e5b816514",
+      "training/datasets.py": "e5ae4aadd0aa267c4c8a5fdb0f27ff022f0acb66fb601f7f25c52eea4c7fd4b8",
+      "training/model.py": "cd4eb16093f17490dca5c422f1f8b95493da69c356493069b6a05a8142fc842b",
+      "training/paper_models.py": "f5861fba21c81a11f017a1ceb02d83cdfb6c8adf268b4d1cc4bda809564e2655",
+      "transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+      "transport/binary.py": "917c4e82f3af06f6dba6a14ffb2e755889e96f9a52d49ebb041e34a766f91946",
+      "transport/chunking.py": "f5d2f7e1f96e00c7ee2cb5fc606c6d53330a04d44d14a9e0a8142859d8a71b81",
+      "transport/client.py": "eb1f75423faab4e86fcfca0563c0b1017b1a3d1c1c070251f9e6d2ed4100556b",
+      "transport/security.py": "8b555dd967ea7a09ad6f147bcacf09873b0dadb242c0fbbb56b132879aa7dae8",
+      "validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+      "validation/policy.py": "8dc003e2815e0c1bb4eb5533aca1b113de050bf45360dc32c19362e6bda6ee8f"
+    },
+    "dependencies": {
+      "numpy": "2.5.3",
+      "py-arkworks-bls12381": "0.5.0",
+      "dgfl-native": "0.2.0",
+      "cryptography": "50.0.2",
+      "fastapi": "0.142.2",
+      "httpx": "0.28.1"
+    },
+    "native": {
+      "enabled": true,
+      "package_version": "0.2.0",
+      "build_input_sha256": {
+        "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+        "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4",
+        "native/dgfl-native/pyproject.toml": "b55946356672e9167faf49808fef878f86153ebe29e75f3799cc1a0b307569be",
+        "native/dgfl-native/src/lib.rs": "93dfb6413b02142675950a7844de3122f6899f348bf1269d4b03bce8c2ec602f",
+        "native/dgfl-native/src/lego.rs": "e7964b5d9e06a9767d6c0ed0a450809b6e211512c556eead0965e074259e7cac",
+        "native/dgfl-native/src/sigma.rs": "a339d3177e8b4ec8799cb8d2b4532d1b815df0c64a44b3c728777cb9da99a88d",
+        "native/dgfl-native/src/linked.rs": "69a17ef6a8be9127d7c4cae7082f23a7c09c6104d54d5e3c8b1f166f52af87ae",
+        "native/dgfl-native/src/aggregate.rs": "18cd5e86899c5cdf7fd4c8a812eadf078a5689d1ca5acbf9923c22fca127974e",
+        "native/dgfl-native/src/batch.rs": "be5b211de837f49fde468d14b2eef0ddde6e8ea3acd5a16802727bad6f44654e"
+      },
+      "installed_artifact_sha256": {
+        "dgfl_native/dgfl_native.cp312-win_amd64.pyd": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "loaded_artifact_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "loaded_capabilities": {
+        "lego_norm_v1": true,
+        "aggregate_verification_native": true,
+        "ciphertext_sum_pairing_batch": true,
+        "cloud_key_pairing_batch": true,
+        "checked_gpu_point_batch": true
+      },
+      "evidence_scope": "controller imported extension paths and their current on-disk digests, plus checked loaded APIs; installed metadata does not attest node imports or an in-memory image after file replacement"
+    },
+    "python": "3.12.2",
+    "platform": "Windows",
+    "machine": "AMD64"
+  },
+  "verification": {
+    "python_baseline": {
+      "tests": 2128,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 12,
+      "passed": 2116,
+      "time_seconds": 122.061,
+      "skip_reasons": {
+        "compact format only": 6,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "could not import 'pypdf': No module named 'pypdf'": 4
+      },
+      "junit_sha256": "674299d93d89f751b5c6243f47f91dfc04df413aaf66a3c54280035832b1f494"
+    },
+    "python_final": {
+      "tests": 2143,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 12,
+      "passed": 2131,
+      "time_seconds": 120.967,
+      "skip_reasons": {
+        "compact format only": 6,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "could not import 'pypdf': No module named 'pypdf'": 4
+      },
+      "junit_sha256": "b54e24b11414aa838c94a1dd5ccab15a5cf5b7ce9a0d130d0977d18a03b46840"
+    },
+    "ruff": "passed: src and tests",
+    "frontend": {
+      "total": 100,
+      "passed": 100,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "todo": 0,
+      "build": "passed",
+      "node": {
+        "version": "v24.18.0",
+        "executable": "C:\\Program Files\\nodejs\\node.exe",
+        "npm_cli": "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js"
+      },
+      "working_directory": "D:\\Desktop\\全国密码技术竞赛\\Project\\DGFlow-source-671a850\\web",
+      "commands": {
+        "test": "& 'C:\\Program Files\\nodejs\\node.exe' 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js' test",
+        "build": "& 'C:\\Program Files\\nodejs\\node.exe' 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js' run build"
+      },
+      "test_result": {
+        "exit_code": 0,
+        "duration_ms": 813.9918
+      },
+      "build_result": {
+        "exit_code": 0,
+        "tool": "vite",
+        "version": "7.3.6",
+        "modules_transformed": 47,
+        "duration_ms": 854,
+        "main_bundle": "web/dist/assets/index-DHD9DpRV.js",
+        "main_bundle_bytes": 215874,
+        "main_bundle_sha256": "1537ed095604fb51c1efc5a1abe84abcdaee64e229276a0e0ec153c6faa6b4b9"
+      },
+      "log_files": [],
+      "log_note": "No separate test or build log file was saved. Results are recorded from the successful command outputs in the agent session; tests and build were not rerun to create this evidence file."
+    },
+    "validation_environment": {
+      "numeric_thread_budget": 1,
+      "windows_wmi_fallback": "Opt-in platform._wmi_query fallback for validation processes only; application system_info already avoids WMI.",
+      "concurrency": "Final Python regression overlapped isolated acceptance; its timings are not a performance benchmark."
+    }
+  },
+  "real_acceptance": {
+    "dataset": "cifar10",
+    "model": "RGB pooled linear softmax",
+    "grid": 8,
+    "dimension": 1930,
+    "samples": {
+      "shape": [
+        1200,
+        192
+      ],
+      "test": 400,
+      "test_shape": [
+        400,
+        192
+      ],
+      "train": 1200
+    },
+    "dataset_array_sha256": {
+      "test_x": "e772377b05e9241acb0ec8de2b8e6e67150a4cca5b46b7c5c2e1772eb3b96741",
+      "test_y": "951fcd45520369bc1c9fbf7962215fc223ac30799aa9fbe28769a1bd933b0e79",
+      "train_x": "f1e6d9ff06edf38cb05ccd901af5d730b95f87c80c4b1e5956ee02d4a7263bd7",
+      "train_y": "11c5003a5945c301356f606943ef5e59fb3098478d62d4e67c65eadd6ab17120"
+    },
+    "topology": {
+      "aggregator_count": 2,
+      "aggregator_threshold": 2,
+      "authority_count": 2,
+      "authority_threshold": 2,
+      "client_count": 2
+    },
+    "proof_suite": "lego_norm_v1",
+    "proof_crs_hash": "563db0704c275e79a339dac5d3a1cfd433a8bd40073a08f70c0f351c515435ad",
+    "public_parameter_files": {
+      "manifest.json": {
+        "bytes": 549,
+        "sha256": "1c532254aae780ced2d642d480b0d0e2db6c1f14e1a3638877776a2b3ba4102f"
+      },
+      "pk.bin": {
+        "bytes": 6205876,
+        "sha256": "7f9e51e1ed428bed0a769b1bfef11785342e71fb62cedc73d6ab494c4e549c3c"
+      },
+      "vk.bin": {
+        "bytes": 93132,
+        "sha256": "90d5b038f095e33e95f7e3c6a4d9c8a427f0446746afb37eb9d6ec3cd4c96312"
+      }
+    },
+    "case_status": {
+      "dgflow": "completed",
+      "plain": "completed"
+    },
+    "model_hashes": {
+      "dgflow": "94471cfb4914953c9555a159ca25fc1693d54c045e45b56c9d61a037fdc2feca",
+      "plain": "94471cfb4914953c9555a159ca25fc1693d54c045e45b56c9d61a037fdc2feca"
+    },
+    "accepted_clients": {
+      "dgflow": [
+        "client1",
+        "client2"
+      ],
+      "plain": [
+        "client1",
+        "client2"
+      ]
+    },
+    "all_submitted_proofs_valid": true,
+    "equal_quantized_models": true,
+    "main_public_parameters_unchanged": true,
+    "cleanup": {
+      "missing": [],
+      "refused": [],
+      "stopped": [
+        "authority1",
+        "authority2",
+        "aggregator1",
+        "aggregator2",
+        "client1",
+        "client2"
+      ]
+    },
+    "cleanup_verified": true,
+    "timing_scope": "Correctness and lifecycle validation only; overlapping regression and CPU execution are unsuitable for comparison with existing GPU experiments."
+  },
+  "activation": {
+    "scope": "controller only; roles are not stopped or restarted",
+    "protected_files_equal": true,
+    "protected_file_count": 168,
+    "protected_content": [
+      "cluster configuration",
+      "identity keys",
+      "existing results",
+      "installed CRS",
+      "role PID records"
+    ],
+    "role_processes_restarted": false,
+    "nodes_online": 12,
+    "gpu_preparation": {
+      "reason": "CUDA 密码内核和 3 个边缘节点已通过自检",
+      "state": "ready"
+    },
+    "datasets": {
+      "cifar10": {
+        "channels": 3,
+        "image_size": 32,
+        "name": "CIFAR-10",
+        "ready": true,
+        "test_samples": 10000,
+        "train_samples": 50000
+      },
+      "mnist": {
+        "channels": 1,
+        "image_size": 28,
+        "name": "MNIST",
+        "ready": true,
+        "test_samples": 10000,
+        "train_samples": 60000
+      }
+    }
+  },
+  "confirmed_fixes": [
+    {
+      "id": "stage-accounting",
+      "files": [
+        "web/src/lib/format.js",
+        "web/src/views/Monitor.vue"
+      ],
+      "problem": "Validation and aggregation parents and their children were added together in the displayed subtotal.",
+      "resolution": "Parents contribute once; children and client call sums remain separately visible; unknown top-level stages are retained.",
+      "speed_claim": "Display correction only; no training acceleration claimed."
+    },
+    {
+      "id": "admission-rollback",
+      "files": [
+        "src/dgfl/experiments/runner.py"
+      ],
+      "problem": "Initial persistence or experiment Thread.start failure could retain an active queued task indefinitely.",
+      "resolution": "Save before reserving active; thread launch errors publish failure and release admission."
+    },
+    {
+      "id": "monitor-startup",
+      "files": [
+        "src/dgfl/experiments/telemetry.py"
+      ],
+      "problem": "Synchronous first hardware-driver construction/read could block experiment startup.",
+      "resolution": "Keep CPU/RSS baseline synchronous; perform immediate first hardware read on a daemon; bounded finish reports incomplete sampling and safe snapshots explicitly."
+    },
+    {
+      "id": "terminal-cleanup",
+      "files": [
+        "src/dgfl/experiments/runner.py",
+        "src/dgfl/experiments/telemetry.py"
+      ],
+      "problem": "Monitoring, executor, GPU statistics, RPC cleanup or final persistence exceptions could leave admission locked.",
+      "resolution": "Protect each cleanup separately; atomically publish terminal status/error/summary; release active in finally. Failed persistence is explicit in memory; unwritable storage cannot guarantee durable error records."
+    },
+    {
+      "id": "frontend-threshold-eligibility",
+      "files": [
+        "web/src/lib/trainingEligibility.js",
+        "web/src/views/Deploy.vue",
+        "web/src/lib/store.js"
+      ],
+      "problem": "Requiring every node online prevented starts that satisfy backend cloud threshold or plain-mode membership rules.",
+      "resolution": "Separate full-deployment readiness from exact role/threshold and batch eligibility, including highest-ID cloud exclusions. Identity, dataset, CRS, GPU and training-backend guards remain."
+    }
+  ],
+  "observed_performance": [
+    {
+      "run_id": "946685cb4dbe425d919f9f4197e60ea1",
+      "record": "runtime/results/946685cb4dbe425d919f9f4197e60ea1/result.json",
+      "dataset": "mnist",
+      "dimension": 650,
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_authorities": {
+          "client1": "authority1",
+          "client2": "authority2",
+          "client3": "authority3",
+          "client4": "authority1",
+          "client5": "authority2",
+          "client6": "authority3"
+        },
+        "client_count": 6,
+        "cloud_strategy": "auto",
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "max_norm_squared": null,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 10,
+        "rpc_workers": 6,
+        "seed": 19,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "summary": {
+        "accuracy": 0.626,
+        "bytes_sent": 501760857,
+        "completed_rounds": 10,
+        "controller_cpu_s": 111.703125,
+        "elapsed_s": 215.9268159000203
+      },
+      "stage_totals": {
+        "aggregate_key_s": 33.28471519990126,
+        "aggregate_verification_s": 1.8299725998658687,
+        "aggregation_s": 138.9817858999595,
+        "authorization_s": 19.924377899966203,
+        "client_stage_s": 26.32604219991481,
+        "combine_and_confirmation_s": 75.06114549998892,
+        "combine_cloud_E_s": 0.49246579984901473,
+        "combine_cloud_E_s_max": 4.193484599876683,
+        "combine_context_materials_s": 3.7968945998582058,
+        "combine_context_materials_s_max": 3.208910400280729,
+        "combine_cpu_s": 50.796875,
+        "combine_cpu_s_max": 39.625,
+        "combine_dkg_constants_s": 5.92198990000179,
+        "combine_dkg_constants_s_max": 0.7528049000538886,
+        "combine_interpolation_s": 1.631472799985204,
+        "combine_interpolation_s_max": 1.526685299933888,
+        "combine_metrics_s": 0.30680770002072677,
+        "combine_numerators_s": 9.930120700155385,
+        "combine_numerators_s_max": 9.744615800038446,
+        "combine_proof_verification_s": 13.826331000309438,
+        "combine_proof_verification_s_max": 15.774847000197042,
+        "combine_total_s": 35.59966770000756,
+        "combine_total_s_max": 31.447472100087907,
+        "dkg_s": 19.320781300077215,
+        "encryption_wall_sum_s": 14.940584099909756,
+        "partial_decryption_s": 27.42738230008399,
+        "proof_metrics_s": 0.274443699978292,
+        "proof_wall_sum_s": 90.45361240027705,
+        "training_wall_sum_s": 0.6117077003000304,
+        "validation_key_s": 0.43052360002184287,
+        "validation_s": 20.49374190007802
+      },
+      "aggregation_fraction_of_elapsed": 0.6436522732049718,
+      "implementation_source_sha256": "a39749b6054df70c0506e8d9b8d1f3bd489143b25ac634081cbe1512f79fae35",
+      "measurement": "Existing records, not paired benchmarks. Dataset, seed and source versions differ. Sub-stages are contained in their parent; per-client call sums are not parallel elapsed time. bytes_sent measures application requests plus responses, excluding TLS/HTTP framing."
+    },
+    {
+      "run_id": "9590f94f5af54c509c05a5bb7b06f08f",
+      "record": "runtime/results/9590f94f5af54c509c05a5bb7b06f08f/result.json",
+      "dataset": "cifar10",
+      "dimension": 1930,
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_authorities": {
+          "client1": "authority1",
+          "client2": "authority2",
+          "client3": "authority3",
+          "client4": "authority1",
+          "client5": "authority2",
+          "client6": "authority3"
+        },
+        "client_count": 6,
+        "cloud_strategy": "auto",
+        "compute_device": "gpu",
+        "dataset": "cifar10",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "max_norm_squared": null,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "563db0704c275e79a339dac5d3a1cfd433a8bd40073a08f70c0f351c515435ad",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 10,
+        "rpc_workers": 6,
+        "seed": 21,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "summary": {
+        "accuracy": 0.294,
+        "bytes_sent": 1485506255,
+        "completed_rounds": 10,
+        "controller_cpu_s": 91.5,
+        "elapsed_s": 254.72179770000002
+      },
+      "stage_totals": {
+        "aggregate_key_s": 42.435139599998365,
+        "aggregate_verification_s": 2.0208544000033726,
+        "aggregation_s": 176.41664329999912,
+        "authorization_s": 20.818925300003684,
+        "client_stage_s": 27.392263799998545,
+        "combine_and_confirmation_s": 98.06358060000275,
+        "combine_cloud_E_s": 0.9527615000024525,
+        "combine_cloud_E_s_max": 8.988410300000396,
+        "combine_context_materials_s": 4.223461199990197,
+        "combine_context_materials_s_max": 4.323999000005642,
+        "combine_cpu_s": 49.6875,
+        "combine_cpu_s_max": 44.109375,
+        "combine_dkg_constants_s": 5.275424299998122,
+        "combine_dkg_constants_s_max": 0.9402168999986316,
+        "combine_interpolation_s": 1.8449757000034879,
+        "combine_interpolation_s_max": 2.3559906000009505,
+        "combine_metrics_s": 0.1531888000008621,
+        "combine_numerators_s": 11.058884500002023,
+        "combine_numerators_s_max": 11.625176699999429,
+        "combine_proof_verification_s": 16.14494100000229,
+        "combine_proof_verification_s_max": 26.52461019999828,
+        "combine_total_s": 39.50069889999759,
+        "combine_total_s_max": 46.688693900001454,
+        "dkg_s": 20.200299899997844,
+        "encryption_wall_sum_s": 18.131841099992016,
+        "partial_decryption_s": 32.54728149999755,
+        "proof_metrics_s": 0.07886310000321828,
+        "proof_wall_sum_s": 90.2108932999945,
+        "training_wall_sum_s": 0.32982120000815485,
+        "validation_key_s": 0.13750360000267392,
+        "validation_s": 20.999484099997062
+      },
+      "aggregation_fraction_of_elapsed": 0.6925855772570151,
+      "implementation_source_sha256": "d62b2e1cd0580e39f9428cf7f188efff29cbe4c0298ed6c4055cfbad0a884a7f",
+      "measurement": "Existing records, not paired benchmarks. Dataset, seed and source versions differ. Sub-stages are contained in their parent; per-client call sums are not parallel elapsed time. bytes_sent measures application requests plus responses, excluding TLS/HTTP framing."
+    },
+    {
+      "run_id": "45c0bd462e404b41b1dc10a0023d4f18",
+      "record": "runtime/results/45c0bd462e404b41b1dc10a0023d4f18/result.json",
+      "dataset": "cifar10",
+      "dimension": 1930,
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_authorities": {
+          "client1": "authority1",
+          "client2": "authority2",
+          "client3": "authority3",
+          "client4": "authority1",
+          "client5": "authority2",
+          "client6": "authority3"
+        },
+        "client_count": 6,
+        "cloud_strategy": "auto",
+        "compute_device": "gpu",
+        "dataset": "cifar10",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "max_norm_squared": null,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "563db0704c275e79a339dac5d3a1cfd433a8bd40073a08f70c0f351c515435ad",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 20,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "summary": {
+        "accuracy": 0.295,
+        "bytes_sent": 2946165473,
+        "completed_rounds": 20,
+        "controller_cpu_s": 184.875,
+        "elapsed_s": 479.4948425999992
+      },
+      "stage_totals": {
+        "aggregate_key_s": 87.59151810000003,
+        "aggregate_verification_s": 4.272801900002378,
+        "aggregation_s": 354.16587460000665,
+        "authorization_s": 42.76634310000554,
+        "client_stage_s": 55.233782399996926,
+        "combine_and_confirmation_s": 193.64208310000322,
+        "combine_cloud_E_s": 1.910562299997764,
+        "combine_cloud_E_s_max": 17.805437399993025,
+        "combine_context_materials_s": 8.395577399975082,
+        "combine_context_materials_s_max": 8.758872800015524,
+        "combine_cpu_s": 95.375,
+        "combine_cpu_s_max": 88.796875,
+        "combine_dkg_constants_s": 6.6314647999970475,
+        "combine_dkg_constants_s_max": 1.7803203999956168,
+        "combine_interpolation_s": 3.558786699997654,
+        "combine_interpolation_s_max": 4.63345940000363,
+        "combine_metrics_s": 0.23278460000256018,
+        "combine_numerators_s": 22.370668100007606,
+        "combine_numerators_s_max": 23.415098400002535,
+        "combine_proof_verification_s": 32.467518199984625,
+        "combine_proof_verification_s_max": 53.975503199999366,
+        "combine_total_s": 75.3350532000004,
+        "combine_total_s_max": 94.4911858000014,
+        "dkg_s": 25.548207800002274,
+        "encryption_wall_sum_s": 37.75531409999712,
+        "partial_decryption_s": 65.93126650000158,
+        "proof_metrics_s": 0.18417429999863089,
+        "proof_wall_sum_s": 182.6931029000025,
+        "training_wall_sum_s": 0.6477942999936204,
+        "validation_key_s": 0.40504580000015267,
+        "validation_s": 43.322605000001204
+      },
+      "aggregation_fraction_of_elapsed": 0.7386229071403306,
+      "implementation_source_sha256": "d62b2e1cd0580e39f9428cf7f188efff29cbe4c0298ed6c4055cfbad0a884a7f",
+      "measurement": "Existing records, not paired benchmarks. Dataset, seed and source versions differ. Sub-stages are contained in their parent; per-client call sums are not parallel elapsed time. bytes_sent measures application requests plus responses, excluding TLS/HTTP framing."
+    }
+  ],
+  "optimization_candidates": [
+    {
+      "priority": 1,
+      "area": "Aggregation scheduling",
+      "status": "design_and_benchmark_required",
+      "evidence": "Threshold path performs coordinator full combine before independent edge full combines.",
+      "proposal": "Read-only prepare_finish plus commit_finish could allow independent checks to overlap; bind context/manifest/parts digest and advance state only after agreement.",
+      "guardrails": "Keep full mathematical verification by every actor; cover malformed cloud evidence, replay, partial failure and inconsistent state. Shared GPU contention may limit gains."
+    },
+    {
+      "priority": 2,
+      "area": "Client key enrollment",
+      "status": "measure_first",
+      "evidence": "recover_client_key interpolates all shares and checks public commitments coordinate by coordinate each round.",
+      "proposal": "Add key_enrollment_s; use existing native pedersen_verify_batch with width 1 and a bounded workers budget.",
+      "guardrails": "Preserve every share, threshold/unique ID checks, client/epoch/transcript/public equality, canonical scalars and full per-coordinate equations. No secret-key cache proposed in this audit."
+    },
+    {
+      "priority": 3,
+      "area": "Lego witness encryption recheck",
+      "status": "small_optimization_not_applied",
+      "evidence": "lego.py second p.encrypt call omits workers and uses the default single worker.",
+      "proposal": "Pass the proof worker budget and measure this sub-stage separately.",
+      "guardrails": "Keep complete ciphertext/witness equality; summed client proof call time is not elapsed time saved."
+    },
+    {
+      "priority": 4,
+      "area": "Large models and parameter-domain preflight",
+      "status": "larger_integration_required",
+      "proposal": "Integrate a modest CNN, matching CRS and resource budgeting before pursuing the full paper CNN.",
+      "guardrails": "Current secure chain has a 20,000-coordinate limit and a 1 GiB logical-message cap. The low-level 2–16-bit domain also needs DLOG-budget preflight: dimension 5, bits 16, x=reference=[32767]*5 requires 103619 BSGS steps, beyond 100000; the current runner uses 8 bits."
+    },
+    {
+      "priority": 5,
+      "area": "Screening quality",
+      "status": "controlled_attack_evaluation_required",
+      "proposal": "Evaluate non-IID false rejection, label flips, backdoors and adaptive attacks before changing cosine/kmeans/norm thresholds.",
+      "guardrails": "A valid proof certifies the specified mathematical relation, not honest training. No general poisoning robustness or MRPL guarantee is established."
+    }
+  ],
+  "remaining_limits": [
+    "The secure path currently trains pooled linear models; 582026/878538-parameter CNN modules are local-training components only.",
+    "DKG and critical round RPCs require all authorities; a cryptographic s/w threshold is not end-to-end edge crash tolerance.",
+    "Cloud replacement handles explicit network absence/timeouts; invalid signatures or mathematical proofs abort rather than mask Byzantine clouds.",
+    "The coordinator remains an availability single point; dynamic across-round membership is not implemented.",
+    "Default regrouping differs from fixed-batch multi-round privacy assumptions.",
+    "Installed Lego parameters are labeled single-party development setup; no audited multi-party ceremony is claimed.",
+    "No independent formal security review, multi-physical-host performance test or full paper baseline reproduction was performed."
+  ],
+  "documentation_updated": [
+    "README.md",
+    "docs/submission/user-manual.md",
+    "docs/research/paper-models.md",
+    "docs/research/paper-gap-analysis.md"
+  ]
+}

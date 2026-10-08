@@ -1,0 +1,14 @@
+{
+  "cpu": "Intel Core i7-14700HX",
+  "physical_cores": 20,
+  "logical_processors": 28,
+  "installed_ram_bytes": 16873545728,
+  "os": "Windows 11, version 10.0.26200",
+  "gpu_present_but_not_used": "NVIDIA GeForce RTX 4070 Laptop GPU",
+  "training_backend": "NumPy CPU",
+  "crypto_backend": "py-arkworks-bls12381 0.5.0, CPU",
+  "deployment": "one physical host, twelve independent role processes",
+  "benchmark_limitations": "fixed case order, shared laptop, existing process caches, not an isolated performance laboratory",
+  "formal_start_source_sha256": "ac00368af00ca5356430ef748e849cbb424b3341756cabba664edbb461fa95ad",
+  "startup": "All twelve role processes and coordinator were stopped and restarted after policy fixes before the formal suite."
+}

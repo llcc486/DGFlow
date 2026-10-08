@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "scope": "one isolated GPU actor, same existing nine public aggregate proofs x 650 coordinates; fresh polynomial caches per repetition; no training/services/new-owner or four-cloud benchmark",
+  "order": [
+    "baseline-before",
+    "current-workers1",
+    "current-workers2",
+    "baseline-after"
+  ],
+  "configuration": {
+    "actors": 1,
+    "proofs": 9,
+    "dimension": 650,
+    "warmups_each": 1,
+    "repeats_each": 3,
+    "chunk_size": 4096,
+    "block_size": 32,
+    "scheduler_slots": 1,
+    "GPU": "NVIDIA GeForce RTX 4060 Laptop GPU"
+  },
+  "rows": [
+    {
+      "name": "baseline-before",
+      "file": "<workspace>\\tmp\\speed-optimization-20261006\\gpu-micro-baseline-before.json",
+      "report_sha256": "568668f2abf680ff96ab331efa57c05b1dd1a680097c5d8df3d212406aefa5a7",
+      "status": "completed",
+      "source_sha256": "13c97a5935eb0b8ff5f2bbfcb8bad60331d0a0a524eaf25a8869b3880e844e1a",
+      "native_loaded_files_sha256": {
+        "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import\\dgfl_native\\__init__.py": "422a108cd8121105818e668668cf4f0a62cf0d70bf714228ddda01b93de05650",
+        "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "script_sha256": "f589712738c050662f21a5d475779f81fb6f1882919be0fb163b1442472774fa",
+      "fixture_sha256": "30736255ab51df8c5713ff887b99c340ecd25d8ad70b0ad1774ee3cc350c6631",
+      "verifier_workers": 1,
+      "wall_samples_s": [
+        1.0700188999762759,
+        1.0725724000076298,
+        1.0799555999983568
+      ],
+      "wall_mean_s": 1.0741822999940875,
+      "statement_prepare_mean_s": 0.38168603334149037,
+      "verification_call_mean_s": 0.6910554000060074,
+      "kernel_mean_s": 0.3240108439127603,
+      "cold_constructor_s": 0.04359280000790022,
+      "checksum": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "all_outputs_match_CPU": true,
+      "failed_batches": 0,
+      "cleanup": [
+        {
+          "event": "done",
+          "actor": 0,
+          "cleanup": "explicit_runtime_close"
+        }
+      ],
+      "hardware_iteration_sample_count": 3,
+      "cpu_effective_mhz_samples": [
+        3760.8546958662164,
+        3354.3998840714116,
+        3016.254691689008
+      ],
+      "GPU_sm_mhz_samples": [
+        2700,
+        2700,
+        2700
+      ]
+    },
+    {
+      "name": "current-workers1",
+      "file": "<workspace>\\tmp\\speed-optimization-20261006\\gpu-micro-current-workers1.json",
+      "report_sha256": "340cca09d6963d271cfa20bdbaeb6f704dee14b3d4ce0b5052abab273ec3befa",
+      "status": "completed",
+      "source_sha256": "edd5ffb7ee1eb716929b42620d6b18e87fc0aeb83e378f3ade22bb84ff0044a6",
+      "native_loaded_files_sha256": {
+        "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\__init__.py": "422a108cd8121105818e668668cf4f0a62cf0d70bf714228ddda01b93de05650",
+        "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "script_sha256": "f589712738c050662f21a5d475779f81fb6f1882919be0fb163b1442472774fa",
+      "fixture_sha256": "30736255ab51df8c5713ff887b99c340ecd25d8ad70b0ad1774ee3cc350c6631",
+      "verifier_workers": 1,
+      "wall_samples_s": [
+        0.9634147000033408,
+        0.9606945000123233,
+        0.9754113999952096
+      ],
+      "wall_mean_s": 0.9665068666702913,
+      "statement_prepare_mean_s": 0.27002079999268364,
+      "verification_call_mean_s": 0.6951910666636346,
+      "kernel_mean_s": 0.3245071207682292,
+      "cold_constructor_s": 0.045099100010702386,
+      "checksum": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "all_outputs_match_CPU": true,
+      "failed_batches": 0,
+      "cleanup": [
+        {
+          "event": "done",
+          "actor": 0,
+          "cleanup": "explicit_runtime_close"
+        }
+      ],
+      "hardware_iteration_sample_count": 3,
+      "cpu_effective_mhz_samples": [
+        2569.476715400584,
+        2802.8961386823967,
+        3063.946699181328
+      ],
+      "GPU_sm_mhz_samples": [
+        2700,
+        2685,
+        2700
+      ]
+    },
+    {
+      "name": "current-workers2",
+      "file": "<workspace>\\tmp\\speed-optimization-20261006\\gpu-micro-current-workers2.json",
+      "report_sha256": "d28923638d72c7b0a4c697477b6a894c5685de401ed382cece0bb2bf352cd7a1",
+      "status": "completed",
+      "source_sha256": "edd5ffb7ee1eb716929b42620d6b18e87fc0aeb83e378f3ade22bb84ff0044a6",
+      "native_loaded_files_sha256": {
+        "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\__init__.py": "422a108cd8121105818e668668cf4f0a62cf0d70bf714228ddda01b93de05650",
+        "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "script_sha256": "f589712738c050662f21a5d475779f81fb6f1882919be0fb163b1442472774fa",
+      "fixture_sha256": "30736255ab51df8c5713ff887b99c340ecd25d8ad70b0ad1774ee3cc350c6631",
+      "verifier_workers": 2,
+      "wall_samples_s": [
+        0.7039223999890964,
+        0.6895501999824774,
+        0.6911013000062667
+      ],
+      "wall_mean_s": 0.6948579666592801,
+      "statement_prepare_mean_s": 0.16237446665763855,
+      "verification_call_mean_s": 0.5311157333392961,
+      "kernel_mean_s": 0.329162073135376,
+      "cold_constructor_s": 0.043371499981731176,
+      "checksum": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "all_outputs_match_CPU": true,
+      "failed_batches": 0,
+      "cleanup": [
+        {
+          "event": "done",
+          "actor": 0,
+          "cleanup": "explicit_runtime_close"
+        }
+      ],
+      "hardware_iteration_sample_count": 2,
+      "cpu_effective_mhz_samples": [
+        2700.732558892472,
+        3284.6825511680795
+      ],
+      "GPU_sm_mhz_samples": [
+        2700,
+        2685
+      ]
+    },
+    {
+      "name": "baseline-after",
+      "file": "<workspace>\\tmp\\speed-optimization-20261006\\gpu-micro-baseline-after.json",
+      "report_sha256": "81138a7a11a615c102b5225e7f98f74606622b49bb1c110254217ab83954d876",
+      "status": "completed",
+      "source_sha256": "13c97a5935eb0b8ff5f2bbfcb8bad60331d0a0a524eaf25a8869b3880e844e1a",
+      "native_loaded_files_sha256": {
+        "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import\\dgfl_native\\__init__.py": "422a108cd8121105818e668668cf4f0a62cf0d70bf714228ddda01b93de05650",
+        "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "script_sha256": "f589712738c050662f21a5d475779f81fb6f1882919be0fb163b1442472774fa",
+      "fixture_sha256": "30736255ab51df8c5713ff887b99c340ecd25d8ad70b0ad1774ee3cc350c6631",
+      "verifier_workers": 1,
+      "wall_samples_s": [
+        1.0831808999937493,
+        1.0574527000135276,
+        1.0769534999853931
+      ],
+      "wall_mean_s": 1.0725290333308901,
+      "statement_prepare_mean_s": 0.3818707666747893,
+      "verification_call_mean_s": 0.6894674666594559,
+      "kernel_mean_s": 0.3248905099232992,
+      "cold_constructor_s": 0.04347890001372434,
+      "checksum": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "all_outputs_match_CPU": true,
+      "failed_batches": 0,
+      "cleanup": [
+        {
+          "event": "done",
+          "actor": 0,
+          "cleanup": "explicit_runtime_close"
+        }
+      ],
+      "hardware_iteration_sample_count": 3,
+      "cpu_effective_mhz_samples": [
+        3104.390714057885,
+        3650.321953736349,
+        3550.6038404443807
+      ],
+      "GPU_sm_mhz_samples": [
+        2700,
+        2700,
+        2700
+      ]
+    }
+  ],
+  "comparisons": {
+    "baseline_pooled_mean_s": 1.0733556666624888,
+    "baseline_drift_percent": -0.15390931904263327,
+    "current_workers1": {
+      "reduction_percent": 9.954650011252575,
+      "speedup": 1.1105515166801678
+    },
+    "current_workers2": {
+      "reduction_percent": 35.26302713620697,
+      "speedup": 1.5447123270715886
+    }
+  },
+  "validation": {
+    "new_native_cuda_regression": "86 passed in 11.90s",
+    "new_threshold_5_and_32_real_DKG_combine": true,
+    "final_33rd_term_and_bounds_rejected": true,
+    "fused_G1_thresholds_5_16_32_hardware_checked": true,
+    "host_only": "22 passed",
+    "ruff": "all touched Python files passed"
+  },
+  "limitations": [
+    "Observed fixed-fixture microbenchmark, not a whole federated round speedup or paper CNN comparison.",
+    "The same existing public proofs and verifier-owned public table are reused; the constructor and independent CPU oracle are outside steady timing.",
+    "workers1 is an equal active host-thread comparison; workers2 additionally uses the existing configured two-thread CPU budget which the old GPU parser did not honor.",
+    "One sequential A/B1/B2/A sequence with three warm measured samples per run; no statistical guarantee.",
+    "CUDA kernel_seconds overlaps host sync_seconds; do not add them or treat their difference as exclusive CPU time.",
+    "Whole-machine telemetry samples are sparse and include other applications; retain raw samples rather than infer utilization or frequency causality."
+  ]
+}

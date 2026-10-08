@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-04",
+  "scope": "Current optimization source with isolated new native extension and CPU Torch",
+  "python": {
+    "collected": 801,
+    "passed": 789,
+    "skipped": 12,
+    "failures": 0,
+    "errors": 0,
+    "pytest_wall_s": 93.28,
+    "command": "PYTHONPATH=tmp/optimization-native;tmp/review-torch;src .venv/Scripts/python.exe -m pytest -q",
+    "skipped_groups": [
+      {
+        "reason": "compact-format-only cases on legacy layout",
+        "count": 6
+      },
+      {
+        "reason": "Windows host does not permit symlinks",
+        "count": 2
+      },
+      {
+        "reason": "optional pypdf unavailable",
+        "count": 4
+      }
+    ]
+  },
+  "native_required": {
+    "passed": 51,
+    "skipped": 0
+  },
+  "rust": {
+    "passed": 9,
+    "failures": 0
+  },
+  "frontend": {
+    "tests": 11,
+    "passed": 11,
+    "build": "passed",
+    "commands": [
+      "node --test",
+      "node node_modules/vite/bin/vite.js build"
+    ]
+  },
+  "ruff": "passed",
+  "loaded_native_sha256": "07ece1bcc5cfb79bd9fa1f2052b22b3b7d2d984ed721e71560cdf8e6cf8e76ce",
+  "wheel_sha256": "bc746190856f8153b891611210048995e012fb1ab52507f160ad8c792c35a613",
+  "live_service_replaced": true,
+  "packaging_after_release_id_update": {
+    "failures": 0,
+    "passed": 5
+  }
+}

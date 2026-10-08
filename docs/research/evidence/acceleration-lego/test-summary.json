@@ -1,0 +1,36 @@
+{
+  "command": "PYTHONPATH=isolated-native .venv/Scripts/python.exe -m pytest -q --tb=short",
+  "tests": 599,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 15,
+  "passed": 584,
+  "seconds": 22.147,
+  "scope": [
+    "full project regression with Lego-capable native artifact loaded",
+    "malformed point/scalar rejection in both verification modes",
+    "valid same-norm different-vector SNARK cannot link to ciphertext",
+    "actual DKG enrollment, authorization inner product, threshold aggregate decryption"
+  ],
+  "native_version": "0.2.0",
+  "benchmark_target": {
+    "generation_and_both_verification_modes_under_1000ms_all_samples": true,
+    "max_generation_ms": 354.68290001153946,
+    "max_randomized_verification_ms": 230.09209998417646,
+    "max_deterministic_verification_ms": 649.6093000168912
+  },
+  "native_rust_tests": {
+    "command": "cargo test --locked --release --manifest-path native/dgfl-native/Cargo.toml --lib",
+    "passed": 4,
+    "failed": 0
+  },
+  "final_native_lego_tests": {
+    "command": "isolated final native artifact: pytest tests/crypto/test_lego.py -q --tb=short",
+    "passed": 11,
+    "failed": 0
+  },
+  "loaded_native_artifacts": {
+    "tmp/proof-ms-native-final/dgfl_native/dgfl_native.cp312-win_amd64.pyd": "a94803cd8143fb6e48cbf9fa9ed0e99bc6bb6d87c3faabb463a3363fa9768d3a"
+  },
+  "remaining_integration": "CRS export/load and trusted manifest pinning; opt-in role/task/backend registration and full role experiment"
+}

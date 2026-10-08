@@ -1,0 +1,529 @@
+{
+  "kind": "public-DL-aggregate-C0-microbenchmark",
+  "dimension": 650,
+  "clients": 6,
+  "authorities": 3,
+  "authority_threshold": 2,
+  "actor_id": 3,
+  "workers": 2,
+  "excludes_from_timing": [
+    "fixture/DKG setup",
+    "oracle comparison",
+    "independent proof verification",
+    "RPC",
+    "training"
+  ],
+  "timed_entropy": "unaltered CSPRNG, fresh actor state per sample; same-manifest retry uses existing proof",
+  "identity_before": {
+    "native_module": "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\__init__.py",
+    "native_binary": "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd",
+    "native_sha256": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c",
+    "native_build_manifest": "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\build-manifest.json",
+    "backend_path": "<workspace>\\src\\dgfl\\crypto\\backend.py",
+    "backend_sha256": "3c06d903407b4c8e4bc66a9f1b1cc6b7439e8907395049367589da5883a60e69",
+    "protocol_paths": {
+      "phase1": "<workspace>\\tmp\\speed-optimization-20261006\\current\\src\\dgfl\\crypto\\protocol.py",
+      "current": "<workspace>\\src\\dgfl\\crypto\\protocol.py"
+    },
+    "protocol_sha256": {
+      "phase1": "60dd15b4a1b36ff57562ac6e70d606720983868fd8ce2931bc2822d3719d6853",
+      "current": "3bced67cadbc7d7c4f0852c96007da030b713c67506ea87980523eaf553f74ea"
+    },
+    "aggregate_keys_sha256": {
+      "phase1": "c64a430925b2556fd478daf93f9aefa2884823570dd929c83bc0b5c721840da5",
+      "current": "ce1d3aa5794c8fe77f7213407404166bdf4aec9ff5163e6a46014f2c8bd54765"
+    },
+    "native_source_sha256": {
+      "native/dgfl-native/src/batch.rs": "be5b211de837f49fde468d14b2eef0ddde6e8ea3acd5a16802727bad6f44654e",
+      "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+      "native/dgfl-native/src/lib.rs": "93dfb6413b02142675950a7844de3122f6899f348bf1269d4b03bce8c2ec602f",
+      "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4"
+    },
+    "script_sha256": "7a03ef604d2d1f187f37329c13ce99fa17c06d50f15de4bad9acb358d64c5cf4",
+    "python": "3.12.2"
+  },
+  "public_transcript_sha256": "a1a9ade4f00d76688d7449a029db84f450b30fa438e2b2fcebeeacf8b6117875",
+  "cases": [
+    {
+      "cloud_threshold": 2,
+      "clouds": 3,
+      "repeats": 5,
+      "fixed_nonce_wire_oracle_sha256": "c3b17a81812e859c09bf995fd5afc55f058d763a76ce904872bae323fc307df9",
+      "samples": {
+        "first": {
+          "phase1": [
+            {
+              "wall_s": 1.548057300009532,
+              "process_cpu_s": 3.0
+            },
+            {
+              "wall_s": 1.552340499998536,
+              "process_cpu_s": 2.96875
+            },
+            {
+              "wall_s": 1.5595107999979518,
+              "process_cpu_s": 2.90625
+            },
+            {
+              "wall_s": 1.5548285999975633,
+              "process_cpu_s": 2.96875
+            },
+            {
+              "wall_s": 1.551614600000903,
+              "process_cpu_s": 2.9375
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 1.505359300004784,
+              "process_cpu_s": 2.90625
+            },
+            {
+              "wall_s": 1.514768599998206,
+              "process_cpu_s": 2.828125
+            },
+            {
+              "wall_s": 1.562301900004968,
+              "process_cpu_s": 2.875
+            },
+            {
+              "wall_s": 1.5376949999772478,
+              "process_cpu_s": 2.9375
+            },
+            {
+              "wall_s": 1.523184299992863,
+              "process_cpu_s": 2.828125
+            }
+          ]
+        },
+        "same_manifest": {
+          "phase1": [
+            {
+              "wall_s": 0.27091390002169646,
+              "process_cpu_s": 0.5
+            },
+            {
+              "wall_s": 0.26676270001917146,
+              "process_cpu_s": 0.453125
+            },
+            {
+              "wall_s": 0.2601944000052754,
+              "process_cpu_s": 0.5
+            },
+            {
+              "wall_s": 0.2649811999872327,
+              "process_cpu_s": 0.515625
+            },
+            {
+              "wall_s": 0.25466100001358427,
+              "process_cpu_s": 0.5
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 0.2799807999981567,
+              "process_cpu_s": 0.484375
+            },
+            {
+              "wall_s": 0.2869055999908596,
+              "process_cpu_s": 0.5
+            },
+            {
+              "wall_s": 0.27526019999640994,
+              "process_cpu_s": 0.46875
+            },
+            {
+              "wall_s": 0.2857770000118762,
+              "process_cpu_s": 0.484375
+            },
+            {
+              "wall_s": 0.27498680001008324,
+              "process_cpu_s": 0.5
+            }
+          ]
+        },
+        "changed_approved": {
+          "phase1": [
+            {
+              "wall_s": 1.563634699996328,
+              "process_cpu_s": 3.03125
+            },
+            {
+              "wall_s": 1.5726538999879267,
+              "process_cpu_s": 3.046875
+            },
+            {
+              "wall_s": 1.575949699996272,
+              "process_cpu_s": 3.015625
+            },
+            {
+              "wall_s": 1.5683213000011165,
+              "process_cpu_s": 3.0625
+            },
+            {
+              "wall_s": 1.5305443000106607,
+              "process_cpu_s": 2.984375
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 1.4686572999926284,
+              "process_cpu_s": 2.859375
+            },
+            {
+              "wall_s": 1.4934570000041276,
+              "process_cpu_s": 2.890625
+            },
+            {
+              "wall_s": 1.512572400009958,
+              "process_cpu_s": 2.890625
+            },
+            {
+              "wall_s": 1.528586100001121,
+              "process_cpu_s": 2.859375
+            },
+            {
+              "wall_s": 1.5012384000001475,
+              "process_cpu_s": 2.859375
+            }
+          ]
+        }
+      },
+      "medians": {
+        "first": {
+          "phase1": {
+            "wall_s": 1.552340499998536,
+            "process_cpu_s": 2.96875
+          },
+          "current": {
+            "wall_s": 1.523184299992863,
+            "process_cpu_s": 2.875
+          },
+          "wall_speedup": 1.0191416101162607,
+          "wall_reduction_percent": 1.8782090659684725,
+          "paired_wall_deltas_s": [
+            0.04269800000474788,
+            0.03757190000033006,
+            -0.0027911000070162117,
+            0.017133600020315498,
+            0.02843030000803992
+          ]
+        },
+        "same_manifest": {
+          "phase1": {
+            "wall_s": 0.2649811999872327,
+            "process_cpu_s": 0.5
+          },
+          "current": {
+            "wall_s": 0.2799807999981567,
+            "process_cpu_s": 0.484375
+          },
+          "wall_speedup": 0.9464263263372961,
+          "wall_reduction_percent": -5.660628003664692,
+          "paired_wall_deltas_s": [
+            -0.009066899976460263,
+            -0.020142899971688166,
+            -0.015065799991134554,
+            -0.02079580002464354,
+            -0.020325799996498972
+          ]
+        },
+        "changed_approved": {
+          "phase1": {
+            "wall_s": 1.5683213000011165,
+            "process_cpu_s": 3.03125
+          },
+          "current": {
+            "wall_s": 1.5012384000001475,
+            "process_cpu_s": 2.859375
+          },
+          "wall_speedup": 1.044685041363825,
+          "wall_reduction_percent": 4.277369694648748,
+          "paired_wall_deltas_s": [
+            0.09497740000369959,
+            0.07919689998379909,
+            0.06337729998631403,
+            0.03973519999999553,
+            0.029305900010513142
+          ]
+        }
+      }
+    },
+    {
+      "cloud_threshold": 3,
+      "clouds": 4,
+      "repeats": 2,
+      "fixed_nonce_wire_oracle_sha256": "b75dcca641de9d72f29f5d49e56bd3ab50ffed04cbd93fe9510c4428f97155e6",
+      "samples": {
+        "first": {
+          "phase1": [
+            {
+              "wall_s": 2.437704499985557,
+              "process_cpu_s": 4.734375
+            },
+            {
+              "wall_s": 2.4219969999976456,
+              "process_cpu_s": 4.71875
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 2.4288669000088703,
+              "process_cpu_s": 4.5625
+            },
+            {
+              "wall_s": 2.403956800000742,
+              "process_cpu_s": 4.609375
+            }
+          ]
+        },
+        "same_manifest": {
+          "phase1": [
+            {
+              "wall_s": 0.5049843000015244,
+              "process_cpu_s": 0.953125
+            },
+            {
+              "wall_s": 0.5176855999743566,
+              "process_cpu_s": 0.984375
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 0.5202242000086699,
+              "process_cpu_s": 1.0
+            },
+            {
+              "wall_s": 0.5370844999852125,
+              "process_cpu_s": 1.015625
+            }
+          ]
+        },
+        "changed_approved": {
+          "phase1": [
+            {
+              "wall_s": 2.4478205000050366,
+              "process_cpu_s": 4.765625
+            },
+            {
+              "wall_s": 2.530477399996016,
+              "process_cpu_s": 4.734375
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 2.449490400002105,
+              "process_cpu_s": 4.625
+            },
+            {
+              "wall_s": 2.5085303999949247,
+              "process_cpu_s": 4.625
+            }
+          ]
+        }
+      },
+      "medians": {
+        "first": {
+          "phase1": {
+            "wall_s": 2.4298507499916013,
+            "process_cpu_s": 4.7265625
+          },
+          "current": {
+            "wall_s": 2.416411850004806,
+            "process_cpu_s": 4.5859375
+          },
+          "wall_speedup": 1.005561510545799,
+          "wall_reduction_percent": 0.5530751214592788,
+          "paired_wall_deltas_s": [
+            0.00883759997668676,
+            0.01804019999690354
+          ]
+        },
+        "same_manifest": {
+          "phase1": {
+            "wall_s": 0.5113349499879405,
+            "process_cpu_s": 0.96875
+          },
+          "current": {
+            "wall_s": 0.5286543499969412,
+            "process_cpu_s": 1.0078125
+          },
+          "wall_speedup": 0.9672387070888552,
+          "wall_reduction_percent": -3.387094899225862,
+          "paired_wall_deltas_s": [
+            -0.01523990000714548,
+            -0.01939890001085587
+          ]
+        },
+        "changed_approved": {
+          "phase1": {
+            "wall_s": 2.4891489500005264,
+            "process_cpu_s": 4.75
+          },
+          "current": {
+            "wall_s": 2.479010399998515,
+            "process_cpu_s": 4.625
+          },
+          "wall_speedup": 1.0040897569457625,
+          "wall_reduction_percent": 0.4073098960996058,
+          "paired_wall_deltas_s": [
+            -0.001669899997068569,
+            0.02194700000109151
+          ]
+        }
+      }
+    },
+    {
+      "cloud_threshold": 3,
+      "clouds": 8,
+      "repeats": 2,
+      "fixed_nonce_wire_oracle_sha256": "5e1303043edb7d04fb5f5d2182a0c7a595dad4c42687bd575f7636f19d7137f7",
+      "samples": {
+        "first": {
+          "phase1": [
+            {
+              "wall_s": 4.029927600000519,
+              "process_cpu_s": 6.796875
+            },
+            {
+              "wall_s": 4.1425750000053085,
+              "process_cpu_s": 6.96875
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 3.9388012000126764,
+              "process_cpu_s": 6.734375
+            },
+            {
+              "wall_s": 3.9245074999926146,
+              "process_cpu_s": 6.796875
+            }
+          ]
+        },
+        "same_manifest": {
+          "phase1": [
+            {
+              "wall_s": 0.8159477000008337,
+              "process_cpu_s": 1.046875
+            },
+            {
+              "wall_s": 0.7464215000218246,
+              "process_cpu_s": 1.046875
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 0.8406718999904115,
+              "process_cpu_s": 1.140625
+            },
+            {
+              "wall_s": 0.7650406000029761,
+              "process_cpu_s": 1.125
+            }
+          ]
+        },
+        "changed_approved": {
+          "phase1": [
+            {
+              "wall_s": 4.014397699997062,
+              "process_cpu_s": 6.859375
+            },
+            {
+              "wall_s": 3.933337800001027,
+              "process_cpu_s": 6.828125
+            }
+          ],
+          "current": [
+            {
+              "wall_s": 4.115306099993177,
+              "process_cpu_s": 6.71875
+            },
+            {
+              "wall_s": 3.9199740000185557,
+              "process_cpu_s": 6.765625
+            }
+          ]
+        }
+      },
+      "medians": {
+        "first": {
+          "phase1": {
+            "wall_s": 4.086251300002914,
+            "process_cpu_s": 6.8828125
+          },
+          "current": {
+            "wall_s": 3.9316543500026455,
+            "process_cpu_s": 6.765625
+          },
+          "wall_speedup": 1.0393210939308957,
+          "wall_reduction_percent": 3.7833441619255836,
+          "paired_wall_deltas_s": [
+            0.09112639998784289,
+            0.21806750001269393
+          ]
+        },
+        "same_manifest": {
+          "phase1": {
+            "wall_s": 0.7811846000113292,
+            "process_cpu_s": 1.046875
+          },
+          "current": {
+            "wall_s": 0.8028562499966938,
+            "process_cpu_s": 1.1328125
+          },
+          "wall_speedup": 0.9730068116360134,
+          "wall_reduction_percent": -2.7742034322041587,
+          "paired_wall_deltas_s": [
+            -0.024724199989577755,
+            -0.01861909998115152
+          ]
+        },
+        "changed_approved": {
+          "phase1": {
+            "wall_s": 3.9738677499990445,
+            "process_cpu_s": 6.84375
+          },
+          "current": {
+            "wall_s": 4.017640050005866,
+            "process_cpu_s": 6.7421875
+          },
+          "wall_speedup": 0.9891049722070653,
+          "wall_reduction_percent": -1.1015036926387944,
+          "paired_wall_deltas_s": [
+            -0.1009083999961149,
+            0.013363799982471392
+          ]
+        }
+      }
+    }
+  ],
+  "identity_after": {
+    "native_module": "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\__init__.py",
+    "native_binary": "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd",
+    "native_sha256": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c",
+    "native_build_manifest": "<workspace>\\tmp\\speed-optimization-20261006\\native-current\\build-manifest.json",
+    "backend_path": "<workspace>\\src\\dgfl\\crypto\\backend.py",
+    "backend_sha256": "3c06d903407b4c8e4bc66a9f1b1cc6b7439e8907395049367589da5883a60e69",
+    "protocol_paths": {
+      "phase1": "<workspace>\\tmp\\speed-optimization-20261006\\current\\src\\dgfl\\crypto\\protocol.py",
+      "current": "<workspace>\\src\\dgfl\\crypto\\protocol.py"
+    },
+    "protocol_sha256": {
+      "phase1": "60dd15b4a1b36ff57562ac6e70d606720983868fd8ce2931bc2822d3719d6853",
+      "current": "3bced67cadbc7d7c4f0852c96007da030b713c67506ea87980523eaf553f74ea"
+    },
+    "aggregate_keys_sha256": {
+      "phase1": "c64a430925b2556fd478daf93f9aefa2884823570dd929c83bc0b5c721840da5",
+      "current": "ce1d3aa5794c8fe77f7213407404166bdf4aec9ff5163e6a46014f2c8bd54765"
+    },
+    "native_source_sha256": {
+      "native/dgfl-native/src/batch.rs": "be5b211de837f49fde468d14b2eef0ddde6e8ea3acd5a16802727bad6f44654e",
+      "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+      "native/dgfl-native/src/lib.rs": "93dfb6413b02142675950a7844de3122f6899f348bf1269d4b03bce8c2ec602f",
+      "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4"
+    },
+    "script_sha256": "7a03ef604d2d1f187f37329c13ce99fa17c06d50f15de4bad9acb358d64c5cf4",
+    "python": "3.12.2"
+  }
+}

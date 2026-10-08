@@ -1,0 +1,776 @@
+{
+  "scope": "complete real-role rounds at matched workload; fresh randomized keys and proofs",
+  "equivalence": "every quantized model hash and approved client set agrees across all reports",
+  "workload_fields_checked": [
+    "client_count",
+    "authority_count",
+    "aggregator_count",
+    "authority_threshold",
+    "aggregator_threshold",
+    "rounds",
+    "seed",
+    "mode",
+    "proof_suite",
+    "proof_crs_hash",
+    "non_iid",
+    "train_limit",
+    "test_limit",
+    "local_epochs",
+    "backend",
+    "grid",
+    "execution",
+    "rpc_workers",
+    "verification",
+    "verification_workers",
+    "verification_threads",
+    "batch_strategy",
+    "attack",
+    "malicious_clients",
+    "offline_aggregators",
+    "min_cosine",
+    "max_norm_ratio"
+  ],
+  "cases": {
+    "early_gpu": {
+      "source_report": "tmp\\speed-optimization-20261006\\baseline-gpu.json",
+      "report_sha256": "412bea04878489a4a86e78fa51e95342a77d530043e267a920f33c019a282e09",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 97.40550480000093,
+      "round_total_s": 88.34085629999754,
+      "round_duration_s": [
+        38.61006229999475,
+        26.58555869999691,
+        23.14523530000588
+      ],
+      "steady_round_mean_s": 24.865397000001394,
+      "stage_mean_s": {
+        "dkg_s": 5.132374766670789,
+        "client_stage_s": 2.7696706000036406,
+        "validation_s": 2.0669017666659784,
+        "aggregation_s": 19.449771166662686,
+        "aggregate_key_s": 4.301514833331264,
+        "partial_decryption_s": 4.931132566668869,
+        "combine_and_confirmation_s": 9.863293300004443,
+        "combine_dkg_constants_s": 3.011177700003221
+      },
+      "source_sha256": "67498f6025fcc5741c211162d413eebbc8d1c0a1efa54453e0809182a7d90f99",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "cleanup_verified": true
+    },
+    "early_cpu": {
+      "source_report": "tmp\\speed-optimization-20261006\\baseline-cpu.json",
+      "report_sha256": "b84db025aa6b88834b6181409477da204708e58d7f9d8e614e253b279132a2c5",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "cpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 123.54694189998554,
+      "round_total_s": 119.0858630000439,
+      "round_duration_s": [
+        51.11820730002364,
+        35.46766019999632,
+        32.49999550002394
+      ],
+      "steady_round_mean_s": 33.98382785001013,
+      "stage_mean_s": {
+        "dkg_s": 5.895121166657191,
+        "client_stage_s": 2.830575133334302,
+        "validation_s": 2.1618101333248583,
+        "aggregation_s": 28.778546500000328,
+        "aggregate_key_s": 4.31096400001358,
+        "partial_decryption_s": 4.962283666672495,
+        "combine_and_confirmation_s": 19.091382900000706,
+        "combine_dkg_constants_s": 2.867638166664013
+      },
+      "source_sha256": "67498f6025fcc5741c211162d413eebbc8d1c0a1efa54453e0809182a7d90f99",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "cleanup_verified": true
+    },
+    "old_gpu": {
+      "source_report": "tmp\\speed-optimization-20261006\\baseline-gpu-after-b.json",
+      "report_sha256": "dc3356a7f4967b05430a960d471b33d57ef63ec5d86d5e468ed78e3addac4cd4",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 46.15391789999558,
+      "round_total_s": 41.11391600003117,
+      "round_duration_s": [
+        18.837591300019994,
+        11.52159920000122,
+        10.754725500009954
+      ],
+      "steady_round_mean_s": 11.138162350005587,
+      "stage_mean_s": {
+        "dkg_s": 2.501153366659613,
+        "client_stage_s": 1.1797515000022638,
+        "validation_s": 0.9686840666690841,
+        "aggregation_s": 9.042848566663451,
+        "aggregate_key_s": 2.212361299985787,
+        "partial_decryption_s": 2.168665566656273,
+        "combine_and_confirmation_s": 4.502038466656813,
+        "combine_dkg_constants_s": 1.0060232666534528
+      },
+      "source_sha256": "67498f6025fcc5741c211162d413eebbc8d1c0a1efa54453e0809182a7d90f99",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "cleanup_verified": true
+    },
+    "old_cpu": {
+      "source_report": "tmp\\speed-optimization-20261006\\baseline-cpu-after.json",
+      "report_sha256": "a5a56a88b07b797f27bc3f31cf77add0d76d27fa21a447e114cbc7ee77e59457",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "cpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 57.13518920002389,
+      "round_total_s": 53.06538059999002,
+      "round_duration_s": [
+        23.12071499999729,
+        15.333996600005776,
+        14.610668999986956
+      ],
+      "steady_round_mean_s": 14.972332799996366,
+      "stage_mean_s": {
+        "dkg_s": 2.487716100004036,
+        "client_stage_s": 1.149124566669343,
+        "validation_s": 0.9566112000029534,
+        "aggregation_s": 13.07663393333011,
+        "aggregate_key_s": 2.2406442000065,
+        "partial_decryption_s": 2.2736098333261907,
+        "combine_and_confirmation_s": 8.398825466671648,
+        "combine_dkg_constants_s": 1.1065826333360747
+      },
+      "source_sha256": "67498f6025fcc5741c211162d413eebbc8d1c0a1efa54453e0809182a7d90f99",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+      },
+      "cleanup_verified": true
+    },
+    "new_gpu_a": {
+      "source_report": "tmp\\speed-optimization-20261006\\current-gpu-a.json",
+      "report_sha256": "38a0f0ed7df533d8d0d4bb6f4e223872f3eaf7301e698f495ea1ba3f3c85390a",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 43.0117453999992,
+      "round_total_s": 37.75739640000393,
+      "round_duration_s": [
+        17.724423800013028,
+        10.087672499998007,
+        9.945300099992892
+      ],
+      "steady_round_mean_s": 10.01648629999545,
+      "stage_mean_s": {
+        "dkg_s": 2.3782790999975987,
+        "client_stage_s": 1.1549444999933864,
+        "validation_s": 1.042253033335631,
+        "aggregation_s": 7.997374900005525,
+        "aggregate_key_s": 2.297541366657242,
+        "partial_decryption_s": 1.67548620000404,
+        "combine_and_confirmation_s": 3.846946433322349,
+        "combine_dkg_constants_s": 0.6682148333444881
+      },
+      "source_sha256": "b328aba8c8fd8f976401bfbc98cbf51a17fd748e0eb1d979abb15ce2dde855c4",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "cleanup_verified": true
+    },
+    "new_gpu_b": {
+      "source_report": "tmp\\speed-optimization-20261006\\current-gpu-b.json",
+      "report_sha256": "37cf7417539d27ab759f5e74217e00e52cd9cd7c9d17b946103f4663a69968be",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "gpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 39.75926739998977,
+      "round_total_s": 35.40398139998433,
+      "round_duration_s": [
+        16.24861469998723,
+        9.966899799997918,
+        9.188466899999185
+      ],
+      "steady_round_mean_s": 9.577683349998551,
+      "stage_mean_s": {
+        "dkg_s": 2.276649366656784,
+        "client_stage_s": 1.1034782999874249,
+        "validation_s": 1.0050605666668464,
+        "aggregation_s": 7.40457419998711,
+        "aggregate_key_s": 2.1823815333385332,
+        "partial_decryption_s": 1.525578000000678,
+        "combine_and_confirmation_s": 3.5458725999924354,
+        "combine_dkg_constants_s": 0.5888794333344171
+      },
+      "source_sha256": "b328aba8c8fd8f976401bfbc98cbf51a17fd748e0eb1d979abb15ce2dde855c4",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "cleanup_verified": true
+    },
+    "new_cpu_a": {
+      "source_report": "tmp\\speed-optimization-20261006\\current-cpu-a.json",
+      "report_sha256": "6779daec7f36b150317aaf08faa5e021910a1eff30ba14c9c9b3670fee4644c9",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "cpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 58.62233169999672,
+      "round_total_s": 53.676620399957756,
+      "round_duration_s": [
+        23.388064499973552,
+        14.431910699990112,
+        15.856645199994091
+      ],
+      "steady_round_mean_s": 15.144277949992102,
+      "stage_mean_s": {
+        "dkg_s": 2.5829258000012487,
+        "client_stage_s": 1.3550006666725192,
+        "validation_s": 1.0634360999974888,
+        "aggregation_s": 12.873835466676004,
+        "aggregate_key_s": 2.4308747666558097,
+        "partial_decryption_s": 1.729923466676458,
+        "combine_and_confirmation_s": 8.5613248666729,
+        "combine_dkg_constants_s": 0.7732176666710681
+      },
+      "source_sha256": "b328aba8c8fd8f976401bfbc98cbf51a17fd748e0eb1d979abb15ce2dde855c4",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "cleanup_verified": true
+    },
+    "new_cpu_b": {
+      "source_report": "tmp\\speed-optimization-20261006\\current-cpu-b.json",
+      "report_sha256": "5fcd444a7e29e41d27278ac033ac09d7111563f4f60b104b604c7f09a0943b63",
+      "config": {
+        "aggregator_count": 3,
+        "aggregator_threshold": 2,
+        "attack": "none",
+        "authority_count": 3,
+        "authority_threshold": 2,
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "client_count": 6,
+        "compute_device": "cpu",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 3,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "output_signature": [
+        {
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        },
+        {
+          "model_hash": "34df1fa2bcc7028d96d77f8df35261a9ae3a15d71e1d99a80857f9b37c64fb09",
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ]
+        }
+      ],
+      "task_elapsed_s": 47.86312829999952,
+      "round_total_s": 44.57747309998376,
+      "round_duration_s": [
+        20.174842500011437,
+        12.52375399999437,
+        11.878876599977957
+      ],
+      "steady_round_mean_s": 12.201315299986163,
+      "stage_mean_s": {
+        "dkg_s": 2.2227839333354495,
+        "client_stage_s": 1.0221513333381154,
+        "validation_s": 0.813292399989829,
+        "aggregation_s": 10.789036899999095,
+        "aggregate_key_s": 1.99563223333098,
+        "partial_decryption_s": 1.4152946000006825,
+        "combine_and_confirmation_s": 7.2234490666596685,
+        "combine_dkg_constants_s": 0.6251249666674994
+      },
+      "source_sha256": "b328aba8c8fd8f976401bfbc98cbf51a17fd748e0eb1d979abb15ce2dde855c4",
+      "loaded_native_sha256": {
+        "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+      },
+      "cleanup_verified": true
+    }
+  },
+  "limitations": [
+    "small local repeated sample; no population-wide statistical claim",
+    "steady means omit first-round AuthSetup; task elapsed includes data/proof preparation",
+    "aggregation subphase times are nested and must not be added to the aggregation total"
+  ]
+}

@@ -1,0 +1,1806 @@
+{
+  "scope": "actual restarted desktop control service and all twelve roles",
+  "run": {
+    "run_id": "4e593357b0dc4bb2bbcf01722fc08105",
+    "status": "completed",
+    "config": {
+      "mode": "optimized",
+      "execution": "parallel",
+      "rpc_workers": 6,
+      "proof_suite": "lego_norm_v1",
+      "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+      "verification": "randomized",
+      "verification_workers": 1,
+      "verification_threads": 2,
+      "proof_block_size": 128,
+      "rounds": 2,
+      "seed": 42,
+      "attack": "none",
+      "malicious_clients": 0,
+      "non_iid": true,
+      "offline_aggregators": 0,
+      "train_limit": 6000,
+      "test_limit": 1000,
+      "local_epochs": 5,
+      "backend": "numpy",
+      "grid": 8,
+      "min_cosine": 0.0,
+      "max_norm_ratio": 2.0,
+      "batch_strategy": "regroup",
+      "max_norm_squared": null
+    },
+    "created_at": "2026-10-04T16:56:11.811259+00:00",
+    "current_round": 2,
+    "rounds": [
+      {
+        "round": 1,
+        "accuracy": 0.324,
+        "loss": 2.1104578944038814,
+        "samples": 1000,
+        "accepted_clients": [
+          "client1",
+          "client2",
+          "client4",
+          "client5",
+          "client6"
+        ],
+        "rejected_clients": [
+          "client3"
+        ],
+        "collateral_clients": [],
+        "duration_s": 34.60604150001018,
+        "bytes_sent": 92033268,
+        "stage_times": {
+          "dkg_s": 5.2393483000050765,
+          "client_stage_s": 1.171639199994388,
+          "training_wall_sum_s": 0.02443099998345133,
+          "encryption_wall_sum_s": 1.2550134000048274,
+          "proof_wall_sum_s": 3.405318899996928,
+          "validation_key_s": 0.013652800000272691,
+          "authorization_s": 1.156975899997633,
+          "validation_s": 1.1716094000003068,
+          "proof_metrics_s": 0.008909800002584234,
+          "aggregate_key_s": 5.685851000002003,
+          "partial_decryption_s": 2.5056466000096407,
+          "aggregate_verification_s": 0.12010430000373162,
+          "combine_and_confirmation_s": 18.672198300002492,
+          "combine_numerators_s": 1.3811648999981117,
+          "combine_dkg_constants_s": 1.2408798999967985,
+          "combine_proof_verification_s": 13.0523133000097,
+          "combine_interpolation_s": 0.7128229000081774,
+          "combine_context_materials_s": 0.05307580000953749,
+          "combine_cloud_E_s": 2.118842299983953,
+          "combine_total_s": 18.55913339999097,
+          "combine_cpu_s": 20.15625,
+          "combine_metrics_s": 0.013403199991444126,
+          "combine_numerators_s_max": 0.9591847999981837,
+          "combine_dkg_constants_s_max": 1.2180335000011837,
+          "combine_proof_verification_s_max": 12.943503700036672,
+          "combine_interpolation_s_max": 0.7033513000060339,
+          "combine_context_materials_s_max": 0.04732489999150857,
+          "combine_cloud_E_s_max": 1.9414492000069004,
+          "combine_total_s_max": 17.77273649998824,
+          "combine_cpu_s_max": 17.515625,
+          "aggregation_s": 27.01227999999537
+        },
+        "controller_cpu_s": 23.046875,
+        "validations": [
+          {
+            "client_id": "client1",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.10350786278761391
+          },
+          {
+            "client_id": "client2",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.0776037902760212
+          },
+          {
+            "client_id": "client3",
+            "decision": "rejected",
+            "proof_valid": true,
+            "reason": "相似度低于配置门限",
+            "score": -0.020036081187371636
+          },
+          {
+            "client_id": "client4",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.12827379563502897
+          },
+          {
+            "client_id": "client5",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.049379784155444854
+          },
+          {
+            "client_id": "client6",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.025213752829745254
+          }
+        ],
+        "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+        "attack_accepted": 0,
+        "attack_submitted": 0,
+        "honest_rejected": 1,
+        "honest_total": 6,
+        "reference_norm_squared": 56955,
+        "combine_metrics": {
+          "coordinator": {
+            "actor": "coordinator",
+            "context_hash": "2473895cded618d3136d0ba5d05d929f1be52eb56c2def245638164d65f90df3",
+            "round_id": 1,
+            "combine_timings": {
+              "combine_numerators_s": 1.3811648999981117,
+              "combine_dkg_constants_s": 1.2408798999967985,
+              "combine_proof_verification_s": 13.0523133000097,
+              "combine_interpolation_s": 0.7128229000081774,
+              "combine_context_materials_s": 0.05307580000953749,
+              "combine_cloud_E_s": 2.118842299983953,
+              "combine_total_s": 18.55913339999097,
+              "combine_cpu_s": 20.15625,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          },
+          "authority1": {
+            "actor": "authority1",
+            "context_hash": "2473895cded618d3136d0ba5d05d929f1be52eb56c2def245638164d65f90df3",
+            "round_id": 1,
+            "combine_timings": {
+              "combine_numerators_s": 0.9495140000071842,
+              "combine_dkg_constants_s": 1.2131693999981508,
+              "combine_proof_verification_s": 12.821584700010135,
+              "combine_interpolation_s": 0.7033513000060339,
+              "combine_context_materials_s": 0.04732489999150857,
+              "combine_cloud_E_s": 1.9414492000069004,
+              "combine_total_s": 17.676424199991743,
+              "combine_cpu_s": 17.515625,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          },
+          "authority2": {
+            "actor": "authority2",
+            "context_hash": "2473895cded618d3136d0ba5d05d929f1be52eb56c2def245638164d65f90df3",
+            "round_id": 1,
+            "combine_timings": {
+              "combine_numerators_s": 0.9591847999981837,
+              "combine_dkg_constants_s": 1.2117507999937516,
+              "combine_proof_verification_s": 12.889175999982399,
+              "combine_interpolation_s": 0.7016235999908531,
+              "combine_context_materials_s": 0.046851300008711405,
+              "combine_cloud_E_s": 1.9198541999940062,
+              "combine_total_s": 17.728471300011734,
+              "combine_cpu_s": 17.484375,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          },
+          "authority3": {
+            "actor": "authority3",
+            "context_hash": "2473895cded618d3136d0ba5d05d929f1be52eb56c2def245638164d65f90df3",
+            "round_id": 1,
+            "combine_timings": {
+              "combine_numerators_s": 0.9524980999995023,
+              "combine_dkg_constants_s": 1.2180335000011837,
+              "combine_proof_verification_s": 12.943503700036672,
+              "combine_interpolation_s": 0.6868007000011858,
+              "combine_context_materials_s": 0.04620119999162853,
+              "combine_cloud_E_s": 1.9256668999878457,
+              "combine_total_s": 17.77273649998824,
+              "combine_cpu_s": 17.5,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          }
+        },
+        "proof_verification_metrics": {
+          "authority1": {
+            "context_hash": "2473895cded618d3136d0ba5d05d929f1be52eb56c2def245638164d65f90df3",
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.07745740000973456,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "verifications": {
+              "client1": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.0050073000020347536,
+                "native_threads": 2,
+                "parameters_load_s": 0.0761958999937633,
+                "proof_verify_s": 0.11660330000449903
+              },
+              "client2": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.005032400003983639,
+                "native_threads": 2,
+                "parameters_load_s": 8.720000914763659e-05,
+                "proof_verify_s": 0.1229036000004271
+              },
+              "client3": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.00484860000142362,
+                "native_threads": 2,
+                "parameters_load_s": 0.00011160000576637685,
+                "proof_verify_s": 0.11908940000284929
+              },
+              "client4": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004404299994348548,
+                "native_threads": 2,
+                "parameters_load_s": 7.54999928176403e-05,
+                "proof_verify_s": 0.13172190000477713
+              },
+              "client5": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004798900001333095,
+                "native_threads": 2,
+                "parameters_load_s": 9.110000974033028e-05,
+                "proof_verify_s": 0.11681839999801014
+              },
+              "client6": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004791599989403039,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010410000686533749,
+                "proof_verify_s": 0.12869130000763107
+              }
+            }
+          },
+          "authority2": {
+            "context_hash": "2473895cded618d3136d0ba5d05d929f1be52eb56c2def245638164d65f90df3",
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.07844470000418369,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "verifications": {
+              "client1": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.005150099997990765,
+                "native_threads": 2,
+                "parameters_load_s": 0.07498420000774786,
+                "proof_verify_s": 0.12117769999895245
+              },
+              "client2": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.0052309999882709235,
+                "native_threads": 2,
+                "parameters_load_s": 8.779999916441739e-05,
+                "proof_verify_s": 0.1160513000068022
+              },
+              "client3": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.007046099999570288,
+                "native_threads": 2,
+                "parameters_load_s": 9.679999493528157e-05,
+                "proof_verify_s": 0.12299509999866132
+              },
+              "client4": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004618599996319972,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010350000229664147,
+                "proof_verify_s": 0.12927199999103323
+              },
+              "client5": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004828700009966269,
+                "native_threads": 2,
+                "parameters_load_s": 7.249999907799065e-05,
+                "proof_verify_s": 0.11510140000609681
+              },
+              "client6": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.005101800008560531,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010729998757597059,
+                "proof_verify_s": 0.1285516999923857
+              }
+            }
+          },
+          "authority3": {
+            "context_hash": "2473895cded618d3136d0ba5d05d929f1be52eb56c2def245638164d65f90df3",
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.07793479999236297,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "verifications": {
+              "client1": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.005309300002409145,
+                "native_threads": 2,
+                "parameters_load_s": 0.07563150000351015,
+                "proof_verify_s": 0.11462659999961033
+              },
+              "client2": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004920699997455813,
+                "native_threads": 2,
+                "parameters_load_s": 0.0001109000004362315,
+                "proof_verify_s": 0.11406279999937396
+              },
+              "client3": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.00494710000930354,
+                "native_threads": 2,
+                "parameters_load_s": 0.00013359999866224825,
+                "proof_verify_s": 0.12111459999869112
+              },
+              "client4": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004898700004559942,
+                "native_threads": 2,
+                "parameters_load_s": 8.589999924879521e-05,
+                "proof_verify_s": 0.11539069999707863
+              },
+              "client5": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.004783000011229888,
+                "native_threads": 2,
+                "parameters_load_s": 8.009999874047935e-05,
+                "proof_verify_s": 0.11146159999771044
+              },
+              "client6": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.005012699999497272,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010810000821948051,
+                "proof_verify_s": 0.12296520000381861
+              }
+            }
+          }
+        },
+        "proof_generation_metrics": {
+          "client1": {
+            "proof_gen_s": 0.5874532000016188,
+            "parameters_load_s": 0.003717200001119636,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0036401999968802556,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client2": {
+            "proof_gen_s": 0.5537555999908363,
+            "parameters_load_s": 0.004059800005052239,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0039745000103721395,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client3": {
+            "proof_gen_s": 0.5907793999940623,
+            "parameters_load_s": 0.0034075000003213063,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0033318999921903014,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client4": {
+            "proof_gen_s": 0.5371140000061132,
+            "parameters_load_s": 0.003536300006089732,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0034673000045586377,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client5": {
+            "proof_gen_s": 0.5799970999942161,
+            "parameters_load_s": 0.004234299995005131,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0041603000136092305,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client6": {
+            "proof_gen_s": 0.5562196000100812,
+            "parameters_load_s": 0.004265199997462332,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.004195900008198805,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          }
+        }
+      },
+      {
+        "round": 2,
+        "accuracy": 0.433,
+        "loss": 1.8885067492644412,
+        "samples": 1000,
+        "accepted_clients": [
+          "client1",
+          "client2",
+          "client3",
+          "client4",
+          "client5",
+          "client6"
+        ],
+        "rejected_clients": [],
+        "collateral_clients": [],
+        "duration_s": 33.7018293000001,
+        "bytes_sent": 92134470,
+        "stage_times": {
+          "dkg_s": 5.015232499994454,
+          "client_stage_s": 1.1264716000005137,
+          "training_wall_sum_s": 0.018317599984584376,
+          "encryption_wall_sum_s": 1.0925709999719402,
+          "proof_wall_sum_s": 3.46429140001419,
+          "validation_key_s": 0.012753999995766208,
+          "authorization_s": 1.174910200003069,
+          "validation_s": 1.189187399999355,
+          "proof_metrics_s": 0.009255400000256486,
+          "aggregate_key_s": 5.403880099998787,
+          "partial_decryption_s": 2.3297022999904584,
+          "aggregate_verification_s": 0.11460899999656249,
+          "combine_and_confirmation_s": 18.482924600000842,
+          "combine_numerators_s": 1.3672778000036487,
+          "combine_dkg_constants_s": 1.468862200010335,
+          "combine_proof_verification_s": 12.695158799993806,
+          "combine_interpolation_s": 0.7755908999970416,
+          "combine_context_materials_s": 0.05330679996404797,
+          "combine_cloud_E_s": 1.9422259999992093,
+          "combine_total_s": 18.302448599992204,
+          "combine_cpu_s": 19.84375,
+          "combine_metrics_s": 0.009879799996269867,
+          "combine_numerators_s_max": 1.002565600007074,
+          "combine_dkg_constants_s_max": 1.4386274999997113,
+          "combine_proof_verification_s_max": 12.656769099994563,
+          "combine_interpolation_s_max": 0.6907710999948904,
+          "combine_context_materials_s_max": 0.049001099992892705,
+          "combine_cloud_E_s_max": 1.8399054000037722,
+          "combine_total_s_max": 17.667826100005186,
+          "combine_cpu_s_max": 17.40625,
+          "aggregation_s": 26.359158100007335
+        },
+        "controller_cpu_s": 22.84375,
+        "validations": [
+          {
+            "client_id": "client1",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.7509158518250583
+          },
+          {
+            "client_id": "client2",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.5817037384457302
+          },
+          {
+            "client_id": "client3",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.27949042135741736
+          },
+          {
+            "client_id": "client4",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.779748995107214
+          },
+          {
+            "client_id": "client5",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.6509046449911576
+          },
+          {
+            "client_id": "client6",
+            "decision": "accepted",
+            "proof_valid": true,
+            "reason": "通过并纳入聚合",
+            "score": 0.5074363438912303
+          }
+        ],
+        "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+        "attack_accepted": 0,
+        "attack_submitted": 0,
+        "honest_rejected": 0,
+        "honest_total": 6,
+        "reference_norm_squared": 150379,
+        "combine_metrics": {
+          "coordinator": {
+            "actor": "coordinator",
+            "context_hash": "dd6ce70217e58e6f760406a01ac286d815d1e063afdb6bdc9bbc881321776521",
+            "round_id": 2,
+            "combine_timings": {
+              "combine_numerators_s": 1.3672778000036487,
+              "combine_dkg_constants_s": 1.468862200010335,
+              "combine_proof_verification_s": 12.695158799993806,
+              "combine_interpolation_s": 0.7755908999970416,
+              "combine_context_materials_s": 0.05330679996404797,
+              "combine_cloud_E_s": 1.9422259999992093,
+              "combine_total_s": 18.302448599992204,
+              "combine_cpu_s": 19.84375,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          },
+          "authority1": {
+            "actor": "authority1",
+            "context_hash": "dd6ce70217e58e6f760406a01ac286d815d1e063afdb6bdc9bbc881321776521",
+            "round_id": 2,
+            "combine_timings": {
+              "combine_numerators_s": 0.9443753999948967,
+              "combine_dkg_constants_s": 1.4358510000020033,
+              "combine_proof_verification_s": 12.577645400015172,
+              "combine_interpolation_s": 0.690303600000334,
+              "combine_context_materials_s": 0.04652879999775905,
+              "combine_cloud_E_s": 1.8329001999954926,
+              "combine_total_s": 17.52762779999466,
+              "combine_cpu_s": 17.171875,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          },
+          "authority2": {
+            "actor": "authority2",
+            "context_hash": "dd6ce70217e58e6f760406a01ac286d815d1e063afdb6bdc9bbc881321776521",
+            "round_id": 2,
+            "combine_timings": {
+              "combine_numerators_s": 0.9670856000011554,
+              "combine_dkg_constants_s": 1.4386274999997113,
+              "combine_proof_verification_s": 12.631536699977005,
+              "combine_interpolation_s": 0.6669137999997474,
+              "combine_context_materials_s": 0.04431420004402753,
+              "combine_cloud_E_s": 1.8381107000022894,
+              "combine_total_s": 17.586614799991366,
+              "combine_cpu_s": 17.40625,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          },
+          "authority3": {
+            "actor": "authority3",
+            "context_hash": "dd6ce70217e58e6f760406a01ac286d815d1e063afdb6bdc9bbc881321776521",
+            "round_id": 2,
+            "combine_timings": {
+              "combine_numerators_s": 1.002565600007074,
+              "combine_dkg_constants_s": 1.428787500000908,
+              "combine_proof_verification_s": 12.656769099994563,
+              "combine_interpolation_s": 0.6907710999948904,
+              "combine_context_materials_s": 0.049001099992892705,
+              "combine_cloud_E_s": 1.8399054000037722,
+              "combine_total_s": 17.667826100005186,
+              "combine_cpu_s": 17.3125,
+              "combine_commitment_cache_hits": 6,
+              "combine_commitment_cache_misses": 3
+            }
+          }
+        },
+        "proof_verification_metrics": {
+          "authority1": {
+            "context_hash": "dd6ce70217e58e6f760406a01ac286d815d1e063afdb6bdc9bbc881321776521",
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0036035999946761876,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "verifications": {
+              "client1": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.008247899997513741,
+                "native_threads": 2,
+                "parameters_load_s": 7.760000880807638e-05,
+                "proof_verify_s": 0.12000850000185892
+              },
+              "client2": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.00797539998893626,
+                "native_threads": 2,
+                "parameters_load_s": 7.759999425616115e-05,
+                "proof_verify_s": 0.12420139998721424
+              },
+              "client3": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.009595200011972338,
+                "native_threads": 2,
+                "parameters_load_s": 9.679999493528157e-05,
+                "proof_verify_s": 0.15734150000207592
+              },
+              "client4": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.008686900007887743,
+                "native_threads": 2,
+                "parameters_load_s": 0.00013810000382363796,
+                "proof_verify_s": 0.1394830999925034
+              },
+              "client5": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.007850599999073893,
+                "native_threads": 2,
+                "parameters_load_s": 9.729999874252826e-05,
+                "proof_verify_s": 0.12451680000231136
+              },
+              "client6": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.007618999996338971,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010489999840501696,
+                "proof_verify_s": 0.11579510000592563
+              }
+            }
+          },
+          "authority2": {
+            "context_hash": "dd6ce70217e58e6f760406a01ac286d815d1e063afdb6bdc9bbc881321776521",
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.003604900004575029,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "verifications": {
+              "client1": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.007419400004437193,
+                "native_threads": 2,
+                "parameters_load_s": 9.200000204145908e-05,
+                "proof_verify_s": 0.13411179999820888
+              },
+              "client2": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.008375799996429123,
+                "native_threads": 2,
+                "parameters_load_s": 8.179999713320285e-05,
+                "proof_verify_s": 0.1362510999897495
+              },
+              "client3": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.007771599994157441,
+                "native_threads": 2,
+                "parameters_load_s": 0.0001066999975591898,
+                "proof_verify_s": 0.14486470000701956
+              },
+              "client4": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.008023299989872612,
+                "native_threads": 2,
+                "parameters_load_s": 0.00011029999586753547,
+                "proof_verify_s": 0.13238939999428112
+              },
+              "client5": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.0072533999918960035,
+                "native_threads": 2,
+                "parameters_load_s": 0.0001083999959519133,
+                "proof_verify_s": 0.13972440001089126
+              },
+              "client6": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.007071500003803521,
+                "native_threads": 2,
+                "parameters_load_s": 9.010000212583691e-05,
+                "proof_verify_s": 0.11435240000719205
+              }
+            }
+          },
+          "authority3": {
+            "context_hash": "dd6ce70217e58e6f760406a01ac286d815d1e063afdb6bdc9bbc881321776521",
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0036194999993313104,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "verifications": {
+              "client1": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.008186200007912703,
+                "native_threads": 2,
+                "parameters_load_s": 7.54999928176403e-05,
+                "proof_verify_s": 0.11313079998944886
+              },
+              "client2": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.00788059999467805,
+                "native_threads": 2,
+                "parameters_load_s": 8.510000770911574e-05,
+                "proof_verify_s": 0.12569709999661427
+              },
+              "client3": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.00877770000079181,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010809999366756529,
+                "proof_verify_s": 0.14116119999380317
+              },
+              "client4": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.008419600009801798,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010509999992791563,
+                "proof_verify_s": 0.12499209999805316
+              },
+              "client5": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.008004200004506856,
+                "native_threads": 2,
+                "parameters_load_s": 0.00010059999476652592,
+                "proof_verify_s": 0.13302789999579545
+              },
+              "client6": {
+                "checked_ciphertext_reused": true,
+                "inner_product_s": 0.007850499998312443,
+                "native_threads": 2,
+                "parameters_load_s": 9.300000965595245e-05,
+                "proof_verify_s": 0.12007239999365993
+              }
+            }
+          }
+        },
+        "proof_generation_metrics": {
+          "client1": {
+            "proof_gen_s": 0.5858072999981232,
+            "parameters_load_s": 0.007190100004663691,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.007104399992385879,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client2": {
+            "proof_gen_s": 0.5851937999977963,
+            "parameters_load_s": 0.007288000007974915,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.007219599996460602,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client3": {
+            "proof_gen_s": 0.5606669999979204,
+            "parameters_load_s": 0.006773800007067621,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.00669910000578966,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client4": {
+            "proof_gen_s": 0.5730792000103975,
+            "parameters_load_s": 0.006889600001159124,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.00681760000588838,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client5": {
+            "proof_gen_s": 0.5724034000013489,
+            "parameters_load_s": 0.004029700008686632,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.0039456000085920095,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          },
+          "client6": {
+            "proof_gen_s": 0.5871407000086037,
+            "parameters_load_s": 0.006593699989025481,
+            "parameters": {
+              "bits": 8,
+              "circuit": "signed-binary-range-squared-norm-v1",
+              "created_at": "2026-10-03T11:56:15.725040+00:00",
+              "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+              "curve": "BLS12-381",
+              "dimension": 650,
+              "load_wall_s": 0.00651530000322964,
+              "pk_bytes": 1954228,
+              "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+              "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+              "prover_cached": true,
+              "schema_version": 1,
+              "setup_kind": "single_party_development",
+              "suite": "lego_norm_v1",
+              "vk_bytes": 31692,
+              "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+            },
+            "params_cached": true
+          }
+        }
+      }
+    ],
+    "events": [
+      {
+        "time": "2026-10-04T16:56:12.014244+00:00",
+        "stage": "health",
+        "message": "检查节点身份与双向 TLS 连接",
+        "round": 0
+      },
+      {
+        "time": "2026-10-04T16:56:12.046807+00:00",
+        "stage": "data",
+        "message": "各客户端从本机公开数据缓存建立独立分区；原始样本不经节点 RPC 上传",
+        "round": 0
+      },
+      {
+        "time": "2026-10-04T16:56:15.259753+00:00",
+        "stage": "dkg",
+        "message": "密钥节点共同建钥，核对同一公开转录",
+        "round": 1
+      },
+      {
+        "time": "2026-10-04T16:56:20.499810+00:00",
+        "stage": "training",
+        "message": "客户端本地训练、量化；安全模式生成密文与范围/范数证明",
+        "round": 1
+      },
+      {
+        "time": "2026-10-04T16:56:21.669616+00:00",
+        "stage": "received",
+        "message": "已收到 6 份客户端提交；接收完成后进入验证",
+        "round": 1
+      },
+      {
+        "time": "2026-10-04T16:56:21.670622+00:00",
+        "stage": "validation",
+        "message": "各密钥节点独立核验证明、授权内积、范数与相似度门限及成员分组",
+        "round": 1
+      },
+      {
+        "time": "2026-10-04T16:56:22.852393+00:00",
+        "stage": "aggregation",
+        "message": "5 个客户端获准；等待至少两份聚合结果",
+        "round": 1
+      },
+      {
+        "time": "2026-10-04T16:56:49.868099+00:00",
+        "stage": "completed_round",
+        "message": "第 1 轮完成，测试准确率 32.40%",
+        "round": 1
+      },
+      {
+        "time": "2026-10-04T16:56:49.877116+00:00",
+        "stage": "dkg",
+        "message": "密钥节点共同建钥，核对同一公开转录",
+        "round": 2
+      },
+      {
+        "time": "2026-10-04T16:56:54.892732+00:00",
+        "stage": "training",
+        "message": "客户端本地训练、量化；安全模式生成密文与范围/范数证明",
+        "round": 2
+      },
+      {
+        "time": "2026-10-04T16:56:56.017383+00:00",
+        "stage": "received",
+        "message": "已收到 6 份客户端提交；接收完成后进入验证",
+        "round": 2
+      },
+      {
+        "time": "2026-10-04T16:56:56.019542+00:00",
+        "stage": "validation",
+        "message": "各密钥节点独立核验证明、授权内积、范数与相似度门限及成员分组",
+        "round": 2
+      },
+      {
+        "time": "2026-10-04T16:56:57.218915+00:00",
+        "stage": "aggregation",
+        "message": "6 个客户端获准；等待至少两份聚合结果",
+        "round": 2
+      },
+      {
+        "time": "2026-10-04T16:57:23.580918+00:00",
+        "stage": "completed_round",
+        "message": "第 2 轮完成，测试准确率 43.30%",
+        "round": 2
+      },
+      {
+        "time": "2026-10-04T16:57:23.710254+00:00",
+        "stage": "finished",
+        "message": "全部配置轮次已完成",
+        "round": 2
+      }
+    ],
+    "error": null,
+    "summary": {
+      "accuracy": 0.433,
+      "elapsed_s": 71.70811510000203,
+      "controller_cpu_s": 46.703125,
+      "bytes_sent": 184190991,
+      "completed_rounds": 2
+    },
+    "evidence": {
+      "data": "MNIST public replay",
+      "crypto_backend": "BLS12-381 / py-arkworks-bls12381 wrapper + optional dgfl-native (locked dependencies)",
+      "proof": "experimental circuit-specific trusted-setup LegoGroth16 range/norm + shared-response ciphertext/key/committed-witness Sigma",
+      "wire_format": "binary-v2: raw curve points, chunked above 24 MiB, hash domain revised",
+      "wire_measurement": "application request + response bytes, excluding TLS/HTTP framing",
+      "training_backend": "numpy",
+      "execution": {
+        "requested": "parallel",
+        "resolved": "parallel",
+        "rpc_workers": 6,
+        "batched_authorization": true,
+        "embedded_aggregate_certificates": true
+      },
+      "proof_settings": {
+        "proof_suite": "lego_norm_v1",
+        "verification": "randomized",
+        "verification_workers": 1,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4"
+      },
+      "implementation": {
+        "source_sha256": "12f6a373c539e095af00c14f452226167e8f229ecd371965cf4e1f0309ee22c2",
+        "source_files": {
+          "__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+          "cli.py": "2440e8b635ecd3acbc3facb5e21e8b7094a5448a5a4c54ba365102fe0ebdf54c",
+          "crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+          "crypto/backend.py": "59d857b72c7135094d82ec13b4b47b3ed74ef8c4169a32da0a9f4edb806f72cb",
+          "crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+          "crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+          "crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+          "crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+          "crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+          "crypto/protocol.py": "ada36d4abcd6d17e354e5c74ce191ff49d0d2f80e65dacfb3597573843ce5967",
+          "deployment.py": "e597e5bcadab7b7a6e55c16f13f239c1a23c362aa1bedad2396b7aa973600e7e",
+          "experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+          "experiments/evidence.py": "88587fd057e9a0d38086401f4a4181b93c016d031eb6ba96b482d93d17f6bcd1",
+          "experiments/runner.py": "838163a13a73db1c55c255d2f5757f9d6a75aa256432a475850c29d49266512a",
+          "experiments/telemetry.py": "9e27522cf837a6fc4a22aec293a0c65e183a5570257623b719c4874651570b5f",
+          "services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+          "services/control.py": "2dac94899dcb6c080dffb619e9ddb1fc71d0f0d78e6d5f4d07c048f44c807197",
+          "services/node.py": "08702743c8327b67b22df917fa014e08871b29f8a2c1f27c2a255c1f49228dac",
+          "services/roles.py": "588cd67bee38f8f620d0f1fa08349f5fb3f629d47b02fdeebec2f22bb12820b1",
+          "training/__init__.py": "979cf13d7187c5dbf4a21bdfa9db81c4bb6abd8719f14cd2777b953476c014da",
+          "training/data.py": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012",
+          "training/model.py": "113c26807cdf92cfcfa25e81da537abdb8f64d43a53b74cae1bf66eb8180ffed",
+          "training/paper_models.py": "c2b9904988ffda39b0216a05003f13eb23df3d52c7aaa386b3ee5171d89853d9",
+          "transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+          "transport/binary.py": "d66092d05e58de4311e68cd0e0463f99f8682a3e56701ea953f7df75d90de686",
+          "transport/chunking.py": "cbdf575495f7e37453ff2d30679d09a065df420d78ef7dfcb7fbc4320611a732",
+          "transport/client.py": "9dde759ed586f82a7eedb9019c77fa965d621e15ba3e91365d78c740c353b347",
+          "transport/security.py": "428268c63a34761b7da62765444ef2eb2095cd1d847e792172103b5b48225ed2",
+          "validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+          "validation/policy.py": "449cb484cb17c2cd045c51f9e2af79318b8dad7ac8cdcd565bbc8b2e4db40c1d"
+        },
+        "dependencies": {
+          "numpy": "2.5.3",
+          "py-arkworks-bls12381": "0.5.0",
+          "dgfl-native": "0.2.0",
+          "cryptography": "50.0.2",
+          "fastapi": "0.142.2",
+          "httpx": "0.28.1"
+        },
+        "native": {
+          "enabled": true,
+          "package_version": "0.2.0",
+          "build_input_sha256": {
+            "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+            "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4",
+            "native/dgfl-native/pyproject.toml": "b55946356672e9167faf49808fef878f86153ebe29e75f3799cc1a0b307569be",
+            "native/dgfl-native/src/lib.rs": "05599052f11005b587ae9ffffd989590134da00e6f49dda0f2e1b3d4bcc76d03",
+            "native/dgfl-native/src/lego.rs": "5fe7f64c8f3ced63281481e0bbc9c5b6d65299e8cecc7245a87b36e6d4192a01",
+            "native/dgfl-native/src/sigma.rs": "0f0b8b7976c5d2e348867f37e7ad39bbf73e1c0a395fbe5bb05b25728ee6fd57",
+            "native/dgfl-native/src/linked.rs": "69a17ef6a8be9127d7c4cae7082f23a7c09c6104d54d5e3c8b1f166f52af87ae",
+            "native/dgfl-native/src/aggregate.rs": "cf8292ff8e97e65f207194d7e934da65c2d27ac0e11f4dc687d46e4072bb425d"
+          },
+          "installed_artifact_sha256": {
+            "dgfl_native/dgfl_native.cp312-win_amd64.pyd": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+          },
+          "loaded_artifact_sha256": {
+            "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+          },
+          "loaded_capabilities": {
+            "lego_norm_v1": true,
+            "aggregate_verification_native": true
+          },
+          "evidence_scope": "controller imported extension paths and their current on-disk digests, plus checked loaded APIs; installed metadata does not attest node imports or an in-memory image after file replacement"
+        },
+        "python": "3.12.2",
+        "platform": "Windows",
+        "machine": "AMD64"
+      },
+      "proof_parameters": {
+        "bits": 8,
+        "circuit": "signed-binary-range-squared-norm-v1",
+        "created_at": "2026-10-03T11:56:15.725040+00:00",
+        "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "curve": "BLS12-381",
+        "dimension": 650,
+        "pk_bytes": 1954228,
+        "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+        "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+        "schema_version": 1,
+        "setup_kind": "single_party_development",
+        "suite": "lego_norm_v1",
+        "vk_bytes": 31692,
+        "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+      },
+      "deployment": "single_host",
+      "initial_nodes": [
+        {
+          "id": "aggregator1",
+          "role": "aggregator",
+          "status": "online",
+          "host": "https://127.0.0.1:9201",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "aggregator2",
+          "role": "aggregator",
+          "status": "online",
+          "host": "https://127.0.0.1:9202",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "aggregator3",
+          "role": "aggregator",
+          "status": "online",
+          "host": "https://127.0.0.1:9203",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "authority1",
+          "role": "authority",
+          "status": "online",
+          "host": "https://127.0.0.1:9101",
+          "capabilities": {
+            "aggregate_verification_native": true,
+            "batched_authorization": true,
+            "embedded_aggregate_certificates": true,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "authority2",
+          "role": "authority",
+          "status": "online",
+          "host": "https://127.0.0.1:9102",
+          "capabilities": {
+            "aggregate_verification_native": true,
+            "batched_authorization": true,
+            "embedded_aggregate_certificates": true,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "authority3",
+          "role": "authority",
+          "status": "online",
+          "host": "https://127.0.0.1:9103",
+          "capabilities": {
+            "aggregate_verification_native": true,
+            "batched_authorization": true,
+            "embedded_aggregate_certificates": true,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "client1",
+          "role": "client",
+          "status": "online",
+          "host": "https://127.0.0.1:9301",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "client2",
+          "role": "client",
+          "status": "online",
+          "host": "https://127.0.0.1:9302",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "client3",
+          "role": "client",
+          "status": "online",
+          "host": "https://127.0.0.1:9303",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "client4",
+          "role": "client",
+          "status": "online",
+          "host": "https://127.0.0.1:9304",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "client5",
+          "role": "client",
+          "status": "online",
+          "host": "https://127.0.0.1:9305",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        },
+        {
+          "id": "client6",
+          "role": "client",
+          "status": "online",
+          "host": "https://127.0.0.1:9306",
+          "capabilities": {
+            "aggregate_verification_native": false,
+            "batched_authorization": false,
+            "embedded_aggregate_certificates": false,
+            "lego_norm_v1": true
+          }
+        }
+      ],
+      "screening": {
+        "min_cosine": 0.0,
+        "max_norm_squared": null,
+        "max_norm_ratio": 2.0,
+        "batch_strategy": "regroup"
+      },
+      "partitions": {
+        "client1": {
+          "config_hash": "7b16a9de9466417fbc2f1dfb06055557f0feed2f04e732bd5ea486c657001a40",
+          "partition_hash": "79ab05bd9c0708f28671ede252309c936752ff1da6a88f84b5832206aec6f860",
+          "policy": {
+            "batch_size": 2,
+            "batch_strategy": "regroup",
+            "bits": 8,
+            "dimension": 650,
+            "max_norm_ratio": 2.0,
+            "max_norm_squared": null,
+            "members": [
+              "client1",
+              "client2",
+              "client3",
+              "client4",
+              "client5",
+              "client6"
+            ],
+            "min_cosine": 0.0,
+            "mode": "optimized",
+            "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "proof_suite": "lego_norm_v1",
+            "scale": 128,
+            "verification": "randomized",
+            "verification_threads": 2,
+            "verification_workers": 1
+          },
+          "policy_hash": "51cfdf8819fce0926fbdc94581f27325156f2ba99c531f1dd406a7a566717822",
+          "proof_parameters": {
+            "bits": 8,
+            "circuit": "signed-binary-range-squared-norm-v1",
+            "created_at": "2026-10-03T11:56:15.725040+00:00",
+            "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "curve": "BLS12-381",
+            "dimension": 650,
+            "load_wall_s": 2.5529065000009723,
+            "pk_bytes": 1954228,
+            "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+            "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+            "prover_cached": false,
+            "schema_version": 1,
+            "setup_kind": "single_party_development",
+            "suite": "lego_norm_v1",
+            "vk_bytes": 31692,
+            "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+          },
+          "proof_parameters_load_s": 2.5534224000002723,
+          "samples": 1000
+        },
+        "client2": {
+          "config_hash": "7b16a9de9466417fbc2f1dfb06055557f0feed2f04e732bd5ea486c657001a40",
+          "partition_hash": "e126be3727e89e8a441d10adcb034290d9b293ab7282895f6f1e89ab8d64fe64",
+          "policy": {
+            "batch_size": 2,
+            "batch_strategy": "regroup",
+            "bits": 8,
+            "dimension": 650,
+            "max_norm_ratio": 2.0,
+            "max_norm_squared": null,
+            "members": [
+              "client1",
+              "client2",
+              "client3",
+              "client4",
+              "client5",
+              "client6"
+            ],
+            "min_cosine": 0.0,
+            "mode": "optimized",
+            "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "proof_suite": "lego_norm_v1",
+            "scale": 128,
+            "verification": "randomized",
+            "verification_threads": 2,
+            "verification_workers": 1
+          },
+          "policy_hash": "51cfdf8819fce0926fbdc94581f27325156f2ba99c531f1dd406a7a566717822",
+          "proof_parameters": {
+            "bits": 8,
+            "circuit": "signed-binary-range-squared-norm-v1",
+            "created_at": "2026-10-03T11:56:15.725040+00:00",
+            "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "curve": "BLS12-381",
+            "dimension": 650,
+            "load_wall_s": 2.620043799994164,
+            "pk_bytes": 1954228,
+            "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+            "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+            "prover_cached": false,
+            "schema_version": 1,
+            "setup_kind": "single_party_development",
+            "suite": "lego_norm_v1",
+            "vk_bytes": 31692,
+            "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+          },
+          "proof_parameters_load_s": 2.6204289000015706,
+          "samples": 1000
+        },
+        "client3": {
+          "config_hash": "7b16a9de9466417fbc2f1dfb06055557f0feed2f04e732bd5ea486c657001a40",
+          "partition_hash": "1c74d800446f86463eb14da7061941042d2f14724c618b80258da4d81d13df86",
+          "policy": {
+            "batch_size": 2,
+            "batch_strategy": "regroup",
+            "bits": 8,
+            "dimension": 650,
+            "max_norm_ratio": 2.0,
+            "max_norm_squared": null,
+            "members": [
+              "client1",
+              "client2",
+              "client3",
+              "client4",
+              "client5",
+              "client6"
+            ],
+            "min_cosine": 0.0,
+            "mode": "optimized",
+            "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "proof_suite": "lego_norm_v1",
+            "scale": 128,
+            "verification": "randomized",
+            "verification_threads": 2,
+            "verification_workers": 1
+          },
+          "policy_hash": "51cfdf8819fce0926fbdc94581f27325156f2ba99c531f1dd406a7a566717822",
+          "proof_parameters": {
+            "bits": 8,
+            "circuit": "signed-binary-range-squared-norm-v1",
+            "created_at": "2026-10-03T11:56:15.725040+00:00",
+            "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "curve": "BLS12-381",
+            "dimension": 650,
+            "load_wall_s": 2.595243000003393,
+            "pk_bytes": 1954228,
+            "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+            "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+            "prover_cached": false,
+            "schema_version": 1,
+            "setup_kind": "single_party_development",
+            "suite": "lego_norm_v1",
+            "vk_bytes": 31692,
+            "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+          },
+          "proof_parameters_load_s": 2.595643199994811,
+          "samples": 1000
+        },
+        "client4": {
+          "config_hash": "7b16a9de9466417fbc2f1dfb06055557f0feed2f04e732bd5ea486c657001a40",
+          "partition_hash": "67abe9ba213133898e5dc9a4ffd424d174c02bcac8f82e549453cdc3527533ed",
+          "policy": {
+            "batch_size": 2,
+            "batch_strategy": "regroup",
+            "bits": 8,
+            "dimension": 650,
+            "max_norm_ratio": 2.0,
+            "max_norm_squared": null,
+            "members": [
+              "client1",
+              "client2",
+              "client3",
+              "client4",
+              "client5",
+              "client6"
+            ],
+            "min_cosine": 0.0,
+            "mode": "optimized",
+            "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "proof_suite": "lego_norm_v1",
+            "scale": 128,
+            "verification": "randomized",
+            "verification_threads": 2,
+            "verification_workers": 1
+          },
+          "policy_hash": "51cfdf8819fce0926fbdc94581f27325156f2ba99c531f1dd406a7a566717822",
+          "proof_parameters": {
+            "bits": 8,
+            "circuit": "signed-binary-range-squared-norm-v1",
+            "created_at": "2026-10-03T11:56:15.725040+00:00",
+            "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "curve": "BLS12-381",
+            "dimension": 650,
+            "load_wall_s": 2.595541900009266,
+            "pk_bytes": 1954228,
+            "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+            "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+            "prover_cached": false,
+            "schema_version": 1,
+            "setup_kind": "single_party_development",
+            "suite": "lego_norm_v1",
+            "vk_bytes": 31692,
+            "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+          },
+          "proof_parameters_load_s": 2.5960679999989225,
+          "samples": 1000
+        },
+        "client5": {
+          "config_hash": "7b16a9de9466417fbc2f1dfb06055557f0feed2f04e732bd5ea486c657001a40",
+          "partition_hash": "ba3a78a42c1903c19a97ea565ac061df8c84870d610845834a085c1153d78980",
+          "policy": {
+            "batch_size": 2,
+            "batch_strategy": "regroup",
+            "bits": 8,
+            "dimension": 650,
+            "max_norm_ratio": 2.0,
+            "max_norm_squared": null,
+            "members": [
+              "client1",
+              "client2",
+              "client3",
+              "client4",
+              "client5",
+              "client6"
+            ],
+            "min_cosine": 0.0,
+            "mode": "optimized",
+            "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "proof_suite": "lego_norm_v1",
+            "scale": 128,
+            "verification": "randomized",
+            "verification_threads": 2,
+            "verification_workers": 1
+          },
+          "policy_hash": "51cfdf8819fce0926fbdc94581f27325156f2ba99c531f1dd406a7a566717822",
+          "proof_parameters": {
+            "bits": 8,
+            "circuit": "signed-binary-range-squared-norm-v1",
+            "created_at": "2026-10-03T11:56:15.725040+00:00",
+            "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "curve": "BLS12-381",
+            "dimension": 650,
+            "load_wall_s": 2.613114799998584,
+            "pk_bytes": 1954228,
+            "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+            "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+            "prover_cached": false,
+            "schema_version": 1,
+            "setup_kind": "single_party_development",
+            "suite": "lego_norm_v1",
+            "vk_bytes": 31692,
+            "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+          },
+          "proof_parameters_load_s": 2.6137606000120286,
+          "samples": 1000
+        },
+        "client6": {
+          "config_hash": "7b16a9de9466417fbc2f1dfb06055557f0feed2f04e732bd5ea486c657001a40",
+          "partition_hash": "cce76e53c86962ce6740dd86944bfe3a1344830a6bb34f4ea0c327b73ed07d2a",
+          "policy": {
+            "batch_size": 2,
+            "batch_strategy": "regroup",
+            "bits": 8,
+            "dimension": 650,
+            "max_norm_ratio": 2.0,
+            "max_norm_squared": null,
+            "members": [
+              "client1",
+              "client2",
+              "client3",
+              "client4",
+              "client5",
+              "client6"
+            ],
+            "min_cosine": 0.0,
+            "mode": "optimized",
+            "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "proof_suite": "lego_norm_v1",
+            "scale": 128,
+            "verification": "randomized",
+            "verification_threads": 2,
+            "verification_workers": 1
+          },
+          "policy_hash": "51cfdf8819fce0926fbdc94581f27325156f2ba99c531f1dd406a7a566717822",
+          "proof_parameters": {
+            "bits": 8,
+            "circuit": "signed-binary-range-squared-norm-v1",
+            "created_at": "2026-10-03T11:56:15.725040+00:00",
+            "crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+            "curve": "BLS12-381",
+            "dimension": 650,
+            "load_wall_s": 2.5762391000025673,
+            "pk_bytes": 1954228,
+            "pk_sha256": "816595aa083bbdc1a6eb7d6b6d7d9b532d23696e645980d5ec5e2f68626bcaf4",
+            "protocol_version": "DGFL-LEGO-NORM-V1-EXPERIMENTAL",
+            "prover_cached": false,
+            "schema_version": 1,
+            "setup_kind": "single_party_development",
+            "suite": "lego_norm_v1",
+            "vk_bytes": 31692,
+            "vk_sha256": "bea698283c143303cf0c6db7f94839769c2f96aa301bd0b7ae3c03587bb4bcf0"
+          },
+          "proof_parameters_load_s": 2.5767964999977266,
+          "samples": 1000
+        }
+      },
+      "memory": {
+        "peak_sampled_rss_bytes": 1630523392,
+        "samples": 62,
+        "interval_seconds": 1,
+        "sampled_cpu_seconds": 275.890625,
+        "sampled_cpu_seconds_by_role": {
+          "controller": 46.578125,
+          "aggregator1": 4.171875,
+          "aggregator2": 4.21875,
+          "aggregator3": 4.203125,
+          "authority1": 58.828125,
+          "authority2": 59.0625,
+          "authority3": 58.859375,
+          "client1": 6.71875,
+          "client2": 6.796875,
+          "client3": 6.5625,
+          "client4": 6.703125,
+          "client5": 6.5,
+          "client6": 6.6875
+        },
+        "cpu_measurement": "user + system deltas; exited workers between samples may be missed; existing-process CPU before first sample excluded",
+        "scope": "local controller + recorded local role process trees; RSS sum may double-count shared pages"
+      },
+      "resources": {
+        "peak_sampled_rss_bytes": 1630523392,
+        "samples": 62,
+        "interval_seconds": 1,
+        "sampled_cpu_seconds": 275.890625,
+        "sampled_cpu_seconds_by_role": {
+          "controller": 46.578125,
+          "aggregator1": 4.171875,
+          "aggregator2": 4.21875,
+          "aggregator3": 4.203125,
+          "authority1": 58.828125,
+          "authority2": 59.0625,
+          "authority3": 58.859375,
+          "client1": 6.71875,
+          "client2": 6.796875,
+          "client3": 6.5625,
+          "client4": 6.703125,
+          "client5": 6.5,
+          "client6": 6.6875
+        },
+        "cpu_measurement": "user + system deltas; exited workers between samples may be missed; existing-process CPU before first sample excluded",
+        "scope": "local controller + recorded local role process trees; RSS sum may double-count shared pages"
+      }
+    },
+    "initial_metrics": {
+      "accuracy": 0.066,
+      "loss": 2.301219863379547,
+      "samples": 1000
+    },
+    "current_validations": [
+      {
+        "client_id": "client1",
+        "decision": "accepted",
+        "proof_valid": true,
+        "reason": "通过并纳入聚合",
+        "score": 0.7509158518250583
+      },
+      {
+        "client_id": "client2",
+        "decision": "accepted",
+        "proof_valid": true,
+        "reason": "通过并纳入聚合",
+        "score": 0.5817037384457302
+      },
+      {
+        "client_id": "client3",
+        "decision": "accepted",
+        "proof_valid": true,
+        "reason": "通过并纳入聚合",
+        "score": 0.27949042135741736
+      },
+      {
+        "client_id": "client4",
+        "decision": "accepted",
+        "proof_valid": true,
+        "reason": "通过并纳入聚合",
+        "score": 0.779748995107214
+      },
+      {
+        "client_id": "client5",
+        "decision": "accepted",
+        "proof_valid": true,
+        "reason": "通过并纳入聚合",
+        "score": 0.6509046449911576
+      },
+      {
+        "client_id": "client6",
+        "decision": "accepted",
+        "proof_valid": true,
+        "reason": "通过并纳入聚合",
+        "score": 0.5074363438912303
+      }
+    ],
+    "current_validations_round": 2
+  },
+  "cpu_affinity": "normal service scheduling, no benchmark affinity constraint",
+  "matches_isolated_round_outputs": true,
+  "embedded_aggregate_certificates": true
+}

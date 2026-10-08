@@ -1,0 +1,5 @@
+cases:
+  - name: plain_full_mnist_42
+    config: {mode: plain, rounds: 3, seed: 42, train_limit: 60000, test_limit: 10000, attack: none}
+  - name: optimized_full_mnist_42
+    config: {mode: optimized, rounds: 3, seed: 42, train_limit: 60000, test_limit: 10000, attack: none}

@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "suite": "legacy",
+      "dimension": 64,
+      "old_proof_accepted": true,
+      "tampered_rejected": true
+    },
+    {
+      "suite": "compact_range_v1",
+      "dimension": 64,
+      "old_proof_accepted": true,
+      "tampered_rejected": true
+    },
+    {
+      "suite": "compact_norm_v1",
+      "dimension": 64,
+      "old_proof_accepted": true,
+      "tampered_rejected": true
+    },
+    {
+      "suite": "lego_norm_v1",
+      "dimension": 650,
+      "old_proof_accepted": true,
+      "tampered_rejected": true
+    }
+  ]
+}

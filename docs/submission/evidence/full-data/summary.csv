@@ -1,0 +1,3 @@
+﻿run_id,status,mode,rounds,seed,attack,malicious_clients,non_iid,offline_aggregators,train_limit,test_limit,local_epochs,backend,attempted_round_count,completed_rounds,accuracy,elapsed_seconds,completed_round_seconds,wire_bytes,completed_round_attack_accepted,completed_round_attack_submitted,completed_round_honest_rejected,completed_round_honest_total,incomplete_validation_round,incomplete_round_validations,error
+e24674cfc4d14567b82f8243d97a144d,completed,plain,3,42,none,1,False,0,60000,10000,2,numpy,3,3,0.8295,11.949742399971,2.4546912000514567,199104,0,0,0,18,,[],
+f5af62e75ec9405ea0a6e900aca6422e,completed,optimized,3,42,none,1,False,0,60000,10000,2,numpy,3,3,0.8295,640.4559969000984,637.0681490999414,914233769,0,0,0,18,,[],

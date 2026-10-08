@@ -1,0 +1,5 @@
+# Optional CPU training backend only; the default demonstration uses NumPy.
+# Install separately after requirements-lock.txt. Not part of the base offline bundle.
+# Official PyTorch CPU wheel index; CUDA packages are not requested.
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu

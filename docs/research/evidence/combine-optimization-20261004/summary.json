@@ -1,0 +1,1912 @@
+{
+  "cases": {
+    "baseline-clean": {
+      "run_id": "11c23b1220d1476bb329914253f73fd0",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 7.911105550003413,
+        "validation_s": 2.490219049999723,
+        "authorization_s": 2.470397450000746,
+        "aggregation_s": 41.03396275000705,
+        "aggregate_key_s": 5.582624000002397,
+        "partial_decryption_s": 2.7143352500061155,
+        "combine_and_confirmation_s": 32.60532575000252,
+        "combine_proof_verification_s": 26.715905550016032,
+        "combine_cloud_E_s": null,
+        "round_wall_s": 52.57761885000218,
+        "bytes_sent_per_round": 118706635.5
+      },
+      "controller_cpu_affinity": null,
+      "role_cpu_affinity": null,
+      "per_actor_combine_means": {},
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "4edccf5cdb3037ae3bfa8814663e555006600ee27fdc0c1fe49680a7d9135ade",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "07ece1bcc5cfb79bd9fa1f2052b22b3b7d2d984ed721e71560cdf8e6cf8e76ce"
+      }
+    },
+    "cache-only": {
+      "run_id": "c021bd3281a14da988f63c640107d2c9",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 8.15037100000336,
+        "validation_s": 2.588402750006935,
+        "authorization_s": 2.572138849995099,
+        "aggregation_s": 42.3530022499981,
+        "aggregate_key_s": 5.671113050004351,
+        "partial_decryption_s": 2.804702900000848,
+        "combine_and_confirmation_s": 33.73978550000902,
+        "combine_proof_verification_s": 27.677018399997905,
+        "combine_cloud_E_s": 2.2182044999935897,
+        "round_wall_s": 54.296586399999796,
+        "bytes_sent_per_round": 118707520.5
+      },
+      "controller_cpu_affinity": null,
+      "role_cpu_affinity": null,
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 2.2182044999935897,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.04842074996122392,
+          "combine_cpu_s": 34.3203125,
+          "combine_dkg_constants_s": 1.4094046999962302,
+          "combine_interpolation_s": 0.725866449996829,
+          "combine_numerators_s": 1.6602714999971795,
+          "combine_proof_verification_s": 27.677018399997905,
+          "combine_total_s": 33.739217700000154
+        },
+        "authority1": {
+          "combine_cloud_E_s": 2.0147840500067105,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.043951799991191365,
+          "combine_cpu_s": 29.875,
+          "combine_dkg_constants_s": 1.420951200001582,
+          "combine_interpolation_s": 0.7111597999974038,
+          "combine_numerators_s": 1.000302449996525,
+          "combine_proof_verification_s": 25.369943099998636,
+          "combine_total_s": 30.561121649996494
+        },
+        "authority2": {
+          "combine_cloud_E_s": 1.9862959499951103,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.04151905002800049,
+          "combine_cpu_s": 30.1484375,
+          "combine_dkg_constants_s": 1.4350853500000085,
+          "combine_interpolation_s": 0.7165849500015611,
+          "combine_numerators_s": 1.0163233999992372,
+          "combine_proof_verification_s": 25.45100945001468,
+          "combine_total_s": 30.64684750000015
+        },
+        "authority3": {
+          "combine_cloud_E_s": 2.0037446999995154,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.04389090001495788,
+          "combine_cpu_s": 30.0859375,
+          "combine_dkg_constants_s": 1.425626550008019,
+          "combine_interpolation_s": 0.710262149994378,
+          "combine_numerators_s": 1.0057242999973823,
+          "combine_proof_verification_s": 25.383232299987867,
+          "combine_total_s": 30.572510650003096
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "b2dff636638d557da96f1af628045ad46f8a622583730b61777e3c5df7d3029b",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "07ece1bcc5cfb79bd9fa1f2052b22b3b7d2d984ed721e71560cdf8e6cf8e76ce"
+      }
+    },
+    "native": {
+      "run_id": "69974070220f42e08929a0b1472c3445",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 9.019786449993262,
+        "validation_s": 2.944763800005603,
+        "authorization_s": 2.9214252999954624,
+        "aggregation_s": 41.071455549994425,
+        "aggregate_key_s": 6.489677600002324,
+        "partial_decryption_s": 3.1947321999978158,
+        "combine_and_confirmation_s": 31.22341609999421,
+        "combine_proof_verification_s": 23.809201350020885,
+        "combine_cloud_E_s": 2.5286834000071394,
+        "round_wall_s": 54.49608165000245,
+        "bytes_sent_per_round": 118707520.5
+      },
+      "controller_cpu_affinity": null,
+      "role_cpu_affinity": null,
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 2.5286834000071394,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.06607030001032399,
+          "combine_cpu_s": 34.65625,
+          "combine_dkg_constants_s": 1.5970917000086047,
+          "combine_interpolation_s": 0.8860623500004294,
+          "combine_numerators_s": 1.9404539999959525,
+          "combine_proof_verification_s": 23.809201350020885,
+          "combine_total_s": 30.82760204999795
+        },
+        "authority1": {
+          "combine_cloud_E_s": 2.1676609000060125,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.05871824998757802,
+          "combine_cpu_s": 28.875,
+          "combine_dkg_constants_s": 1.6913649999987683,
+          "combine_interpolation_s": 0.7532564499997534,
+          "combine_numerators_s": 1.1803970499968273,
+          "combine_proof_verification_s": 23.600918249998358,
+          "combine_total_s": 29.45235590000084
+        },
+        "authority2": {
+          "combine_cloud_E_s": 2.15912625000783,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07534254997881362,
+          "combine_cpu_s": 28.75,
+          "combine_dkg_constants_s": 1.6737839999987045,
+          "combine_interpolation_s": 0.7454001000005519,
+          "combine_numerators_s": 1.206646799997543,
+          "combine_proof_verification_s": 23.592530750007427,
+          "combine_total_s": 29.45286820000183
+        },
+        "authority3": {
+          "combine_cloud_E_s": 2.178344449996075,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.08205505001387792,
+          "combine_cpu_s": 28.8984375,
+          "combine_dkg_constants_s": 1.6964278499945067,
+          "combine_interpolation_s": 0.7486417499967501,
+          "combine_numerators_s": 1.1754548999961116,
+          "combine_proof_verification_s": 23.628464049987087,
+          "combine_total_s": 29.509428249999473
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "b2dff636638d557da96f1af628045ad46f8a622583730b61777e3c5df7d3029b",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "a3bc24968ddc0be3effd7dfae3efd8e1e150284fd9bb41559f160144b435e6d8"
+      }
+    },
+    "native-v2": {
+      "run_id": "cc6fe87d70d747a38cce21dc2bc92ddb",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 7.758835450003971,
+        "validation_s": 2.285156450001523,
+        "authorization_s": 2.271314049998182,
+        "aggregation_s": 27.75701449999906,
+        "aggregate_key_s": 5.4904670500036445,
+        "partial_decryption_s": 2.716669150002417,
+        "combine_and_confirmation_s": 19.415251849990455,
+        "combine_proof_verification_s": 12.930054749995179,
+        "combine_cloud_E_s": 1.9830932000040775,
+        "round_wall_s": 38.98166544999549,
+        "bytes_sent_per_round": 118707520.5
+      },
+      "controller_cpu_affinity": null,
+      "role_cpu_affinity": null,
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 1.9830932000040775,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.058908899991365615,
+          "combine_cpu_s": 20.7265625,
+          "combine_dkg_constants_s": 1.4085822000051849,
+          "combine_interpolation_s": 0.7328806000004988,
+          "combine_numerators_s": 1.698972149999463,
+          "combine_proof_verification_s": 12.930054749995179,
+          "combine_total_s": 18.81252250000398
+        },
+        "authority1": {
+          "combine_cloud_E_s": 1.8822766999874148,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.04345580001245253,
+          "combine_cpu_s": 17.453125,
+          "combine_dkg_constants_s": 1.420479800006433,
+          "combine_interpolation_s": 0.6781602000046405,
+          "combine_numerators_s": 1.0212571500014747,
+          "combine_proof_verification_s": 12.844979000008607,
+          "combine_total_s": 17.890636949996406
+        },
+        "authority2": {
+          "combine_cloud_E_s": 1.8890068500040798,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.043814649965497665,
+          "combine_cpu_s": 17.609375,
+          "combine_dkg_constants_s": 1.4145351499973913,
+          "combine_interpolation_s": 0.6885428000023239,
+          "combine_numerators_s": 1.032669549997081,
+          "combine_proof_verification_s": 12.853231649998634,
+          "combine_total_s": 17.92182834999403
+        },
+        "authority3": {
+          "combine_cloud_E_s": 1.8779471999951056,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.04266729997470975,
+          "combine_cpu_s": 17.40625,
+          "combine_dkg_constants_s": 1.394013500001165,
+          "combine_interpolation_s": 0.6819003999989945,
+          "combine_numerators_s": 1.035988150004414,
+          "combine_proof_verification_s": 12.821557149982254,
+          "combine_total_s": 17.854100300006394
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "b2dff636638d557da96f1af628045ad46f8a622583730b61777e3c5df7d3029b",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      }
+    },
+    "randomized-v2": {
+      "run_id": "235daf0590fa412ca5b8863ab152c1e6",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "randomized",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 13.602341249999881,
+        "validation_s": 2.8397455000012997,
+        "authorization_s": 2.803544349997537,
+        "aggregation_s": 58.474012600003334,
+        "aggregate_key_s": 11.066957049995835,
+        "partial_decryption_s": 4.515932250003971,
+        "combine_and_confirmation_s": 42.64163334999466,
+        "combine_proof_verification_s": 28.4290235500157,
+        "combine_cloud_E_s": 4.941647799991188,
+        "round_wall_s": 77.87974430000031,
+        "bytes_sent_per_round": 118707493.5
+      },
+      "controller_cpu_affinity": null,
+      "role_cpu_affinity": null,
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 4.941647799991188,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.09327039999334374,
+          "combine_cpu_s": 49.234375,
+          "combine_dkg_constants_s": 4.008015849991352,
+          "combine_interpolation_s": 1.7139707499954966,
+          "combine_numerators_s": 3.4410888499987777,
+          "combine_proof_verification_s": 28.4290235500157,
+          "combine_total_s": 42.62707409999712
+        },
+        "authority1": {
+          "combine_cloud_E_s": 4.1040437499978,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07743829996616114,
+          "combine_cpu_s": 39.4140625,
+          "combine_dkg_constants_s": 3.892929749999894,
+          "combine_interpolation_s": 1.5018507500062697,
+          "combine_numerators_s": 2.3498080499994103,
+          "combine_proof_verification_s": 28.25020254998526,
+          "combine_total_s": 40.176326300002984
+        },
+        "authority2": {
+          "combine_cloud_E_s": 4.1532696499998565,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.08015839997096919,
+          "combine_cpu_s": 39.3046875,
+          "combine_dkg_constants_s": 3.8779206500039436,
+          "combine_interpolation_s": 1.5003996999948868,
+          "combine_numerators_s": 2.291161049994116,
+          "combine_proof_verification_s": 28.27773950000119,
+          "combine_total_s": 40.18070369999623
+        },
+        "authority3": {
+          "combine_cloud_E_s": 4.119768049997219,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.0820284500150592,
+          "combine_cpu_s": 39.4921875,
+          "combine_dkg_constants_s": 3.8738588499982143,
+          "combine_interpolation_s": 1.5143027999947662,
+          "combine_numerators_s": 2.327568099994096,
+          "combine_proof_verification_s": 28.277228050013946,
+          "combine_total_s": 40.194812199995795
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "b2dff636638d557da96f1af628045ad46f8a622583730b61777e3c5df7d3029b",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      }
+    },
+    "baseline-affinity": {
+      "run_id": "769c3eccbebf4e2b8bbaa1d366171ffb",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 11.79281379999884,
+        "validation_s": 4.965599700000894,
+        "authorization_s": 4.949166549995425,
+        "aggregation_s": 67.99231089999375,
+        "aggregate_key_s": 8.656274399996619,
+        "partial_decryption_s": 4.005598299998383,
+        "combine_and_confirmation_s": 55.17412594999769,
+        "combine_proof_verification_s": 46.26049095000781,
+        "combine_cloud_E_s": null,
+        "round_wall_s": 87.62867775000632,
+        "bytes_sent_per_round": 118706635.5
+      },
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "role_cpu_affinity": {
+        "aggregator1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client4": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client5": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client6": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "per_actor_combine_means": {},
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "4edccf5cdb3037ae3bfa8814663e555006600ee27fdc0c1fe49680a7d9135ade",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "07ece1bcc5cfb79bd9fa1f2052b22b3b7d2d984ed721e71560cdf8e6cf8e76ce"
+      }
+    },
+    "native-affinity": {
+      "run_id": "e471bcf5b1004be1854c6db42e8662a0",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "deterministic",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 12.35861814999953,
+        "validation_s": 4.905078100004175,
+        "authorization_s": 4.877696499999729,
+        "aggregation_s": 45.8911314500001,
+        "aggregate_key_s": 8.45409569999174,
+        "partial_decryption_s": 4.014688899995235,
+        "combine_and_confirmation_s": 33.267277499995544,
+        "combine_proof_verification_s": 22.979946699982975,
+        "combine_cloud_E_s": 3.709510599997884,
+        "round_wall_s": 66.04398684999614,
+        "bytes_sent_per_round": 118707520.5
+      },
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "role_cpu_affinity": {
+        "aggregator1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client4": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client5": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client6": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 3.709510599997884,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07626254997740034,
+          "combine_cpu_s": 35.90625,
+          "combine_dkg_constants_s": 2.364168449996214,
+          "combine_interpolation_s": 1.310113800005638,
+          "combine_numerators_s": 2.27404419999948,
+          "combine_proof_verification_s": 22.979946699982975,
+          "combine_total_s": 32.71408040000097
+        },
+        "authority1": {
+          "combine_cloud_E_s": 3.326178750001418,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07877939998434158,
+          "combine_cpu_s": 30.28125,
+          "combine_dkg_constants_s": 2.367737450011191,
+          "combine_interpolation_s": 1.0633060999971349,
+          "combine_numerators_s": 1.658162949999678,
+          "combine_proof_verification_s": 22.946460849998402,
+          "combine_total_s": 31.440662050001265
+        },
+        "authority2": {
+          "combine_cloud_E_s": 3.287344200005464,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07205034999060445,
+          "combine_cpu_s": 30.1171875,
+          "combine_dkg_constants_s": 2.473228899994865,
+          "combine_interpolation_s": 1.117744050003239,
+          "combine_numerators_s": 1.6563156000047456,
+          "combine_proof_verification_s": 22.653122149997216,
+          "combine_total_s": 31.259841499995673
+        },
+        "authority3": {
+          "combine_cloud_E_s": 3.319232399997418,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07453880000684876,
+          "combine_cpu_s": 30.2265625,
+          "combine_dkg_constants_s": 2.3105796000018017,
+          "combine_interpolation_s": 1.161649400004535,
+          "combine_numerators_s": 1.6477067999949213,
+          "combine_proof_verification_s": 22.62190085000475,
+          "combine_total_s": 31.135644600006344
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "b2dff636638d557da96f1af628045ad46f8a622583730b61777e3c5df7d3029b",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      }
+    },
+    "randomized-affinity": {
+      "run_id": "29b4e07fbdec494da0e4fdf801987d67",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "dgflow",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "randomized",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 8.147511949995533,
+        "validation_s": 2.1273373999938485,
+        "authorization_s": 2.11159389999375,
+        "aggregation_s": 45.81027670000185,
+        "aggregate_key_s": 8.793949199993222,
+        "partial_decryption_s": 4.0305917500081705,
+        "combine_and_confirmation_s": 32.77561684999819,
+        "combine_proof_verification_s": 22.802988050010754,
+        "combine_cloud_E_s": 3.677673650003271,
+        "round_wall_s": 58.9823957999979,
+        "bytes_sent_per_round": 118707493.5
+      },
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "role_cpu_affinity": {
+        "aggregator1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client4": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client5": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client6": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 3.677673650003271,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.08589805000519846,
+          "combine_cpu_s": 35.59375,
+          "combine_dkg_constants_s": 2.414249399997061,
+          "combine_interpolation_s": 1.2347762499994133,
+          "combine_numerators_s": 2.360196100009489,
+          "combine_proof_verification_s": 22.802988050010754,
+          "combine_total_s": 32.57582100000582
+        },
+        "authority1": {
+          "combine_cloud_E_s": 3.113983350005583,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.06570719998853747,
+          "combine_cpu_s": 29.265625,
+          "combine_dkg_constants_s": 2.33452214999852,
+          "combine_interpolation_s": 1.1400478499999736,
+          "combine_numerators_s": 1.7461125499976333,
+          "combine_proof_verification_s": 22.381384250002156,
+          "combine_total_s": 30.781791400004295
+        },
+        "authority2": {
+          "combine_cloud_E_s": 3.1916248999987147,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.08636095001565991,
+          "combine_cpu_s": 29.3515625,
+          "combine_dkg_constants_s": 2.4088124000045354,
+          "combine_interpolation_s": 1.0927128000039374,
+          "combine_numerators_s": 1.6387338000058662,
+          "combine_proof_verification_s": 22.42937695000728,
+          "combine_total_s": 30.84766105000017
+        },
+        "authority3": {
+          "combine_cloud_E_s": 3.2041589000000386,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07372580001538154,
+          "combine_cpu_s": 29.203125,
+          "combine_dkg_constants_s": 2.331387749996793,
+          "combine_interpolation_s": 1.0535207499924581,
+          "combine_numerators_s": 1.6925068499986082,
+          "combine_proof_verification_s": 22.451352899988706,
+          "combine_total_s": 30.806687399999646
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "b2dff636638d557da96f1af628045ad46f8a622583730b61777e3c5df7d3029b",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      }
+    },
+    "optimized-pre-wire-affinity": {
+      "run_id": "c2f2edd04e8b465c8193ab81a41b216d",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "optimized",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "randomized",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 8.323296050002682,
+        "validation_s": 2.0725140499998815,
+        "authorization_s": 2.0522301500022877,
+        "aggregation_s": 45.7669684999928,
+        "aggregate_key_s": 8.818809999997029,
+        "partial_decryption_s": 3.7846580500045093,
+        "combine_and_confirmation_s": 32.988019199998234,
+        "combine_proof_verification_s": 22.764152550007566,
+        "combine_cloud_E_s": 3.654918349988293,
+        "round_wall_s": 59.04596264999418,
+        "bytes_sent_per_round": 116319898.5
+      },
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "role_cpu_affinity": {
+        "aggregator1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client4": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client5": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client6": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 3.654918349988293,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.09035955001309048,
+          "combine_cpu_s": 35.640625,
+          "combine_dkg_constants_s": 2.464627150002343,
+          "combine_interpolation_s": 1.2767171499945107,
+          "combine_numerators_s": 2.367140850001306,
+          "combine_proof_verification_s": 22.764152550007566,
+          "combine_total_s": 32.61795335000352
+        },
+        "authority1": {
+          "combine_cloud_E_s": 3.2810258000026806,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07304269999440294,
+          "combine_cpu_s": 29.828125,
+          "combine_dkg_constants_s": 2.5129406499981997,
+          "combine_interpolation_s": 1.052339399997436,
+          "combine_numerators_s": 1.6878708500007633,
+          "combine_proof_verification_s": 22.520851250017586,
+          "combine_total_s": 31.128106100004516
+        },
+        "authority2": {
+          "combine_cloud_E_s": 3.2256243500087294,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07334904998424463,
+          "combine_cpu_s": 29.515625,
+          "combine_dkg_constants_s": 2.4132214999990538,
+          "combine_interpolation_s": 1.151664749995689,
+          "combine_numerators_s": 1.699118250005995,
+          "combine_proof_verification_s": 22.36870139999519,
+          "combine_total_s": 30.931713399993896
+        },
+        "authority3": {
+          "combine_cloud_E_s": 3.1912304500074242,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07246779997512931,
+          "combine_cpu_s": 29.6015625,
+          "combine_dkg_constants_s": 2.3929890500076,
+          "combine_interpolation_s": 1.1651711000013165,
+          "combine_numerators_s": 1.6766192499999306,
+          "combine_proof_verification_s": 22.336440949984535,
+          "combine_total_s": 30.83495364999544
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "b2dff636638d557da96f1af628045ad46f8a622583730b61777e3c5df7d3029b",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      }
+    },
+    "optimized-affinity": {
+      "run_id": "6bbd6a0f5ca94d3b90297f5d05f0be08",
+      "config": {
+        "attack": "none",
+        "backend": "numpy",
+        "batch_strategy": "regroup",
+        "execution": "parallel",
+        "grid": 8,
+        "local_epochs": 5,
+        "malicious_clients": 0,
+        "max_norm_ratio": 2.0,
+        "min_cosine": 0.0,
+        "mode": "optimized",
+        "non_iid": true,
+        "offline_aggregators": 0,
+        "proof_block_size": 128,
+        "proof_crs_hash": "337b7b408e33a1df0de756839e5adce5be80d40fc894a24e75f7152dac39d6e4",
+        "proof_suite": "lego_norm_v1",
+        "rounds": 2,
+        "rpc_workers": 6,
+        "seed": 42,
+        "test_limit": 1000,
+        "train_limit": 6000,
+        "verification": "randomized",
+        "verification_threads": 2,
+        "verification_workers": 1
+      },
+      "means": {
+        "dkg_s": 8.623740850001923,
+        "validation_s": 2.148112349990697,
+        "authorization_s": 2.1319353000071715,
+        "aggregation_s": 45.630544600004214,
+        "aggregate_key_s": 8.855132350006897,
+        "partial_decryption_s": 3.921168150001904,
+        "combine_and_confirmation_s": 32.640168700003414,
+        "combine_proof_verification_s": 23.030299149984785,
+        "combine_cloud_E_s": 3.601067449992115,
+        "round_wall_s": 59.43587955000112,
+        "bytes_sent_per_round": 92083869
+      },
+      "controller_cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "role_cpu_affinity": {
+        "aggregator1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "aggregator3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "authority3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client1": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client2": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client3": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client4": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client5": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "client6": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "per_actor_combine_means": {
+        "coordinator": {
+          "combine_cloud_E_s": 3.601067449992115,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.1015892999857897,
+          "combine_cpu_s": 35.1640625,
+          "combine_dkg_constants_s": 2.3523146500083385,
+          "combine_interpolation_s": 1.299969300009252,
+          "combine_numerators_s": 2.1592376500047976,
+          "combine_proof_verification_s": 23.030299149984785,
+          "combine_total_s": 32.54451819999667
+        },
+        "authority1": {
+          "combine_cloud_E_s": 3.1933683000024757,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07804629998281598,
+          "combine_cpu_s": 29.84375,
+          "combine_dkg_constants_s": 2.4268378999986453,
+          "combine_interpolation_s": 1.203212500004156,
+          "combine_numerators_s": 1.6634608000022126,
+          "combine_proof_verification_s": 22.68929909997678,
+          "combine_total_s": 31.254263299997547
+        },
+        "authority2": {
+          "combine_cloud_E_s": 3.3234690000026603,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.06836839999596123,
+          "combine_cpu_s": 29.7109375,
+          "combine_dkg_constants_s": 2.4461419500003103,
+          "combine_interpolation_s": 1.179559149997658,
+          "combine_numerators_s": 1.6531742500010296,
+          "combine_proof_verification_s": 22.73673429999326,
+          "combine_total_s": 31.40748519999761
+        },
+        "authority3": {
+          "combine_cloud_E_s": 3.2709876999870175,
+          "combine_commitment_cache_hits": 6,
+          "combine_commitment_cache_misses": 3,
+          "combine_context_materials_s": 0.07279115004348569,
+          "combine_cpu_s": 29.9921875,
+          "combine_dkg_constants_s": 2.4131177999952342,
+          "combine_interpolation_s": 1.1827973499966902,
+          "combine_numerators_s": 1.6873433500004467,
+          "combine_proof_verification_s": 22.820936300027824,
+          "combine_total_s": 31.448006049999094
+        }
+      },
+      "outputs": [
+        {
+          "round": 1,
+          "model_hash": "cb5dd8061cd13f48291870c2d96b66878afff78b6fc48d2348915e68dcfc0550",
+          "accuracy": 0.324,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": [
+            "client3"
+          ]
+        },
+        {
+          "round": 2,
+          "model_hash": "aa3d3835e8d5d1f435698836cdb8f050299043a993d23d22405c848c12abf501",
+          "accuracy": 0.433,
+          "accepted_clients": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "rejected_clients": []
+        }
+      ],
+      "source_sha256": "12f6a373c539e095af00c14f452226167e8f229ecd371965cf4e1f0309ee22c2",
+      "native_sha256": {
+        "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      }
+    }
+  },
+  "comparisons": {
+    "cache-only": {
+      "reference": "baseline-clean",
+      "round_wall_s_reduction_percent": -3.2693902607145997,
+      "combine_and_confirmation_s_reduction_percent": -3.479369470818461,
+      "combine_proof_verification_s_reduction_percent": -3.5975304980118805,
+      "bytes_sent_per_round_reduction_percent": -0.0007455354085861288
+    },
+    "native": {
+      "reference": "baseline-clean",
+      "round_wall_s_reduction_percent": -3.6488202432168437,
+      "combine_and_confirmation_s_reduction_percent": 4.238294260894493,
+      "combine_proof_verification_s_reduction_percent": 10.88005119105312,
+      "bytes_sent_per_round_reduction_percent": -0.0007455354085861288
+    },
+    "native-v2": {
+      "reference": "baseline-clean",
+      "round_wall_s_reduction_percent": 25.858823007550725,
+      "combine_and_confirmation_s_reduction_percent": 40.453740597917644,
+      "combine_proof_verification_s_reduction_percent": 51.60166019531604,
+      "bytes_sent_per_round_reduction_percent": -0.0007455354085861288
+    },
+    "randomized-v2": {
+      "reference": "baseline-clean",
+      "round_wall_s_reduction_percent": -48.12337645449891,
+      "combine_and_confirmation_s_reduction_percent": -30.78119101445065,
+      "combine_proof_verification_s_reduction_percent": -6.412352359879625,
+      "bytes_sent_per_round_reduction_percent": -0.0007227902605322356
+    },
+    "baseline-affinity": {
+      "reference": "baseline-affinity",
+      "round_wall_s_reduction_percent": 0.0,
+      "combine_and_confirmation_s_reduction_percent": 0.0,
+      "combine_proof_verification_s_reduction_percent": 0.0,
+      "bytes_sent_per_round_reduction_percent": 0.0
+    },
+    "native-affinity": {
+      "reference": "baseline-affinity",
+      "round_wall_s_reduction_percent": 24.631994290258042,
+      "combine_and_confirmation_s_reduction_percent": 39.70493065872132,
+      "combine_proof_verification_s_reduction_percent": 50.324896627628426,
+      "bytes_sent_per_round_reduction_percent": -0.0007455354085861288
+    },
+    "randomized-affinity": {
+      "reference": "baseline-affinity",
+      "round_wall_s_reduction_percent": 32.69053315141042,
+      "combine_and_confirmation_s_reduction_percent": 40.59603793324874,
+      "combine_proof_verification_s_reduction_percent": 50.70742315585627,
+      "bytes_sent_per_round_reduction_percent": -0.0007227902605322356
+    },
+    "optimized-pre-wire-affinity": {
+      "reference": "baseline-affinity",
+      "round_wall_s_reduction_percent": 32.61799200206473,
+      "combine_and_confirmation_s_reduction_percent": 40.21107062050411,
+      "combine_proof_verification_s_reduction_percent": 50.79137276210916,
+      "bytes_sent_per_round_reduction_percent": 2.010618016378707
+    },
+    "optimized-affinity": {
+      "reference": "baseline-affinity",
+      "round_wall_s_reduction_percent": 32.17302705449434,
+      "combine_and_confirmation_s_reduction_percent": 40.84153008679464,
+      "combine_proof_verification_s_reduction_percent": 50.216051155028005,
+      "bytes_sent_per_round_reduction_percent": 22.427361695378856
+    }
+  },
+  "communication_change_vs_randomized_percent": 22.42792237880079,
+  "new_certificate_deduplication_percent": 20.835669401826372,
+  "new_certificate_deduplication_bytes_per_round": 24236029.5,
+  "all_two_round_model_hashes_accuracy_and_approval_outputs_equal": true,
+  "limitations": [
+    "Two rounds per case, sequential local runs; no statistical significance claim.",
+    "Historical 125.62 s runs had different host load and are excluded from causal speedup.",
+    "Public table construction and checked decode are included in each actor combine timing.",
+    "Actor timings run concurrently: do not sum four wall times or different actor maxima.",
+    "Process CPU includes concurrent work in that process; not exclusive proof CPU."
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "scope": "explicit PowerShell environment assignments in recorded Codex execution calls",
+  "limitations": [
+    "declarations are not an OS process-environment or memory-image attestation",
+    "original measurement reports remain unchanged"
+  ],
+  "powershell_assignments": [
+    "$env:OPENBLAS_NUM_THREADS='1'",
+    "$env:MKL_NUM_THREADS='1'",
+    "$env:BLIS_NUM_THREADS='1'",
+    "$env:OMP_NUM_THREADS='1'",
+    "$env:NUMEXPR_NUM_THREADS='1'",
+    "$env:RAYON_NUM_THREADS='1'"
+  ],
+  "reports_by_sha256": {
+    "383a45411265b0f1e19a434bfc18bdeed8a7c9ba86eb81f76d6e95e432435721": {
+      "report": "baseline-gpu-budget-a.json",
+      "source": "recorded execution calls in this chat; assignments precede Python startup",
+      "declared_library_thread_environment": {
+        "controller": {
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "RAYON_NUM_THREADS": "1"
+        },
+        "role_launcher": {
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "RAYON_NUM_THREADS": "1"
+        }
+      }
+    },
+    "2eb67b2859391d1294fdd29d014ddd5cec6e2ad14e81580c8435c46ede9abb04": {
+      "report": "final-gpu-budget-a.json",
+      "source": "recorded execution calls in this chat; assignments precede Python startup",
+      "declared_library_thread_environment": {
+        "controller": {
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "RAYON_NUM_THREADS": "1"
+        },
+        "role_launcher": {
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "RAYON_NUM_THREADS": "1"
+        }
+      }
+    },
+    "497050f0b2f8b43e40c0ee69a9065d0b3bf73df8e40550835be5c88fee806f41": {
+      "report": "baseline-cpu-budget-a.json",
+      "source": "recorded execution calls in this chat; assignments precede Python startup",
+      "declared_library_thread_environment": {
+        "controller": {
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "RAYON_NUM_THREADS": "1"
+        },
+        "role_launcher": {
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "RAYON_NUM_THREADS": "1"
+        }
+      }
+    }
+  },
+  "publication_note": "Digest keys identify the sanitized published reports. The publication manifest records their original and published hashes. Recorded launch declarations are unchanged."
+}

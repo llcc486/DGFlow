@@ -1,0 +1,97 @@
+{
+  "topology": {
+    "client_count": 6,
+    "authority_count": 3,
+    "aggregator_count": 3,
+    "authority_threshold": 2,
+    "aggregator_threshold": 2
+  },
+  "online_nodes": 12,
+  "deployment_schema_version": 2,
+  "cloud_strategies": [
+    "auto",
+    "threshold",
+    "all"
+  ],
+  "deployment_http_status": 200,
+  "protected_files_unchanged": true,
+  "loaded_native_by_role": {
+    "aggregator1": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "aggregator2": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "aggregator3": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "authority1": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "authority2": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "authority3": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "client1": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "client2": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "client3": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "client4": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "client5": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    },
+    "client6": {
+      "dgfl_native.dgfl_native": "9ce987bae75086dfb11d69b02a5f55d481541c5f8a1f09672f5c1f60b4ce5c7c"
+    }
+  },
+  "gpu_ready": true,
+  "stopped": {
+    "stopped": [
+      "authority1",
+      "authority2",
+      "authority3",
+      "aggregator1",
+      "aggregator2",
+      "aggregator3",
+      "client1",
+      "client2",
+      "client3",
+      "client4",
+      "client5",
+      "client6"
+    ],
+    "missing": [],
+    "refused": []
+  },
+  "started": {
+    "started": [
+      "authority1",
+      "authority2",
+      "authority3",
+      "aggregator1",
+      "aggregator2",
+      "aggregator3",
+      "client1",
+      "client2",
+      "client3",
+      "client4",
+      "client5",
+      "client6"
+    ],
+    "already_running": []
+  },
+  "frontend_files": {
+    "index.html": "1625b33f888d9b79aa178daf13a444cbfd9e0432e19a869ee3332ea71bfbd763",
+    "assets/index-Bp7_Y8U2.css": "cde8876153a473368ca475dc32536f2854921386b23b92af9fd350199a7662a7",
+    "assets/index-hK4IVOPn.js": "d18b54ecdf6ce2b123dd6db08ff6da0f780f3345e161286064223aff1a695680"
+  }
+}

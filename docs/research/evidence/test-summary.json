@@ -1,0 +1,43 @@
+{
+  "command": ".venv/Scripts/python.exe -m pytest -q --junitxml=tmp/paper-foundation-tests.xml",
+  "tests": 295,
+  "passed": 289,
+  "skipped": [
+    {
+      "test": "tests.packaging.test_package_submission.test_symbolic_link_escape_rejected[file]",
+      "reason": "Windows does not permit test symlink creation (WinError 1314)"
+    },
+    {
+      "test": "tests.packaging.test_package_submission.test_symbolic_link_escape_rejected[directory]",
+      "reason": "Windows does not permit test symlink creation (WinError 1314)"
+    },
+    {
+      "test": "tests.packaging.test_package_submission.test_pdf_info_metadata_is_parsed_when_optional_parser_is_available[metadata0-None]",
+      "reason": "could not import 'pypdf': No module named 'pypdf'"
+    },
+    {
+      "test": "tests.packaging.test_package_submission.test_pdf_info_metadata_is_parsed_when_optional_parser_is_available[metadata1-development path]",
+      "reason": "could not import 'pypdf': No module named 'pypdf'"
+    },
+    {
+      "test": "tests.packaging.test_package_submission.test_pdf_info_metadata_is_parsed_when_optional_parser_is_available[metadata2-anonymous|identifying|author]",
+      "reason": "could not import 'pypdf': No module named 'pypdf'"
+    },
+    {
+      "test": "tests.packaging.test_package_submission.test_compressed_pdf_xmp_private_path_is_rejected",
+      "reason": "could not import 'pypdf': No module named 'pypdf'"
+    }
+  ],
+  "failures": 0,
+  "errors": 0,
+  "seconds": 35.479,
+  "warning": "Starlette TestClient/httpx deprecation warning",
+  "python": "3.12.14",
+  "source_sha256": {
+    "src/dgfl/crypto/backend.py": "4033543c33f316bf8736e82b7b0cd362bbd4e99ef3fb376c98a0038b631d67b3",
+    "src/dgfl/crypto/protocol.py": "28312f93d8abfc0c6a343d71a72420e4b1f11cde1cd1c7bf62b6b2dae4fb3dd3",
+    "src/dgfl/training/paper_models.py": "2682329df40c94e8f75e243f26087262732bfb3ef7c37a8c226ecdeb028574fa",
+    "scripts/benchmark_crypto.py": "bd76a7ebfc538711e55039d54e219a5e2cc6e2ca8ceff55483d727338bb82960",
+    "scripts/benchmark_paper_training.py": "d511bad63d73c99020f4a67e4a36fe123cf6a6da72cbda3a90ad4c6eba4339aa"
+  }
+}

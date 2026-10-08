@@ -1,0 +1,597 @@
+{
+  "schema_version": 1,
+  "scope": "explicitly allowlisted public reports, metadata, JUnit and reproduction source",
+  "not_original_byte_copies": true,
+  "transformations": [
+    "JSON string values and object keys recursively replace this workspace absolute prefix with <workspace>",
+    "JSON string values and object keys recursively replace current USERPROFILE absolute prefix with <userprofile>",
+    "prefix matching is case-insensitive and supports forward, backward and doubled backward slashes",
+    "JSON is reserialized as UTF-8 without BOM with indentation and a final newline",
+    "XML attribute values, text and tails receive the same redaction; XML escaping and serialization are regenerated",
+    "launch-controls reports_by_sha256 keys refer to published report digests",
+    "other measurement/source/CRS/native/report hash values remain original evidence values",
+    "selected Python source is copied byte-for-byte; no source or binary snapshot is bundled"
+  ],
+  "excluded": [
+    "every runtime directory, private key, witness and credential",
+    "activation before/private backup, install failure, old-native and wheels",
+    "binary, compiled Python, source archive, unselected file and ordinary log"
+  ],
+  "junit_counts": {
+    "total": 2038,
+    "passed": 2026,
+    "skipped": 12,
+    "failures": 0,
+    "errors": 0
+  },
+  "files": [
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/baseline-gpu-budget-a.json",
+      "published": "baseline-gpu-budget-a.json",
+      "kind": "json",
+      "raw_sha256": "c28dca349f2ce8cd40c5dd10e2a38ec095b67abf86a4de626b58196eb11c5e37",
+      "published_sha256": "383a45411265b0f1e19a434bfc18bdeed8a7c9ba86eb81f76d6e95e432435721",
+      "raw_bytes": 319239,
+      "published_bytes": 526603,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/final-gpu-budget-a.json",
+      "published": "final-gpu-budget-a.json",
+      "kind": "json",
+      "raw_sha256": "ad984ea58a1089ee2ae1169446d468bd1f02a262e0d5bb0aabd2023317ad1a4c",
+      "published_sha256": "2eb67b2859391d1294fdd29d014ddd5cec6e2ad14e81580c8435c46ede9abb04",
+      "raw_bytes": 315629,
+      "published_bytes": 519233,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/baseline-cpu-budget-a.json",
+      "published": "baseline-cpu-budget-a.json",
+      "kind": "json",
+      "raw_sha256": "2f7dd0e50ca1e0c542220c1b35d3dce8c4789ee8c588139b9133f8afb1d5830a",
+      "published_sha256": "497050f0b2f8b43e40c0ee69a9065d0b3bf73df8e40550835be5c88fee806f41",
+      "raw_bytes": 206883,
+      "published_bytes": 324960,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/final-cpu-budget-a.json",
+      "published": "final-cpu-budget-a.json",
+      "kind": "json",
+      "raw_sha256": "0c11796de4eaf42bb90ca5db7484553b569e9143fe76a57c3706605ad6772ef6",
+      "published_sha256": "372b7de55fb1d0082f3300361fe8edf47650aa53fc6617e95581a4a024311b0d",
+      "raw_bytes": 215105,
+      "published_bytes": 337138,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/final-round-summary.json",
+      "published": "final-round-summary.json",
+      "kind": "json",
+      "raw_sha256": "57733005a705042b884bffc047a37dca44d4b76e12cc20cc8430c50e8fec23ca",
+      "published_sha256": "fe39689684796c76795f9f58ab9aece9392ff0c4fc47c8c42ecc39b94cf1c164",
+      "raw_bytes": 42353,
+      "published_bytes": 40265,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/launch-controls.json",
+      "published": "launch-controls.json",
+      "kind": "json",
+      "raw_sha256": "ab862def40dab59c64815c2ce9ef9a2f1bb30f61c46656015c691ec624151bb9",
+      "published_sha256": "380193133c3d2456c4d040fdffa1b274a34a8f208834382908e6997cfdf6097a",
+      "raw_bytes": 2931,
+      "published_bytes": 3041,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/paper20-budget-gpu-rpc2.json",
+      "published": "paper20-budget-gpu-rpc2.json",
+      "kind": "json",
+      "raw_sha256": "5786533478d255f00afccb456fd4ed5810961fb91863667c3ff93c885acab64f",
+      "published_sha256": "972457fc516d551ceabf4f9255f8fe90dcee2984dfbdba3449d47ebbb0dedb20",
+      "raw_bytes": 501569,
+      "published_bytes": 821453,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/paper20-round-summary.json",
+      "published": "paper20-round-summary.json",
+      "kind": "json",
+      "raw_sha256": "ab0517cca93e8c02e6be22884aefb791434c6a106de7662a1646797228ab67c3",
+      "published_sha256": "0d1ac037a8f1ba6917c0d3968ccc0290fb84becdd9411b7f33d9704fb728c61a",
+      "raw_bytes": 17525,
+      "published_bytes": 16563,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/paper20-baseline-gpu.json",
+      "published": "paper20-baseline-gpu.json",
+      "kind": "json",
+      "raw_sha256": "b30c60444a83c9d425ff00ce340afde281f98a4af8ab8299fe5bcbc25666a6fd",
+      "published_sha256": "dc9966a8b0783042bb955d9416b7768b672d7e8f0b83a547e997d6269ecb704e",
+      "raw_bytes": 128574,
+      "published_bytes": 207403,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/paper20-baseline-gpu-rpc2b.json",
+      "published": "paper20-baseline-gpu-rpc2b.json",
+      "kind": "json",
+      "raw_sha256": "d117a56bce2f65e04a24937cef8c29b17d672c32249cfa314f2f33badbe69313",
+      "published_sha256": "2e67b063de7b1553125ff4c55a91bcff43059c63567f9cffec2c11bc0b8c5e67",
+      "raw_bytes": 167934,
+      "published_bytes": 272910,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/paper20-final-gpu-rpc2.json",
+      "published": "paper20-final-gpu-rpc2.json",
+      "kind": "json",
+      "raw_sha256": "4be17f552447b8861414f469378a2a34bb7f5720f5dccb6e000879286dbc6b90",
+      "published_sha256": "c70b101d788d54cf7a0f0c91decd449dbbf5c6fc6f6aa68372776ccf64f012e9",
+      "raw_bytes": 234439,
+      "published_bytes": 380717,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/paper20-baseline-gpu-rpc2-interrupted.json",
+      "published": "paper20-baseline-gpu-rpc2-interrupted.json",
+      "kind": "json",
+      "raw_sha256": "b297bf5c88b2108ffc81dc4698ec0badc4577b8fd4c85c0a5e561eab8c8f5b38",
+      "published_sha256": "58fcd906403c52502f115b8036881824fe2f2a9a40907e1629e558d7ae217e14",
+      "raw_bytes": 884,
+      "published_bytes": 843,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/phase2-gpu-all-a.json",
+      "published": "phase2-gpu-all-a.json",
+      "kind": "json",
+      "raw_sha256": "897243ab922ad474674e23ccfaaa3886c25a5995e5b2dd06219dd18999645a41",
+      "published_sha256": "12575be161ffc4557f41db632838f46f50d3024e3695a38ac36d1c7b848e1287",
+      "raw_bytes": 322362,
+      "published_bytes": 531135,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/phase2-gpu-threshold-a.json",
+      "published": "phase2-gpu-threshold-a.json",
+      "kind": "json",
+      "raw_sha256": "3dcb910bf45b63a4b3506aae46e0b23fe85a35d29aaf6ee3c8133a2369d9daed",
+      "published_sha256": "56ab00cb54b6383f205e3427cdfa5a0af6dcd03c0243fe11aa528c419ab4a4ea",
+      "raw_bytes": 319551,
+      "published_bytes": 526347,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/phase2-cpu-all-a.json",
+      "published": "phase2-cpu-all-a.json",
+      "kind": "json",
+      "raw_sha256": "b7bc998b498ab161031266c9af7894d8be5029c5ef968a025f4a4b4c93588bf7",
+      "published_sha256": "a3d7e99e964695cc1cee9acd96eba5a66f4d428a29472f1289f91e7133c31eb0",
+      "raw_bytes": 206400,
+      "published_bytes": 323684,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/phase2-cpu-threshold-a.json",
+      "published": "phase2-cpu-threshold-a.json",
+      "kind": "json",
+      "raw_sha256": "454251126d78bf0a0b75e75e0d9f675858a742b187d777aa34393242379282b0",
+      "published_sha256": "c9ce6b19fe6367e7e67ad70084fcd0f5f3275963fe38a924221fac2071433417",
+      "raw_bytes": 216389,
+      "published_bytes": 340345,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/phase2-round-summary.json",
+      "published": "phase2-round-summary.json",
+      "kind": "json",
+      "raw_sha256": "40047fc80192676a4a384106987810a8559058bec9d1ab9584c8f543abe2d3cc",
+      "published_sha256": "94988da488cef88e28a153ec7803cf5fc60e055d1cd9bcf8af64a4afedbdf294",
+      "raw_bytes": 26753,
+      "published_bytes": 25778,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/baseline-gpu.json",
+      "published": "baseline-gpu.json",
+      "kind": "json",
+      "raw_sha256": "412bea04878489a4a86e78fa51e95342a77d530043e267a920f33c019a282e09",
+      "published_sha256": "cfb83782ad56aed7b825b76b52fffbbfd12afa810bb63a73c820748732624706",
+      "raw_bytes": 396586,
+      "published_bytes": 654815,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/baseline-cpu.json",
+      "published": "baseline-cpu.json",
+      "kind": "json",
+      "raw_sha256": "b84db025aa6b88834b6181409477da204708e58d7f9d8e614e253b279132a2c5",
+      "published_sha256": "3ced22e62897fc152c9e40459c86990465557058523d1f0f499e5cb460fe74ba",
+      "raw_bytes": 316244,
+      "published_bytes": 507523,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/baseline-gpu-after.json",
+      "published": "baseline-gpu-after.json",
+      "kind": "json",
+      "raw_sha256": "3b0be0d7490d498554c4c7b54f2d8e4f4eb7b906ce826c7ebdff1cc0bae9560e",
+      "published_sha256": "b6e96ee46311ddaad74464739233608cf21ac3774c0e5cc8739ca54ef316d1b7",
+      "raw_bytes": 6490,
+      "published_bytes": 7483,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/baseline-gpu-after-b.json",
+      "published": "baseline-gpu-after-b.json",
+      "kind": "json",
+      "raw_sha256": "dc3356a7f4967b05430a960d471b33d57ef63ec5d86d5e468ed78e3addac4cd4",
+      "published_sha256": "708967b7e59e5c18fc62349b8416017dee41492035ca391b30f5a627ddd5a1cc",
+      "raw_bytes": 324566,
+      "published_bytes": 536033,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/baseline-cpu-after.json",
+      "published": "baseline-cpu-after.json",
+      "kind": "json",
+      "raw_sha256": "a5a56a88b07b797f27bc3f31cf77add0d76d27fa21a447e114cbc7ee77e59457",
+      "published_sha256": "31dc1c0c63c0a106f6b8cf97284e8b8a62912a90e659c3fd902dec277df367b0",
+      "raw_bytes": 215126,
+      "published_bytes": 339185,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/current-gpu-a.json",
+      "published": "current-gpu-a.json",
+      "kind": "json",
+      "raw_sha256": "38a0f0ed7df533d8d0d4bb6f4e223872f3eaf7301e698f495ea1ba3f3c85390a",
+      "published_sha256": "ce26e8188818753c6012e1b0b51763daf2bfb69d0cc9e6ea414cbdc838e7b6f1",
+      "raw_bytes": 324366,
+      "published_bytes": 534153,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/current-gpu-b.json",
+      "published": "current-gpu-b.json",
+      "kind": "json",
+      "raw_sha256": "37cf7417539d27ab759f5e74217e00e52cd9cd7c9d17b946103f4663a69968be",
+      "published_sha256": "ce94c1c6344f1c03c79129d3d0cc79ed675be8a4908ef64737b206714425e2a5",
+      "raw_bytes": 318449,
+      "published_bytes": 524452,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/current-cpu-a.json",
+      "published": "current-cpu-a.json",
+      "kind": "json",
+      "raw_sha256": "6779daec7f36b150317aaf08faa5e021910a1eff30ba14c9c9b3670fee4644c9",
+      "published_sha256": "a523a126616ba9f7e3dc56e11f61a5b150291740187fc7120359785d563bee88",
+      "raw_bytes": 221648,
+      "published_bytes": 348210,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/current-cpu-b.json",
+      "published": "current-cpu-b.json",
+      "kind": "json",
+      "raw_sha256": "5fcd444a7e29e41d27278ac033ac09d7111563f4f60b104b604c7f09a0943b63",
+      "published_sha256": "95fdc0def2a4a2a94b417b39d6acc680c48e6c0250de484c95bbd8465d3d165d",
+      "raw_bytes": 204494,
+      "published_bytes": 320052,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/full-round-summary.json",
+      "published": "full-round-summary.json",
+      "kind": "json",
+      "raw_sha256": "d54725e3eb727af2621e842584c326db187d2bf39719e3de02933f08ef1f11d8",
+      "published_sha256": "4f809ca572f023fdb22c6f2a12bac4e712da238104fffea019adf445263f5479",
+      "raw_bytes": 25698,
+      "published_bytes": 24922,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/aggregate-constants-micro.json",
+      "published": "aggregate-constants-micro.json",
+      "kind": "json",
+      "raw_sha256": "bba39e5edf083927b21219f20be618788ed1c924a044f9d9170e86c69234d802",
+      "published_sha256": "6cc6b605a6967a70d608764ee991748ea0b74b83b15dc09e76a73c15ca645eb5",
+      "raw_bytes": 17725,
+      "published_bytes": 16500,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/dkg-coefficient-cache-micro.json",
+      "published": "dkg-coefficient-cache-micro.json",
+      "kind": "json",
+      "raw_sha256": "0eccee5e537386e51a4f51bb4ae079eb4e100df3fabbf717234893656d7896ae",
+      "published_sha256": "58cdbc8080173aa3b731c847425bebcb72a958a0591b2fa907cc1a972e51de76",
+      "raw_bytes": 8605,
+      "published_bytes": 8125,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/partial-batches.json",
+      "published": "partial-batches.json",
+      "kind": "json",
+      "raw_sha256": "7770db7bbda6b5d8b5d08e3bc5b5eb5f246b9deaabfcee832429a8fc1a313106",
+      "published_sha256": "118722372e0c8ed27fcf5ddba1d1d1287d93a80d938008a0347aa7360cdfa8c2",
+      "raw_bytes": 17186,
+      "published_bytes": 16314,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/gpu-micro-baseline-before.json",
+      "published": "gpu-micro-baseline-before.json",
+      "kind": "json",
+      "raw_sha256": "568668f2abf680ff96ab331efa57c05b1dd1a680097c5d8df3d212406aefa5a7",
+      "published_sha256": "b8480ecf7d4a35a0ccf4c8361596758219e3f8ef7ff83207dae05d1d515beb07",
+      "raw_bytes": 87192,
+      "published_bytes": 84528,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/gpu-micro-baseline-after.json",
+      "published": "gpu-micro-baseline-after.json",
+      "kind": "json",
+      "raw_sha256": "81138a7a11a615c102b5225e7f98f74606622b49bb1c110254217ab83954d876",
+      "published_sha256": "e973a29f25a1775f277f947e93e9983ab8f77fbd85ae15665423ba599e651d68",
+      "raw_bytes": 87252,
+      "published_bytes": 84586,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/gpu-micro-current-workers1.json",
+      "published": "gpu-micro-current-workers1.json",
+      "kind": "json",
+      "raw_sha256": "340cca09d6963d271cfa20bdbaeb6f704dee14b3d4ce0b5052abab273ec3befa",
+      "published_sha256": "6796ae271207565f27f33688f8de7c84b9ec6efed948017f6aa6a351c4614a80",
+      "raw_bytes": 86911,
+      "published_bytes": 84248,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/gpu-micro-current-workers2.json",
+      "published": "gpu-micro-current-workers2.json",
+      "kind": "json",
+      "raw_sha256": "d28923638d72c7b0a4c697477b6a894c5685de401ed382cece0bb2bf352cd7a1",
+      "published_sha256": "a91f643566d71a7119b576dc318bf15602e8b3b0b48d6b5ce7288cf986fe7862",
+      "raw_bytes": 85898,
+      "published_bytes": 83267,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/gpu-micro-summary.json",
+      "published": "gpu-micro-summary.json",
+      "kind": "json",
+      "raw_sha256": "bcf1d873e5f3bdc819d8245c98832110e200bc824e81c5d188afa72f98b2edc1",
+      "published_sha256": "36f71391935fe6fcc7a255271f6120e6cd21fdbe9a07b896e3bde47b63d4a418",
+      "raw_bytes": 10267,
+      "published_bytes": 9571,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/training-images-micro.json",
+      "published": "training-images-micro.json",
+      "kind": "json",
+      "raw_sha256": "85a6d2770a6870b572dd87f7d5b9026a8a0184c00461a35521fe9b77c6d106c7",
+      "published_sha256": "21cf7ee24d977c3bf8da7a36fdcf4137209e5ea75109c24381c9571aefa3f66c",
+      "raw_bytes": 12888,
+      "published_bytes": 12380,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/training-images-followup.json",
+      "published": "training-images-followup.json",
+      "kind": "json",
+      "raw_sha256": "fc7deff3e05ef23e5e075c60a2540709858d8957ebd9a37d1e7724946b6dd829",
+      "published_sha256": "552e2d1f2c79a8a8cd582dc760db8f60bb35773223a7acee928cf23a52e39181",
+      "raw_bytes": 4281,
+      "published_bytes": 4122,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/idx-memory-micro.json",
+      "published": "idx-memory-micro.json",
+      "kind": "json",
+      "raw_sha256": "bc2f53e95117735c963795a46607dcbc91ae7858d7defda89d9aa10a4e861ba7",
+      "published_sha256": "e9d82f596c808e7060d569cc6d2fe493c244a8c7f6645c3e2ef494cf5c8804be",
+      "raw_bytes": 8801,
+      "published_bytes": 8531,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/final-thread-budget/manifest.json",
+      "published": "final-source-manifest.json",
+      "kind": "json",
+      "raw_sha256": "ab370e1681459c8782f1d00606e0d11d66a922b3cdc5bc22ed3db3cae790127c",
+      "published_sha256": "5e13e022cfefccc4601b72d9940c06a1d6a093ad37c1b3b0555c7b6117e076de",
+      "raw_bytes": 11409,
+      "published_bytes": 11271,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/native-current/build-manifest.json",
+      "published": "native-build-manifest.json",
+      "kind": "json",
+      "raw_sha256": "e62e7607dd22e141277f71be220be54869d2039763b4e2465b3211db99265e0c",
+      "published_sha256": "841434b69874da523b7275c2d94f4355187cc21955d159ce590880e13a585a5c",
+      "raw_bytes": 1244,
+      "published_bytes": 1102,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/activation/after.json",
+      "published": "activation-after.json",
+      "kind": "json",
+      "raw_sha256": "72305808bd9952aeb4e31837bb18d89a366f9a2c3218a07200ade4153409301c",
+      "published_sha256": "693a0744390fd533b0865d4496c4c2b8a8dd71ff066a22529da09e57a3a82856",
+      "raw_bytes": 2926,
+      "published_bytes": 2829,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/python-final-results.xml",
+      "published": "python-final-results.xml",
+      "kind": "junit-xml",
+      "raw_sha256": "47d228f7d3f24f0625eb88271daf611a736d8e808522fe9885d427f9dc263ec4",
+      "published_sha256": "1861e9d4c1950c5a871556398e3a39a37aed733faae1f8769ec393e4e6e45d9b",
+      "raw_bytes": 337528,
+      "published_bytes": 336978,
+      "byte_identical": false
+    },
+    {
+      "source": "<workspace>/scripts/benchmark_combine_roles.py",
+      "published": "public/scripts/scripts/benchmark_combine_roles.py",
+      "kind": "python-source",
+      "raw_sha256": "34380220de03164384a558f1a16abedfbf641ed6a0f6b85a29a03a8515f6e172",
+      "published_sha256": "34380220de03164384a558f1a16abedfbf641ed6a0f6b85a29a03a8515f6e172",
+      "raw_bytes": 15080,
+      "published_bytes": 15080,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/scripts/benchmark_acceleration_smoke.py",
+      "published": "public/scripts/scripts/benchmark_acceleration_smoke.py",
+      "kind": "python-source",
+      "raw_sha256": "dbf8a6598e7c333a39b9ccc2a37c914c95a0faf6d579b88bbac79becac11e1e2",
+      "published_sha256": "dbf8a6598e7c333a39b9ccc2a37c914c95a0faf6d579b88bbac79becac11e1e2",
+      "raw_bytes": 7550,
+      "published_bytes": 7550,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/scripts/benchmark_lego_roles.py",
+      "published": "public/scripts/scripts/benchmark_lego_roles.py",
+      "kind": "python-source",
+      "raw_sha256": "2ed164c214dd81ffd12ce41b66346b859c87d2c42421db5bd54a81a587b846e0",
+      "published_sha256": "2ed164c214dd81ffd12ce41b66346b859c87d2c42421db5bd54a81a587b846e0",
+      "raw_bytes": 17028,
+      "published_bytes": 17028,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/scripts/benchmark_gpu_pipeline.py",
+      "published": "public/scripts/scripts/benchmark_gpu_pipeline.py",
+      "kind": "python-source",
+      "raw_sha256": "3623315c3f674acd54bd0154e8c78da3676816dfa83cc32630ff1922eccb6490",
+      "published_sha256": "3623315c3f674acd54bd0154e8c78da3676816dfa83cc32630ff1922eccb6490",
+      "raw_bytes": 21400,
+      "published_bytes": 21400,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/scripts/setup_lego_parameters.py",
+      "published": "public/scripts/scripts/setup_lego_parameters.py",
+      "kind": "python-source",
+      "raw_sha256": "68d4e91f5836b99f24bc9c9d7787d0e915177a60036685352834d88cbf432bc1",
+      "published_sha256": "68d4e91f5836b99f24bc9c9d7787d0e915177a60036685352834d88cbf432bc1",
+      "raw_bytes": 1198,
+      "published_bytes": 1198,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/benchmark_aggregate_constants.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/benchmark_aggregate_constants.py",
+      "kind": "python-source",
+      "raw_sha256": "7a03ef604d2d1f187f37329c13ce99fa17c06d50f15de4bad9acb358d64c5cf4",
+      "published_sha256": "7a03ef604d2d1f187f37329c13ce99fa17c06d50f15de4bad9acb358d64c5cf4",
+      "raw_bytes": 15145,
+      "published_bytes": 15145,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/benchmark_dkg_coefficient_cache.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/benchmark_dkg_coefficient_cache.py",
+      "kind": "python-source",
+      "raw_sha256": "2dc4be0950b009977f7ff9ae44d2c6288563f1957354daaf983c5d59308b9426",
+      "published_sha256": "2dc4be0950b009977f7ff9ae44d2c6288563f1957354daaf983c5d59308b9426",
+      "raw_bytes": 6113,
+      "published_bytes": 6113,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/benchmark_idx_memory.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/benchmark_idx_memory.py",
+      "kind": "python-source",
+      "raw_sha256": "96746ea83f40a3bcab97595f2642404832c99832ec67dc4e449f1785a2f7db9f",
+      "published_sha256": "96746ea83f40a3bcab97595f2642404832c99832ec67dc4e449f1785a2f7db9f",
+      "raw_bytes": 3747,
+      "published_bytes": 3747,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/benchmark_partial_batches.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/benchmark_partial_batches.py",
+      "kind": "python-source",
+      "raw_sha256": "044b28303e7130341e5272c5c6fb2eafaff45fb33f0cbb1f1b38e2df543ec568",
+      "published_sha256": "044b28303e7130341e5272c5c6fb2eafaff45fb33f0cbb1f1b38e2df543ec568",
+      "raw_bytes": 11542,
+      "published_bytes": 11542,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/benchmark_training_images.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/benchmark_training_images.py",
+      "kind": "python-source",
+      "raw_sha256": "bb3beb452670d199c6137fa5a84849d6c8a822793f77d85001105f51ad108b32",
+      "published_sha256": "bb3beb452670d199c6137fa5a84849d6c8a822793f77d85001105f51ad108b32",
+      "raw_bytes": 4335,
+      "published_bytes": 4335,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/benchmark_training_images_followup.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/benchmark_training_images_followup.py",
+      "kind": "python-source",
+      "raw_sha256": "3e9363b50d3ad8de0c1c96c4fbbc914da726155753742f11258495aa7f1adbad",
+      "published_sha256": "3e9363b50d3ad8de0c1c96c4fbbc914da726155753742f11258495aa7f1adbad",
+      "raw_bytes": 3368,
+      "published_bytes": 3368,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/analyze_rounds.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/analyze_rounds.py",
+      "kind": "python-source",
+      "raw_sha256": "f24752a6d1b1645fac662cb9140edb04a070459f206ee7307298b20d46b8915b",
+      "published_sha256": "f24752a6d1b1645fac662cb9140edb04a070459f206ee7307298b20d46b8915b",
+      "raw_bytes": 8309,
+      "published_bytes": 8309,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/windows-wmi-fallback/sitecustomize.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/windows-wmi-fallback/sitecustomize.py",
+      "kind": "python-source",
+      "raw_sha256": "20296cf061f237de0aaea57a401b934aea8b44db8ac450c4c8b40a3d16440cda",
+      "published_sha256": "20296cf061f237de0aaea57a401b934aea8b44db8ac450c4c8b40a3d16440cda",
+      "raw_bytes": 611,
+      "published_bytes": 611,
+      "byte_identical": true
+    },
+    {
+      "source": "<workspace>/tmp/speed-optimization-20261006/publish_evidence.py",
+      "published": "public/scripts/tmp/speed-optimization-20261006/publish_evidence.py",
+      "kind": "python-source",
+      "raw_sha256": "0631f2aee7a03dfdda52e19d2efd9ae24d66c3b414ef01ecc84de8eddffad18a",
+      "published_sha256": "0631f2aee7a03dfdda52e19d2efd9ae24d66c3b414ef01ecc84de8eddffad18a",
+      "raw_bytes": 14111,
+      "published_bytes": 14111,
+      "byte_identical": true
+    }
+  ],
+  "generated_files": [
+    {
+      "published": "README.md",
+      "sha256": "d249234cf5fe3788501e8c7d0a58fc01ec346d89bae215130646e4e659e19ce2",
+      "bytes": 2350,
+      "origin": "publication script explanatory text"
+    }
+  ]
+}

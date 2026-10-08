@@ -1,0 +1,30 @@
+{
+  "completed_at": "2026-10-03T07:54:55.031832+00:00",
+  "pytest": {
+    "command": ".venv/Scripts/python.exe -m pytest -q",
+    "passed": 562,
+    "skipped": 15,
+    "warnings": 1,
+    "elapsed_seconds": 19.36,
+    "warning": "Starlette/httpx test client deprecation",
+    "status": "passed"
+  },
+  "frontend": {
+    "command": "npm.cmd run build",
+    "workdir": "web",
+    "status": "passed",
+    "vite": "7.3.6"
+  },
+  "integration": {
+    "report": "smoke.json",
+    "all_submitted_proofs_valid": true,
+    "quantized_model_and_approved_clients_equal": true
+  },
+  "native": {
+    "built": true,
+    "installed": true,
+    "version": "0.1.0",
+    "platform": "CPython 3.12 Windows x86_64",
+    "wheel_sha256": "3ecc9cf049c87e7a947bf4787d67c9d5cb49143b5f5b32196e11a8c83ba8554a"
+  }
+}

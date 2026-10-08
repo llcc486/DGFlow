@@ -1,0 +1,27 @@
+{
+  "all_passed": true,
+  "checks": {
+    "all_12_authenticated_role_imports_match_binary": true,
+    "all_complete_prove_and_verify_under_1000ms": true,
+    "cold_loading_separate_and_cached_load_checked": true,
+    "comparable_training_inputs": true,
+    "complete_650_dimension_real_role_operations": true,
+    "default_suite_retained": true,
+    "fresh_contexts_epochs_and_all_proofs": true,
+    "full_proofs_accepted": true,
+    "isolated_roles_and_interpreters_stopped": true,
+    "matching_plain_models_and_approved_clients": true,
+    "persistent_trusted_crs_pinned_to_task": true,
+    "regression_and_negative_input_checks_passed": true,
+    "source_unchanged_during_measurement_and_matches_snapshot": true
+  },
+  "limitations": [
+    "single-party development trusted setup",
+    "experimental composition has no external cryptographic audit",
+    "variable-time proving arithmetic",
+    "one local two-round benchmark does not establish a universal latency guarantee"
+  ],
+  "objective": "Accelerate the complete 650-dimensional DGFlow proof to milliseconds",
+  "report_sha256": "9ca9183366cf5007b8330634162fcbed5442d1542c74689d2556c33961c08f04",
+  "scope": "Complete proof operation, not offline setup, cold key loading, or whole federated round"
+}

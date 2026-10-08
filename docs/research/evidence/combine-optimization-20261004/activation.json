@@ -1,0 +1,326 @@
+{
+  "idle_before_activation": true,
+  "node_identity_preflight": true,
+  "old_control_pid": 13736,
+  "wheel_sha256": "6ac7ae361f8924933e087e2516adb031543b27fbfe69f80d90f49fb09d9c825c",
+  "stop": {
+    "stopped": [
+      "authority1",
+      "authority2",
+      "authority3",
+      "aggregator1",
+      "aggregator2",
+      "aggregator3",
+      "client1",
+      "client2",
+      "client3",
+      "client4",
+      "client5",
+      "client6"
+    ],
+    "missing": [],
+    "refused": []
+  },
+  "start": {
+    "started": [
+      "authority1",
+      "authority2",
+      "authority3",
+      "aggregator1",
+      "aggregator2",
+      "aggregator3",
+      "client1",
+      "client2",
+      "client3",
+      "client4",
+      "client5",
+      "client6"
+    ],
+    "already_running": []
+  },
+  "loaded_native_by_role": {
+    "aggregator1": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "aggregator2": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "aggregator3": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "authority1": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "authority2": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "authority3": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "client1": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "client2": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "client3": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "client4": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "client5": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    },
+    "client6": {
+      "identity_checked": true,
+      "authenticated_health": true,
+      "native": {
+        "artifact_names": {
+          "dgfl_native.dgfl_native": "dgfl_native.cp312-win_amd64.pyd"
+        },
+        "evidence_scope": "actual imported extension file hashes captured at first health; not an in-memory image attestation",
+        "loaded_artifact_sha256": {
+          "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+        }
+      },
+      "os_memory_map_diagnostic": {
+        "status": "native_filename_not_observed",
+        "native_file_names": []
+      }
+    }
+  },
+  "implementation": {
+    "source_sha256": "12f6a373c539e095af00c14f452226167e8f229ecd371965cf4e1f0309ee22c2",
+    "source_files": {
+      "__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+      "cli.py": "2440e8b635ecd3acbc3facb5e21e8b7094a5448a5a4c54ba365102fe0ebdf54c",
+      "crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+      "crypto/backend.py": "59d857b72c7135094d82ec13b4b47b3ed74ef8c4169a32da0a9f4edb806f72cb",
+      "crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+      "crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+      "crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+      "crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+      "crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+      "crypto/protocol.py": "ada36d4abcd6d17e354e5c74ce191ff49d0d2f80e65dacfb3597573843ce5967",
+      "deployment.py": "e597e5bcadab7b7a6e55c16f13f239c1a23c362aa1bedad2396b7aa973600e7e",
+      "experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+      "experiments/evidence.py": "88587fd057e9a0d38086401f4a4181b93c016d031eb6ba96b482d93d17f6bcd1",
+      "experiments/runner.py": "838163a13a73db1c55c255d2f5757f9d6a75aa256432a475850c29d49266512a",
+      "experiments/telemetry.py": "9e27522cf837a6fc4a22aec293a0c65e183a5570257623b719c4874651570b5f",
+      "services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+      "services/control.py": "2dac94899dcb6c080dffb619e9ddb1fc71d0f0d78e6d5f4d07c048f44c807197",
+      "services/node.py": "08702743c8327b67b22df917fa014e08871b29f8a2c1f27c2a255c1f49228dac",
+      "services/roles.py": "588cd67bee38f8f620d0f1fa08349f5fb3f629d47b02fdeebec2f22bb12820b1",
+      "training/__init__.py": "979cf13d7187c5dbf4a21bdfa9db81c4bb6abd8719f14cd2777b953476c014da",
+      "training/data.py": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012",
+      "training/model.py": "113c26807cdf92cfcfa25e81da537abdb8f64d43a53b74cae1bf66eb8180ffed",
+      "training/paper_models.py": "c2b9904988ffda39b0216a05003f13eb23df3d52c7aaa386b3ee5171d89853d9",
+      "transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+      "transport/binary.py": "d66092d05e58de4311e68cd0e0463f99f8682a3e56701ea953f7df75d90de686",
+      "transport/chunking.py": "cbdf575495f7e37453ff2d30679d09a065df420d78ef7dfcb7fbc4320611a732",
+      "transport/client.py": "9dde759ed586f82a7eedb9019c77fa965d621e15ba3e91365d78c740c353b347",
+      "transport/security.py": "428268c63a34761b7da62765444ef2eb2095cd1d847e792172103b5b48225ed2",
+      "validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+      "validation/policy.py": "449cb484cb17c2cd045c51f9e2af79318b8dad7ac8cdcd565bbc8b2e4db40c1d"
+    },
+    "dependencies": {
+      "numpy": "2.5.3",
+      "py-arkworks-bls12381": "0.5.0",
+      "dgfl-native": "0.2.0",
+      "cryptography": "50.0.2",
+      "fastapi": "0.142.2",
+      "httpx": "0.28.1"
+    },
+    "native": {
+      "enabled": true,
+      "package_version": "0.2.0",
+      "build_input_sha256": {
+        "native/dgfl-native/Cargo.toml": "a16b06ebec812153e1a5203d5eb3030277cefdfff928aa4f098e9439fe134b26",
+        "native/dgfl-native/Cargo.lock": "78980e5ff4165e8682c140248bdc8054cb06f2f88aeff3958954e218dd04ebb4",
+        "native/dgfl-native/pyproject.toml": "b55946356672e9167faf49808fef878f86153ebe29e75f3799cc1a0b307569be",
+        "native/dgfl-native/src/lib.rs": "05599052f11005b587ae9ffffd989590134da00e6f49dda0f2e1b3d4bcc76d03",
+        "native/dgfl-native/src/lego.rs": "5fe7f64c8f3ced63281481e0bbc9c5b6d65299e8cecc7245a87b36e6d4192a01",
+        "native/dgfl-native/src/sigma.rs": "0f0b8b7976c5d2e348867f37e7ad39bbf73e1c0a395fbe5bb05b25728ee6fd57",
+        "native/dgfl-native/src/linked.rs": "69a17ef6a8be9127d7c4cae7082f23a7c09c6104d54d5e3c8b1f166f52af87ae",
+        "native/dgfl-native/src/aggregate.rs": "cf8292ff8e97e65f207194d7e934da65c2d27ac0e11f4dc687d46e4072bb425d"
+      },
+      "installed_artifact_sha256": {
+        "dgfl_native/dgfl_native.cp312-win_amd64.pyd": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      },
+      "loaded_artifact_sha256": {
+        "dgfl_native.dgfl_native": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b"
+      },
+      "loaded_capabilities": {
+        "lego_norm_v1": true,
+        "aggregate_verification_native": true
+      },
+      "evidence_scope": "controller imported extension paths and their current on-disk digests, plus checked loaded APIs; installed metadata does not attest node imports or an in-memory image after file replacement"
+    },
+    "python": "3.12.2",
+    "platform": "Windows",
+    "machine": "AMD64"
+  },
+  "control_checks": {
+    "origin_status": 403,
+    "chunked_body_status": 413,
+    "new_thread_schema_loaded": true
+  },
+  "all_twelve_roles_online": true,
+  "live_service_replaced": true,
+  "control_pid": 6324
+}

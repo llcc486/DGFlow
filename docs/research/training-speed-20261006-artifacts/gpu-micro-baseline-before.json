@@ -1,0 +1,2144 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-10-06T14:23:24.170883+00:00",
+  "benchmark_script_sha256": "f589712738c050662f21a5d475779f81fb6f1882919be0fb163b1442472774fa",
+  "options": {
+    "source_dir": "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\src",
+    "native_dir": "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import",
+    "actors": 1,
+    "repeats": 3,
+    "warmups": 1,
+    "verifier_workers": 1,
+    "chunk_size": 4096,
+    "output": "<workspace>\\tmp\\speed-optimization-20261006\\gpu-micro-baseline-before.json",
+    "fixture_sha256": "30736255ab51df8c5713ff887b99c340ecd25d8ad70b0ad1774ee3cc350c6631",
+    "source_sha256": "13c97a5935eb0b8ff5f2bbfcb8bad60331d0a0a524eaf25a8869b3880e844e1a"
+  },
+  "source": {
+    "directory": "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\src",
+    "sha256": "13c97a5935eb0b8ff5f2bbfcb8bad60331d0a0a524eaf25a8869b3880e844e1a",
+    "files": {
+      "dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+      "dgfl/cli.py": "359523ade94a70e4611746f3ff1f4795fdb28a20c52f350fab6aebc9fd2ead1a",
+      "dgfl/crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+      "dgfl/crypto/backend.py": "82e5a04249091586a7c398229c82f30b6a4da04c183b43a7423e58308374bccb",
+      "dgfl/crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+      "dgfl/crypto/cuda/field.cuh": "5082ebfc97d007cd6514c5d00d7a5bf872d8783162b28b16c5ff2425e7842748",
+      "dgfl/crypto/cuda/g1.cuh": "dddc27fabd8dce95cab28e4209d107bfbc284addded143fde7b56a4eee874660",
+      "dgfl/crypto/cuda/gt.cuh": "332214bb462ba11aa1c24b998eadbc14458a26f8bd5215fb8a5285d8a79f7764",
+      "dgfl/crypto/cuda_scheduler.py": "b80eaf5df5dc609dc8c494bac3ebb33b75b92183f47a78a0ebb39704a6e09643",
+      "dgfl/crypto/gpu.py": "18073d2d82740476f5c8b9066b4f7f353d30adcb51e157648d4e4a987ec72a5a",
+      "dgfl/crypto/gpu_profile.py": "502b3408fbb57e5d31bb64494c6359cb4e7f7c0ad622773b4eaee506fa7157ba",
+      "dgfl/crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+      "dgfl/crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+      "dgfl/crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+      "dgfl/crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+      "dgfl/crypto/protocol.py": "5d33d1929b63e949e42f752857111ec32bd90f9f50fc984378a8181b05c6a91e",
+      "dgfl/deployment.py": "40bb9dca20aa388251cc9813692a5b782fc717d9018a8c4fdfef3cfad449e24d",
+      "dgfl/experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+      "dgfl/experiments/evidence.py": "88587fd057e9a0d38086401f4a4181b93c016d031eb6ba96b482d93d17f6bcd1",
+      "dgfl/experiments/hardware.py": "b1f755c61ad82b8dfa3ce5abb5c0a113b022c1ec482d04accd4ce70320a57307",
+      "dgfl/experiments/runner.py": "c4654583f33b123d00f0d0cb59bbdb956c0461863389be19f15ae2c21c964607",
+      "dgfl/experiments/telemetry.py": "3797f65311a1170390e2ef74eeaf7c86a46d1b100c668eafd55912bb5c60d269",
+      "dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+      "dgfl/services/control.py": "4f0aa74ef79fbf8d191941ffa492efbfbd9ddb39a5a08aa84731642dc5fd87c9",
+      "dgfl/services/node.py": "66294a4c25b62735bc941b146c7634e14f70eb1ac9eab5a6ed8551cf31e0915c",
+      "dgfl/services/roles.py": "7a1d2a7e220d9838a9b1f1a711396a6f521f386d0f784841de8edafb522a7561",
+      "dgfl/topology.py": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+      "dgfl/training/__init__.py": "979cf13d7187c5dbf4a21bdfa9db81c4bb6abd8719f14cd2777b953476c014da",
+      "dgfl/training/data.py": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012",
+      "dgfl/training/model.py": "113c26807cdf92cfcfa25e81da537abdb8f64d43a53b74cae1bf66eb8180ffed",
+      "dgfl/training/paper_models.py": "c2b9904988ffda39b0216a05003f13eb23df3d52c7aaa386b3ee5171d89853d9",
+      "dgfl/transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+      "dgfl/transport/binary.py": "917c4e82f3af06f6dba6a14ffb2e755889e96f9a52d49ebb041e34a766f91946",
+      "dgfl/transport/chunking.py": "f5d2f7e1f96e00c7ee2cb5fc606c6d53330a04d44d14a9e0a8142859d8a71b81",
+      "dgfl/transport/client.py": "7d51d151c082eab7b2abf0ab7d48deba218a5ab8abcce13c6a58d2ee8d49e2a3",
+      "dgfl/transport/security.py": "8b555dd967ea7a09ad6f147bcacf09873b0dadb242c0fbbb56b132879aa7dae8",
+      "dgfl/validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+      "dgfl/validation/policy.py": "8dc003e2815e0c1bb4eb5533aca1b113de050bf45360dc32c19362e6bda6ee8f"
+    }
+  },
+  "fixture": {
+    "path": "<workspace>\\tmp\\gpu-tuning\\public-fixture.msgpack",
+    "file_sha256": "30736255ab51df8c5713ff887b99c340ecd25d8ad70b0ad1774ee3cc350c6631",
+    "codec": "DGFL canonical binary",
+    "public_records": 9,
+    "rows_per_record": 650
+  },
+  "measurement_notes": [
+    "CPU oracles check nine complete proofs independently outside GPU measurements.",
+    "Cold constructor follows CUDA initialization and public arithmetic self-tests; it is not cold NVRTC compilation.",
+    "Each actor reuses one verifier; polynomial caches are fresh within each repetition.",
+    "Steady wall includes statement checking, polynomial parsing and exact GPU verification; result checksums are timed separately.",
+    "Exact proof rows count coordinates once; runtime rows also count separate G1 and GT launches.",
+    "CUDA event kernel time overlaps host synchronization and must not be added to it.",
+    "Legacy runtimes without configure retain their original chunk policy, disclosed per actor.",
+    "Actors share the configured device; this is a local controlled fixture, not a full protocol run."
+  ],
+  "source_at_finish": {
+    "directory": "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\src",
+    "sha256": "13c97a5935eb0b8ff5f2bbfcb8bad60331d0a0a524eaf25a8869b3880e844e1a",
+    "files": {
+      "dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+      "dgfl/cli.py": "359523ade94a70e4611746f3ff1f4795fdb28a20c52f350fab6aebc9fd2ead1a",
+      "dgfl/crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+      "dgfl/crypto/backend.py": "82e5a04249091586a7c398229c82f30b6a4da04c183b43a7423e58308374bccb",
+      "dgfl/crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+      "dgfl/crypto/cuda/field.cuh": "5082ebfc97d007cd6514c5d00d7a5bf872d8783162b28b16c5ff2425e7842748",
+      "dgfl/crypto/cuda/g1.cuh": "dddc27fabd8dce95cab28e4209d107bfbc284addded143fde7b56a4eee874660",
+      "dgfl/crypto/cuda/gt.cuh": "332214bb462ba11aa1c24b998eadbc14458a26f8bd5215fb8a5285d8a79f7764",
+      "dgfl/crypto/cuda_scheduler.py": "b80eaf5df5dc609dc8c494bac3ebb33b75b92183f47a78a0ebb39704a6e09643",
+      "dgfl/crypto/gpu.py": "18073d2d82740476f5c8b9066b4f7f353d30adcb51e157648d4e4a987ec72a5a",
+      "dgfl/crypto/gpu_profile.py": "502b3408fbb57e5d31bb64494c6359cb4e7f7c0ad622773b4eaee506fa7157ba",
+      "dgfl/crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+      "dgfl/crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+      "dgfl/crypto/lego_registry.py": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+      "dgfl/crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+      "dgfl/crypto/protocol.py": "5d33d1929b63e949e42f752857111ec32bd90f9f50fc984378a8181b05c6a91e",
+      "dgfl/deployment.py": "40bb9dca20aa388251cc9813692a5b782fc717d9018a8c4fdfef3cfad449e24d",
+      "dgfl/experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+      "dgfl/experiments/evidence.py": "88587fd057e9a0d38086401f4a4181b93c016d031eb6ba96b482d93d17f6bcd1",
+      "dgfl/experiments/hardware.py": "b1f755c61ad82b8dfa3ce5abb5c0a113b022c1ec482d04accd4ce70320a57307",
+      "dgfl/experiments/runner.py": "c4654583f33b123d00f0d0cb59bbdb956c0461863389be19f15ae2c21c964607",
+      "dgfl/experiments/telemetry.py": "3797f65311a1170390e2ef74eeaf7c86a46d1b100c668eafd55912bb5c60d269",
+      "dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+      "dgfl/services/control.py": "4f0aa74ef79fbf8d191941ffa492efbfbd9ddb39a5a08aa84731642dc5fd87c9",
+      "dgfl/services/node.py": "66294a4c25b62735bc941b146c7634e14f70eb1ac9eab5a6ed8551cf31e0915c",
+      "dgfl/services/roles.py": "7a1d2a7e220d9838a9b1f1a711396a6f521f386d0f784841de8edafb522a7561",
+      "dgfl/topology.py": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+      "dgfl/training/__init__.py": "979cf13d7187c5dbf4a21bdfa9db81c4bb6abd8719f14cd2777b953476c014da",
+      "dgfl/training/data.py": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012",
+      "dgfl/training/model.py": "113c26807cdf92cfcfa25e81da537abdb8f64d43a53b74cae1bf66eb8180ffed",
+      "dgfl/training/paper_models.py": "c2b9904988ffda39b0216a05003f13eb23df3d52c7aaa386b3ee5171d89853d9",
+      "dgfl/transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+      "dgfl/transport/binary.py": "917c4e82f3af06f6dba6a14ffb2e755889e96f9a52d49ebb041e34a766f91946",
+      "dgfl/transport/chunking.py": "f5d2f7e1f96e00c7ee2cb5fc606c6d53330a04d44d14a9e0a8142859d8a71b81",
+      "dgfl/transport/client.py": "7d51d151c082eab7b2abf0ab7d48deba218a5ab8abcce13c6a58d2ee8d49e2a3",
+      "dgfl/transport/security.py": "8b555dd967ea7a09ad6f147bcacf09873b0dadb242c0fbbb56b132879aa7dae8",
+      "dgfl/validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+      "dgfl/validation/policy.py": "8dc003e2815e0c1bb4eb5533aca1b113de050bf45360dc32c19362e6bda6ee8f"
+    }
+  },
+  "status": "completed",
+  "summary": {
+    "all_outputs_match_independent_cpu_and_fixture": true,
+    "total_exact_proof_rows": 17550,
+    "warmup_exact_proof_rows": 5850,
+    "mean_actor_wall_seconds": 1.0741822999940875,
+    "median_actor_wall_seconds": 1.0725724000076298,
+    "mean_actor_max_seconds": 1.0741822999940875,
+    "mean_coordinated_wall_seconds": 1.081484300006802,
+    "constructor_cold_seconds_by_actor": [
+      0.04359280000790022
+    ]
+  },
+  "actors": [
+    {
+      "event": "ready",
+      "actor": 0,
+      "device": {
+        "available": true,
+        "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+        "memory_bytes": 8585216000,
+        "device_index": 0,
+        "compute_capability": "8.9",
+        "driver_version": 13040,
+        "backend": "cuda_nvrtc",
+        "accelerated_operations": [
+          "ec_batch",
+          "gt_exp_batch",
+          "gt_subgroup_batch"
+        ],
+        "reason": "",
+        "verified": true,
+        "device_resources": {
+          "multiprocessor_count": 24,
+          "max_threads_per_multiprocessor": 1536,
+          "registers_per_multiprocessor": 65536,
+          "errors": {}
+        },
+        "kernel_resources": {
+          "dgfl_gt_pow_batch": {
+            "function_name": "dgfl_gt_pow_batch",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 16048,
+            "num_registers": 255
+          },
+          "dgfl_gt_validate": {
+            "function_name": "dgfl_gt_validate",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 15232,
+            "num_registers": 255
+          },
+          "dgflow_g1_msm": {
+            "function_name": "dgflow_g1_msm",
+            "errors": {},
+            "max_threads_per_block": 640,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 6688,
+            "num_registers": 88
+          },
+          "dgflow_g1_verify_polynomial": {
+            "function_name": "dgflow_g1_verify_polynomial",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 128
+          },
+          "dgfl_gt_prepare_public_table": {
+            "function_name": "dgfl_gt_prepare_public_table",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 13392,
+            "num_registers": 255
+          }
+        },
+        "kernel_source_sha256": "0a7021cf18753c7998960ac4ff2e495d1ec40c36a7b817351c1fb47367c8a8b9",
+        "kernel_build_sha256": "72f494ed673f4bc0cf21d2314f1fbb48811da18cedf961b44c0f626eaa73f396",
+        "nvrtc_version": "12.9",
+        "ptx_sha256": "495d8894d55c933464eab1ad2fe9f1a0bd6f54da25e10c6153e8872c45e45238"
+      },
+      "source_sha256": "13c97a5935eb0b8ff5f2bbfcb8bad60331d0a0a524eaf25a8869b3880e844e1a",
+      "native": {
+        "requested_directory": "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import",
+        "native_gt": true,
+        "native_aggregate_verifier": true,
+        "loaded_files_sha256": {
+          "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import\\dgfl_native\\__init__.py": "422a108cd8121105818e668668cf4f0a62cf0d70bf714228ddda01b93de05650",
+          "<workspace>\\tmp\\speed-optimization-20261006\\baseline\\native-import\\dgfl_native\\dgfl_native.cp312-win_amd64.pyd": "74f02fb3a52f0957f4c7c6120fa0b4635866b69d962d4210b05eb9e4665a9680"
+        }
+      },
+      "source_import_seconds": 0.036687999992864206,
+      "cpu_oracle": {
+        "wall_seconds": 8.0029530999891,
+        "method": "nine_full_native_cpu_proofs",
+        "sha256": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+        "record_sha256": [
+          "3c2f035c99cb2227902b8cd127f9689c0fdc2bd5b905e0425d7ece216444ef1a",
+          "db4e5ba1375033d4d6975e3b54bc01863680469dd710532b22d90b50635866ee",
+          "ea675600653d6045580032c4e86159b1ef45db733852437d2681a99b6bda1d15",
+          "b1bf1a713eec5d5c1f3527d0c94a72b9e1f923957aa3cef72d58d27f5040bb99",
+          "0447232bc44137c1f25ec7b2167e1143a031e1ff6f92c7283a248e9a874cf939",
+          "6b3efdf284f3fdcef6fb7ed76b30e6e74c2f19d7dc4baa0e7d0723cf108d151d",
+          "4ff8464d345ce0f8484c741cfab7eabb749b3fb73e92a94301714c04ba96f503",
+          "353b44d957b4796fd6f69ede13554d977cc78092c75a5dcf81a0d81214387ccf",
+          "6d6edcca927a4629f4f8949a0e47135edb0867dd110e4b4730604fef46addee4"
+        ],
+        "cache": {
+          "hits": 6,
+          "misses": 3
+        },
+        "exact_proof_rows": 5850
+      },
+      "gpu_preparation_seconds": 0.49633650001487695,
+      "constructor_cold_seconds": 0.04359280000790022,
+      "constructor_profile": {
+        "schema_version": 1,
+        "totals": {
+          "batches": 2,
+          "rows": 65,
+          "failed_batches": 0,
+          "failed_wall_seconds": 0,
+          "host_wall_seconds": 0.043404600030044094,
+          "lock_wait_seconds": 2.800021320581436e-06,
+          "scheduler_wait_seconds": 7.399998139590025e-06,
+          "setup_seconds": 0.0002437999937683344,
+          "allocation_seconds": 3.009993815794587e-05,
+          "upload_seconds": 1.1999974958598614e-05,
+          "output_clear_seconds": 1.4200020814314485e-05,
+          "launch_seconds": 0.0002474999928381294,
+          "sync_seconds": 0.04182169999694452,
+          "download_seconds": 0.0004903999797534198,
+          "kernel_seconds": 0.04137267303466796,
+          "upload_bytes": 1152,
+          "download_bytes": 590084,
+          "allocations": 3,
+          "allocation_reuses": 2,
+          "frees": 0
+        },
+        "by_kernel": {
+          "dgfl_gt_pow_batch": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_validate": {
+            "batches": 1,
+            "rows": 1,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.009377900016261265,
+            "lock_wait_seconds": 1.400010660290718e-06,
+            "scheduler_wait_seconds": 4.1000021155923605e-06,
+            "setup_seconds": 2.3999891709536314e-06,
+            "allocation_seconds": 5.199981387704611e-06,
+            "upload_seconds": 6.299989763647318e-06,
+            "output_clear_seconds": 3.5999983083456755e-06,
+            "launch_seconds": 3.689998993650079e-05,
+            "sync_seconds": 0.009087999991606921,
+            "download_seconds": 0.00015269999857991934,
+            "kernel_seconds": 0.008837120056152344,
+            "upload_bytes": 576,
+            "download_bytes": 4,
+            "allocations": 0,
+            "allocation_reuses": 2,
+            "frees": 0
+          },
+          "dgflow_g1_msm": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_prepare_public_table": {
+            "batches": 1,
+            "rows": 64,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.03402670001378283,
+            "lock_wait_seconds": 1.400010660290718e-06,
+            "scheduler_wait_seconds": 3.2999960239976645e-06,
+            "setup_seconds": 0.00024140000459738076,
+            "allocation_seconds": 2.489995677024126e-05,
+            "upload_seconds": 5.699985194951296e-06,
+            "output_clear_seconds": 1.0600022505968809e-05,
+            "launch_seconds": 0.0002106000029016286,
+            "sync_seconds": 0.032733700005337596,
+            "download_seconds": 0.0003376999811735004,
+            "kernel_seconds": 0.032535552978515625,
+            "upload_bytes": 576,
+            "download_bytes": 590080,
+            "allocations": 3,
+            "allocation_reuses": 0,
+            "frees": 0
+          }
+        },
+        "kernel_resources": {
+          "dgfl_gt_pow_batch": {
+            "function_name": "dgfl_gt_pow_batch",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 16048,
+            "num_registers": 255
+          },
+          "dgfl_gt_validate": {
+            "function_name": "dgfl_gt_validate",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 15232,
+            "num_registers": 255
+          },
+          "dgflow_g1_msm": {
+            "function_name": "dgflow_g1_msm",
+            "errors": {},
+            "max_threads_per_block": 640,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 6688,
+            "num_registers": 88
+          },
+          "dgflow_g1_verify_polynomial": {
+            "function_name": "dgflow_g1_verify_polynomial",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 128
+          },
+          "dgfl_gt_prepare_public_table": {
+            "function_name": "dgfl_gt_prepare_public_table",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 13392,
+            "num_registers": 255
+          }
+        },
+        "device_resources": {
+          "multiprocessor_count": 24,
+          "max_threads_per_multiprocessor": 1536,
+          "registers_per_multiprocessor": 65536,
+          "errors": {}
+        },
+        "pool": {
+          "reserved_bytes": 1064528,
+          "peak_reserved_bytes": 1064528,
+          "budget_bytes": 134217728,
+          "slots": 19
+        },
+        "configuration": {
+          "block_size": 32,
+          "chunk_size": 4096,
+          "scheduler_slots": 1
+        },
+        "timing_notes": {
+          "host_wall_seconds": "Complete successful execute calls, including waits and host preparation.",
+          "kernel_seconds": "CUDA event elapsed; overlaps sync_seconds and may include GPU scheduling.",
+          "sync_seconds": "Host blocking wait for the completion event; includes kernel execution.",
+          "upload_seconds": "Host synchronous HtoD copy calls, excluding host packing.",
+          "download_seconds": "Host synchronous DtoH copy calls, excluding host unpacking.",
+          "additive": "Do not add kernel_seconds to host phase times; device and host overlap."
+        }
+      },
+      "method": "one_verify_many_nine_jobs",
+      "runtime_profile_available": true,
+      "chunk_configuration_supported": true,
+      "effective_configuration": {
+        "block_size": 32,
+        "chunk_size": 4096,
+        "scheduler_slots": 1
+      }
+    }
+  ],
+  "samples": [
+    {
+      "event": "sample",
+      "actor": 0,
+      "iteration": 0,
+      "warmup": true,
+      "wall_seconds": 1.1122876000008546,
+      "statement_prepare_seconds": 0.37436620000516996,
+      "verification_call_seconds": 0.7375241999980062,
+      "correctness_check_seconds": 0.0042167000065092,
+      "sha256": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "record_sha256": [
+        "3c2f035c99cb2227902b8cd127f9689c0fdc2bd5b905e0425d7ece216444ef1a",
+        "db4e5ba1375033d4d6975e3b54bc01863680469dd710532b22d90b50635866ee",
+        "ea675600653d6045580032c4e86159b1ef45db733852437d2681a99b6bda1d15",
+        "b1bf1a713eec5d5c1f3527d0c94a72b9e1f923957aa3cef72d58d27f5040bb99",
+        "0447232bc44137c1f25ec7b2167e1143a031e1ff6f92c7283a248e9a874cf939",
+        "6b3efdf284f3fdcef6fb7ed76b30e6e74c2f19d7dc4baa0e7d0723cf108d151d",
+        "4ff8464d345ce0f8484c741cfab7eabb749b3fb73e92a94301714c04ba96f503",
+        "353b44d957b4796fd6f69ede13554d977cc78092c75a5dcf81a0d81214387ccf",
+        "6d6edcca927a4629f4f8949a0e47135edb0867dd110e4b4730604fef46addee4"
+      ],
+      "cache": {
+        "hits": 6,
+        "misses": 3
+      },
+      "records": 9,
+      "exact_proof_rows": 5850,
+      "profile_summary": {
+        "batches": 4,
+        "rows": 11700,
+        "kernel_seconds": 0.3736966114044189,
+        "upload_seconds": 0.003177500009769574,
+        "download_seconds": 0.0005351000290829688,
+        "scheduler_wait_seconds": 3.630004357546568e-05,
+        "lock_wait_seconds": 1.7400016076862812e-05,
+        "sync_seconds": 0.37145229999441653,
+        "allocation_seconds": 0.0006683999963570386
+      },
+      "profile": {
+        "schema_version": 1,
+        "totals": {
+          "batches": 4,
+          "rows": 11700,
+          "failed_batches": 0,
+          "failed_wall_seconds": 0,
+          "host_wall_seconds": 0.38526270003058016,
+          "lock_wait_seconds": 1.7400016076862812e-05,
+          "scheduler_wait_seconds": 3.630004357546568e-05,
+          "setup_seconds": 0.0005579999706242234,
+          "allocation_seconds": 0.0006683999963570386,
+          "upload_seconds": 0.003177500009769574,
+          "output_clear_seconds": 5.810000584460795e-05,
+          "launch_seconds": 0.0031324000156018883,
+          "sync_seconds": 0.37145229999441653,
+          "download_seconds": 0.0005351000290829688,
+          "kernel_seconds": 0.3736966114044189,
+          "upload_bytes": 10564584,
+          "download_bytes": 46800,
+          "allocations": 14,
+          "allocation_reuses": 14,
+          "frees": 0
+        },
+        "by_kernel": {
+          "dgfl_gt_pow_batch": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_validate": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_msm": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_prepare_public_table": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.07424200003151782,
+            "lock_wait_seconds": 9.500014130026102e-06,
+            "scheduler_wait_seconds": 2.1000014385208488e-05,
+            "setup_seconds": 0.00032950000604614615,
+            "allocation_seconds": 0.0002696999872568995,
+            "upload_seconds": 0.0009036000119522214,
+            "output_clear_seconds": 2.920001861639321e-05,
+            "launch_seconds": 7.910002022981644e-05,
+            "sync_seconds": 0.07073629999649711,
+            "download_seconds": 0.00028050001128576696,
+            "kernel_seconds": 0.07054335975646972,
+            "upload_bytes": 2270184,
+            "download_bytes": 23400,
+            "allocations": 7,
+            "allocation_reuses": 7,
+            "frees": 0
+          },
+          "dgfl_gt_verify_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.31102069999906234,
+            "lock_wait_seconds": 7.90000194683671e-06,
+            "scheduler_wait_seconds": 1.530002919025719e-05,
+            "setup_seconds": 0.0002284999645780772,
+            "allocation_seconds": 0.00039870000910013914,
+            "upload_seconds": 0.0022738999978173524,
+            "output_clear_seconds": 2.889998722821474e-05,
+            "launch_seconds": 0.003053299995372072,
+            "sync_seconds": 0.3007159999979194,
+            "download_seconds": 0.00025460001779720187,
+            "kernel_seconds": 0.3031532516479492,
+            "upload_bytes": 8294400,
+            "download_bytes": 23400,
+            "allocations": 7,
+            "allocation_reuses": 7,
+            "frees": 0
+          }
+        },
+        "kernel_resources": {
+          "dgfl_gt_pow_batch": {
+            "function_name": "dgfl_gt_pow_batch",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 16048,
+            "num_registers": 255
+          },
+          "dgfl_gt_validate": {
+            "function_name": "dgfl_gt_validate",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 15232,
+            "num_registers": 255
+          },
+          "dgflow_g1_msm": {
+            "function_name": "dgflow_g1_msm",
+            "errors": {},
+            "max_threads_per_block": 640,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 6688,
+            "num_registers": 88
+          },
+          "dgflow_g1_verify_polynomial": {
+            "function_name": "dgflow_g1_verify_polynomial",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 128
+          },
+          "dgfl_gt_prepare_public_table": {
+            "function_name": "dgfl_gt_prepare_public_table",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 13392,
+            "num_registers": 255
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "function_name": "dgflow_g1_verify_polynomial_many",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 121
+          },
+          "dgfl_gt_verify_many": {
+            "function_name": "dgfl_gt_verify_many",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 18400,
+            "num_registers": 255
+          }
+        },
+        "device_resources": {
+          "multiprocessor_count": 24,
+          "max_threads_per_multiprocessor": 1536,
+          "registers_per_multiprocessor": 65536,
+          "errors": {}
+        },
+        "pool": {
+          "reserved_bytes": 12780368,
+          "peak_reserved_bytes": 12780368,
+          "budget_bytes": 134217728,
+          "slots": 33
+        },
+        "configuration": {
+          "block_size": 32,
+          "chunk_size": 4096,
+          "scheduler_slots": 1
+        },
+        "timing_notes": {
+          "host_wall_seconds": "Complete successful execute calls, including waits and host preparation.",
+          "kernel_seconds": "CUDA event elapsed; overlaps sync_seconds and may include GPU scheduling.",
+          "sync_seconds": "Host blocking wait for the completion event; includes kernel execution.",
+          "upload_seconds": "Host synchronous HtoD copy calls, excluding host packing.",
+          "download_seconds": "Host synchronous DtoH copy calls, excluding host unpacking.",
+          "additive": "Do not add kernel_seconds to host phase times; device and host overlap."
+        }
+      }
+    },
+    {
+      "event": "sample",
+      "actor": 0,
+      "iteration": 1,
+      "warmup": false,
+      "wall_seconds": 1.0700188999762759,
+      "statement_prepare_seconds": 0.37475470002391376,
+      "verification_call_seconds": 0.6943579000071622,
+      "correctness_check_seconds": 0.004338800004916266,
+      "sha256": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "record_sha256": [
+        "3c2f035c99cb2227902b8cd127f9689c0fdc2bd5b905e0425d7ece216444ef1a",
+        "db4e5ba1375033d4d6975e3b54bc01863680469dd710532b22d90b50635866ee",
+        "ea675600653d6045580032c4e86159b1ef45db733852437d2681a99b6bda1d15",
+        "b1bf1a713eec5d5c1f3527d0c94a72b9e1f923957aa3cef72d58d27f5040bb99",
+        "0447232bc44137c1f25ec7b2167e1143a031e1ff6f92c7283a248e9a874cf939",
+        "6b3efdf284f3fdcef6fb7ed76b30e6e74c2f19d7dc4baa0e7d0723cf108d151d",
+        "4ff8464d345ce0f8484c741cfab7eabb749b3fb73e92a94301714c04ba96f503",
+        "353b44d957b4796fd6f69ede13554d977cc78092c75a5dcf81a0d81214387ccf",
+        "6d6edcca927a4629f4f8949a0e47135edb0867dd110e4b4730604fef46addee4"
+      ],
+      "cache": {
+        "hits": 6,
+        "misses": 3
+      },
+      "records": 9,
+      "exact_proof_rows": 5850,
+      "profile_summary": {
+        "batches": 4,
+        "rows": 11700,
+        "kernel_seconds": 0.32566473007202146,
+        "upload_seconds": 0.003380199952516705,
+        "download_seconds": 0.00083559998893179,
+        "scheduler_wait_seconds": 4.290003562346101e-05,
+        "lock_wait_seconds": 2.2899970645084977e-05,
+        "sync_seconds": 0.32658680001622997,
+        "allocation_seconds": 7.22002296242863e-05
+      },
+      "profile": {
+        "schema_version": 1,
+        "totals": {
+          "batches": 4,
+          "rows": 11700,
+          "failed_batches": 0,
+          "failed_wall_seconds": 0,
+          "host_wall_seconds": 0.33587459998670965,
+          "lock_wait_seconds": 2.2899970645084977e-05,
+          "scheduler_wait_seconds": 4.290003562346101e-05,
+          "setup_seconds": 3.2199983252212405e-05,
+          "allocation_seconds": 7.22002296242863e-05,
+          "upload_seconds": 0.003380199952516705,
+          "output_clear_seconds": 8.07999458629638e-05,
+          "launch_seconds": 0.00016609998419880867,
+          "sync_seconds": 0.32658680001622997,
+          "download_seconds": 0.00083559998893179,
+          "kernel_seconds": 0.32566473007202146,
+          "upload_bytes": 10564584,
+          "download_bytes": 46800,
+          "allocations": 0,
+          "allocation_reuses": 28,
+          "frees": 0
+        },
+        "by_kernel": {
+          "dgfl_gt_pow_batch": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_validate": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_msm": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_prepare_public_table": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.056471899995813146,
+            "lock_wait_seconds": 1.1399999493733048e-05,
+            "scheduler_wait_seconds": 2.230002428404987e-05,
+            "setup_seconds": 1.5600002370774746e-05,
+            "allocation_seconds": 2.990008215419948e-05,
+            "upload_seconds": 0.0009973999403882772,
+            "output_clear_seconds": 4.489996354095638e-05,
+            "launch_seconds": 7.609999738633633e-05,
+            "sync_seconds": 0.05326830002013594,
+            "download_seconds": 0.000471699982881546,
+            "kernel_seconds": 0.0529315528869629,
+            "upload_bytes": 2270184,
+            "download_bytes": 23400,
+            "allocations": 0,
+            "allocation_reuses": 14,
+            "frees": 0
+          },
+          "dgfl_gt_verify_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.2794026999908965,
+            "lock_wait_seconds": 1.1499971151351929e-05,
+            "scheduler_wait_seconds": 2.060001133941114e-05,
+            "setup_seconds": 1.659998088143766e-05,
+            "allocation_seconds": 4.230014747008681e-05,
+            "upload_seconds": 0.0023828000121284276,
+            "output_clear_seconds": 3.589998232200742e-05,
+            "launch_seconds": 8.999998681247234e-05,
+            "sync_seconds": 0.27331849999609403,
+            "download_seconds": 0.000363900006050244,
+            "kernel_seconds": 0.2727331771850587,
+            "upload_bytes": 8294400,
+            "download_bytes": 23400,
+            "allocations": 0,
+            "allocation_reuses": 14,
+            "frees": 0
+          }
+        },
+        "kernel_resources": {
+          "dgfl_gt_pow_batch": {
+            "function_name": "dgfl_gt_pow_batch",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 16048,
+            "num_registers": 255
+          },
+          "dgfl_gt_validate": {
+            "function_name": "dgfl_gt_validate",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 15232,
+            "num_registers": 255
+          },
+          "dgflow_g1_msm": {
+            "function_name": "dgflow_g1_msm",
+            "errors": {},
+            "max_threads_per_block": 640,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 6688,
+            "num_registers": 88
+          },
+          "dgflow_g1_verify_polynomial": {
+            "function_name": "dgflow_g1_verify_polynomial",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 128
+          },
+          "dgfl_gt_prepare_public_table": {
+            "function_name": "dgfl_gt_prepare_public_table",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 13392,
+            "num_registers": 255
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "function_name": "dgflow_g1_verify_polynomial_many",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 121
+          },
+          "dgfl_gt_verify_many": {
+            "function_name": "dgfl_gt_verify_many",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 18400,
+            "num_registers": 255
+          }
+        },
+        "device_resources": {
+          "multiprocessor_count": 24,
+          "max_threads_per_multiprocessor": 1536,
+          "registers_per_multiprocessor": 65536,
+          "errors": {}
+        },
+        "pool": {
+          "reserved_bytes": 12780368,
+          "peak_reserved_bytes": 12780368,
+          "budget_bytes": 134217728,
+          "slots": 33
+        },
+        "configuration": {
+          "block_size": 32,
+          "chunk_size": 4096,
+          "scheduler_slots": 1
+        },
+        "timing_notes": {
+          "host_wall_seconds": "Complete successful execute calls, including waits and host preparation.",
+          "kernel_seconds": "CUDA event elapsed; overlaps sync_seconds and may include GPU scheduling.",
+          "sync_seconds": "Host blocking wait for the completion event; includes kernel execution.",
+          "upload_seconds": "Host synchronous HtoD copy calls, excluding host packing.",
+          "download_seconds": "Host synchronous DtoH copy calls, excluding host unpacking.",
+          "additive": "Do not add kernel_seconds to host phase times; device and host overlap."
+        }
+      }
+    },
+    {
+      "event": "sample",
+      "actor": 0,
+      "iteration": 2,
+      "warmup": false,
+      "wall_seconds": 1.0725724000076298,
+      "statement_prepare_seconds": 0.38350029999855906,
+      "verification_call_seconds": 0.6871621000173036,
+      "correctness_check_seconds": 0.0092927000077907,
+      "sha256": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "record_sha256": [
+        "3c2f035c99cb2227902b8cd127f9689c0fdc2bd5b905e0425d7ece216444ef1a",
+        "db4e5ba1375033d4d6975e3b54bc01863680469dd710532b22d90b50635866ee",
+        "ea675600653d6045580032c4e86159b1ef45db733852437d2681a99b6bda1d15",
+        "b1bf1a713eec5d5c1f3527d0c94a72b9e1f923957aa3cef72d58d27f5040bb99",
+        "0447232bc44137c1f25ec7b2167e1143a031e1ff6f92c7283a248e9a874cf939",
+        "6b3efdf284f3fdcef6fb7ed76b30e6e74c2f19d7dc4baa0e7d0723cf108d151d",
+        "4ff8464d345ce0f8484c741cfab7eabb749b3fb73e92a94301714c04ba96f503",
+        "353b44d957b4796fd6f69ede13554d977cc78092c75a5dcf81a0d81214387ccf",
+        "6d6edcca927a4629f4f8949a0e47135edb0867dd110e4b4730604fef46addee4"
+      ],
+      "cache": {
+        "hits": 6,
+        "misses": 3
+      },
+      "records": 9,
+      "exact_proof_rows": 5850,
+      "profile_summary": {
+        "batches": 4,
+        "rows": 11700,
+        "kernel_seconds": 0.32116530609130844,
+        "upload_seconds": 0.0043264999985694885,
+        "download_seconds": 0.0008744999940972775,
+        "scheduler_wait_seconds": 5.399997462518513e-05,
+        "lock_wait_seconds": 2.8300011763349175e-05,
+        "sync_seconds": 0.32197989997803234,
+        "allocation_seconds": 9.559982572682202e-05
+      },
+      "profile": {
+        "schema_version": 1,
+        "totals": {
+          "batches": 4,
+          "rows": 11700,
+          "failed_batches": 0,
+          "failed_wall_seconds": 0,
+          "host_wall_seconds": 0.33192769999732263,
+          "lock_wait_seconds": 2.8300011763349175e-05,
+          "scheduler_wait_seconds": 5.399997462518513e-05,
+          "setup_seconds": 3.989998367615044e-05,
+          "allocation_seconds": 9.559982572682202e-05,
+          "upload_seconds": 0.0043264999985694885,
+          "output_clear_seconds": 7.960002403706312e-05,
+          "launch_seconds": 0.00021239998750388622,
+          "sync_seconds": 0.32197989997803234,
+          "download_seconds": 0.0008744999940972775,
+          "kernel_seconds": 0.32116530609130844,
+          "upload_bytes": 10564584,
+          "download_bytes": 46800,
+          "allocations": 0,
+          "allocation_reuses": 28,
+          "frees": 0
+        },
+        "by_kernel": {
+          "dgfl_gt_pow_batch": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_validate": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_msm": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_prepare_public_table": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.056024599994998425,
+            "lock_wait_seconds": 1.1400028597563505e-05,
+            "scheduler_wait_seconds": 2.1899992134422064e-05,
+            "setup_seconds": 1.8099992303177714e-05,
+            "allocation_seconds": 3.609989653341472e-05,
+            "upload_seconds": 0.0014091000193729997,
+            "output_clear_seconds": 3.810002817772329e-05,
+            "launch_seconds": 9.270000737160444e-05,
+            "sync_seconds": 0.05304099997738376,
+            "download_seconds": 0.00037039999733678997,
+            "kernel_seconds": 0.05274521636962888,
+            "upload_bytes": 2270184,
+            "download_bytes": 23400,
+            "allocations": 0,
+            "allocation_reuses": 14,
+            "frees": 0
+          },
+          "dgfl_gt_verify_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.2759031000023242,
+            "lock_wait_seconds": 1.689998316578567e-05,
+            "scheduler_wait_seconds": 3.209998249076307e-05,
+            "setup_seconds": 2.1799991372972727e-05,
+            "allocation_seconds": 5.94999291934073e-05,
+            "upload_seconds": 0.002917399979196489,
+            "output_clear_seconds": 4.149999585933983e-05,
+            "launch_seconds": 0.00011969998013228178,
+            "sync_seconds": 0.2689389000006486,
+            "download_seconds": 0.0005040999967604876,
+            "kernel_seconds": 0.26842008972167974,
+            "upload_bytes": 8294400,
+            "download_bytes": 23400,
+            "allocations": 0,
+            "allocation_reuses": 14,
+            "frees": 0
+          }
+        },
+        "kernel_resources": {
+          "dgfl_gt_pow_batch": {
+            "function_name": "dgfl_gt_pow_batch",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 16048,
+            "num_registers": 255
+          },
+          "dgfl_gt_validate": {
+            "function_name": "dgfl_gt_validate",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 15232,
+            "num_registers": 255
+          },
+          "dgflow_g1_msm": {
+            "function_name": "dgflow_g1_msm",
+            "errors": {},
+            "max_threads_per_block": 640,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 6688,
+            "num_registers": 88
+          },
+          "dgflow_g1_verify_polynomial": {
+            "function_name": "dgflow_g1_verify_polynomial",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 128
+          },
+          "dgfl_gt_prepare_public_table": {
+            "function_name": "dgfl_gt_prepare_public_table",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 13392,
+            "num_registers": 255
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "function_name": "dgflow_g1_verify_polynomial_many",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 121
+          },
+          "dgfl_gt_verify_many": {
+            "function_name": "dgfl_gt_verify_many",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 18400,
+            "num_registers": 255
+          }
+        },
+        "device_resources": {
+          "multiprocessor_count": 24,
+          "max_threads_per_multiprocessor": 1536,
+          "registers_per_multiprocessor": 65536,
+          "errors": {}
+        },
+        "pool": {
+          "reserved_bytes": 12780368,
+          "peak_reserved_bytes": 12780368,
+          "budget_bytes": 134217728,
+          "slots": 33
+        },
+        "configuration": {
+          "block_size": 32,
+          "chunk_size": 4096,
+          "scheduler_slots": 1
+        },
+        "timing_notes": {
+          "host_wall_seconds": "Complete successful execute calls, including waits and host preparation.",
+          "kernel_seconds": "CUDA event elapsed; overlaps sync_seconds and may include GPU scheduling.",
+          "sync_seconds": "Host blocking wait for the completion event; includes kernel execution.",
+          "upload_seconds": "Host synchronous HtoD copy calls, excluding host packing.",
+          "download_seconds": "Host synchronous DtoH copy calls, excluding host unpacking.",
+          "additive": "Do not add kernel_seconds to host phase times; device and host overlap."
+        }
+      }
+    },
+    {
+      "event": "sample",
+      "actor": 0,
+      "iteration": 3,
+      "warmup": false,
+      "wall_seconds": 1.0799555999983568,
+      "statement_prepare_seconds": 0.38680310000199825,
+      "verification_call_seconds": 0.6916461999935564,
+      "correctness_check_seconds": 0.005723300011595711,
+      "sha256": "770eab3a42430dd4661817ef4ef525fe1476c8f50087408eea6afb6df5cfb284",
+      "record_sha256": [
+        "3c2f035c99cb2227902b8cd127f9689c0fdc2bd5b905e0425d7ece216444ef1a",
+        "db4e5ba1375033d4d6975e3b54bc01863680469dd710532b22d90b50635866ee",
+        "ea675600653d6045580032c4e86159b1ef45db733852437d2681a99b6bda1d15",
+        "b1bf1a713eec5d5c1f3527d0c94a72b9e1f923957aa3cef72d58d27f5040bb99",
+        "0447232bc44137c1f25ec7b2167e1143a031e1ff6f92c7283a248e9a874cf939",
+        "6b3efdf284f3fdcef6fb7ed76b30e6e74c2f19d7dc4baa0e7d0723cf108d151d",
+        "4ff8464d345ce0f8484c741cfab7eabb749b3fb73e92a94301714c04ba96f503",
+        "353b44d957b4796fd6f69ede13554d977cc78092c75a5dcf81a0d81214387ccf",
+        "6d6edcca927a4629f4f8949a0e47135edb0867dd110e4b4730604fef46addee4"
+      ],
+      "cache": {
+        "hits": 6,
+        "misses": 3
+      },
+      "records": 9,
+      "exact_proof_rows": 5850,
+      "profile_summary": {
+        "batches": 4,
+        "rows": 11700,
+        "kernel_seconds": 0.32520249557495107,
+        "upload_seconds": 0.004970000009052455,
+        "download_seconds": 0.0008490000327583402,
+        "scheduler_wait_seconds": 5.6200020480901e-05,
+        "lock_wait_seconds": 2.8000009479001164e-05,
+        "sync_seconds": 0.32574979995843023,
+        "allocation_seconds": 0.00010899992776103318
+      },
+      "profile": {
+        "schema_version": 1,
+        "totals": {
+          "batches": 4,
+          "rows": 11700,
+          "failed_batches": 0,
+          "failed_wall_seconds": 0,
+          "host_wall_seconds": 0.3369284000073094,
+          "lock_wait_seconds": 2.8000009479001164e-05,
+          "scheduler_wait_seconds": 5.6200020480901e-05,
+          "setup_seconds": 3.959998139180243e-05,
+          "allocation_seconds": 0.00010899992776103318,
+          "upload_seconds": 0.004970000009052455,
+          "output_clear_seconds": 8.839997462928295e-05,
+          "launch_seconds": 0.0002700999903026968,
+          "sync_seconds": 0.32574979995843023,
+          "download_seconds": 0.0008490000327583402,
+          "kernel_seconds": 0.32520249557495107,
+          "upload_bytes": 10564584,
+          "download_bytes": 46800,
+          "allocations": 0,
+          "allocation_reuses": 28,
+          "frees": 0
+        },
+        "by_kernel": {
+          "dgfl_gt_pow_batch": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_validate": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_msm": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgfl_gt_prepare_public_table": {
+            "batches": 0,
+            "rows": 0,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.0,
+            "lock_wait_seconds": 0.0,
+            "scheduler_wait_seconds": 0.0,
+            "setup_seconds": 0.0,
+            "allocation_seconds": 0.0,
+            "upload_seconds": 0.0,
+            "output_clear_seconds": 0.0,
+            "launch_seconds": 0.0,
+            "sync_seconds": 0.0,
+            "download_seconds": 0.0,
+            "kernel_seconds": 0.0,
+            "upload_bytes": 0,
+            "download_bytes": 0,
+            "allocations": 0,
+            "allocation_reuses": 0,
+            "frees": 0
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.05713359999936074,
+            "lock_wait_seconds": 1.1500000255182385e-05,
+            "scheduler_wait_seconds": 2.3800006601959467e-05,
+            "setup_seconds": 1.829999382607639e-05,
+            "allocation_seconds": 4.8799964133650064e-05,
+            "upload_seconds": 0.0019824999617412686,
+            "output_clear_seconds": 4.109996370971203e-05,
+            "launch_seconds": 0.00011100000119768083,
+            "sync_seconds": 0.053227399999741465,
+            "download_seconds": 0.0005276000301819295,
+            "kernel_seconds": 0.05296630477905273,
+            "upload_bytes": 2270184,
+            "download_bytes": 23400,
+            "allocations": 0,
+            "allocation_reuses": 14,
+            "frees": 0
+          },
+          "dgfl_gt_verify_many": {
+            "batches": 2,
+            "rows": 5850,
+            "failed_batches": 0,
+            "failed_wall_seconds": 0,
+            "host_wall_seconds": 0.27979480000794865,
+            "lock_wait_seconds": 1.650000922381878e-05,
+            "scheduler_wait_seconds": 3.2400013878941536e-05,
+            "setup_seconds": 2.1299987565726042e-05,
+            "allocation_seconds": 6.019996362738311e-05,
+            "upload_seconds": 0.002987500047311187,
+            "output_clear_seconds": 4.730001091957092e-05,
+            "launch_seconds": 0.000159099989105016,
+            "sync_seconds": 0.27252239995868877,
+            "download_seconds": 0.00032140000257641077,
+            "kernel_seconds": 0.27223619079589834,
+            "upload_bytes": 8294400,
+            "download_bytes": 23400,
+            "allocations": 0,
+            "allocation_reuses": 14,
+            "frees": 0
+          }
+        },
+        "kernel_resources": {
+          "dgfl_gt_pow_batch": {
+            "function_name": "dgfl_gt_pow_batch",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 16048,
+            "num_registers": 255
+          },
+          "dgfl_gt_validate": {
+            "function_name": "dgfl_gt_validate",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 15232,
+            "num_registers": 255
+          },
+          "dgflow_g1_msm": {
+            "function_name": "dgflow_g1_msm",
+            "errors": {},
+            "max_threads_per_block": 640,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 6688,
+            "num_registers": 88
+          },
+          "dgflow_g1_verify_polynomial": {
+            "function_name": "dgflow_g1_verify_polynomial",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 128
+          },
+          "dgfl_gt_prepare_public_table": {
+            "function_name": "dgfl_gt_prepare_public_table",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 13392,
+            "num_registers": 255
+          },
+          "dgflow_g1_verify_polynomial_many": {
+            "function_name": "dgflow_g1_verify_polynomial_many",
+            "errors": {},
+            "max_threads_per_block": 512,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 10192,
+            "num_registers": 121
+          },
+          "dgfl_gt_verify_many": {
+            "function_name": "dgfl_gt_verify_many",
+            "errors": {},
+            "max_threads_per_block": 256,
+            "static_shared_bytes": 0,
+            "local_bytes_per_thread": 18400,
+            "num_registers": 255
+          }
+        },
+        "device_resources": {
+          "multiprocessor_count": 24,
+          "max_threads_per_multiprocessor": 1536,
+          "registers_per_multiprocessor": 65536,
+          "errors": {}
+        },
+        "pool": {
+          "reserved_bytes": 12780368,
+          "peak_reserved_bytes": 12780368,
+          "budget_bytes": 134217728,
+          "slots": 33
+        },
+        "configuration": {
+          "block_size": 32,
+          "chunk_size": 4096,
+          "scheduler_slots": 1
+        },
+        "timing_notes": {
+          "host_wall_seconds": "Complete successful execute calls, including waits and host preparation.",
+          "kernel_seconds": "CUDA event elapsed; overlaps sync_seconds and may include GPU scheduling.",
+          "sync_seconds": "Host blocking wait for the completion event; includes kernel execution.",
+          "upload_seconds": "Host synchronous HtoD copy calls, excluding host packing.",
+          "download_seconds": "Host synchronous DtoH copy calls, excluding host unpacking.",
+          "additive": "Do not add kernel_seconds to host phase times; device and host overlap."
+        }
+      }
+    }
+  ],
+  "rounds": [
+    {
+      "iteration": 0,
+      "warmup": true,
+      "coordinated_wall_seconds": 1.1171162000100594,
+      "actor_max_seconds": 1.1122876000008546,
+      "exact_proof_rows": 5850
+    },
+    {
+      "iteration": 1,
+      "warmup": false,
+      "coordinated_wall_seconds": 1.07503030000953,
+      "actor_max_seconds": 1.0700188999762759,
+      "exact_proof_rows": 5850
+    },
+    {
+      "iteration": 2,
+      "warmup": false,
+      "coordinated_wall_seconds": 1.0828074000019114,
+      "actor_max_seconds": 1.0725724000076298,
+      "exact_proof_rows": 5850
+    },
+    {
+      "iteration": 3,
+      "warmup": false,
+      "coordinated_wall_seconds": 1.0866152000089642,
+      "actor_max_seconds": 1.0799555999983568,
+      "exact_proof_rows": 5850
+    }
+  ],
+  "completions": [
+    {
+      "event": "done",
+      "actor": 0,
+      "cleanup": "explicit_runtime_close"
+    }
+  ],
+  "hardware": {
+    "metadata": {
+      "cpu": {
+        "source": "Windows PDH English counters + CallNtPowerInformation",
+        "available": true,
+        "scope": "whole local CPU across logical processors, including other applications",
+        "frequency_measurement": "estimated interval-average effective MHz = OS MaxMhz reference × % Processor Performance / 100; _Total across logical processors; heterogeneous-core aggregate estimate, not individual-core instantaneous clocks",
+        "nominal_frequency_measurement": "CallNtPowerInformation MaxMhz reference mean; OS maximum specified MHz; not an instantaneous turbo measurement",
+        "reported_frequency_measurement": "PDH Processor Frequency as reported by the platform; kept separate from the nominal reference and effective estimate",
+        "os_reported_current_frequency_measurement": "CallNtPowerInformation CurrentMhz mean; power-management reading may remain fixed on Intel HWP; not an instantaneous turbo measurement",
+        "frequency_limit_measurement": "CallNtPowerInformation MhzLimit mean; OS-reported thermal throttle limit"
+      },
+      "gpu": {
+        "source": "NVIDIA NVML driver",
+        "available": true,
+        "device_index": 0,
+        "scope": "whole local physical GPU, including other applications; NVML utilization is a driver sampling-window measurement",
+        "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+        "uuid": "GPU-1f2fef89-25eb-881c-45d3-f6280dbfe368",
+        "driver_version": "616.56"
+      },
+      "sampler_sha256": "b1f755c61ad82b8dfa3ce5abb5c0a113b022c1ec482d04accd4ce70320a57307"
+    },
+    "samples": [
+      {
+        "elapsed_seconds": 0.48399999999674037,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": null,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": null,
+          "reported_frequency_mhz": 1963.0,
+          "os_reported_current_frequency_mhz": 1932.4166666666667,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": null,
+          "errors": {
+            "processor_performance_percent": "warming_up: interval counters require two samples at least one second apart",
+            "system_utilization_percent": "warming_up: interval counters require two samples at least one second apart",
+            "effective_frequency_mhz": "requires valid OS MaxMhz reference and PDH performance ratio"
+          }
+        },
+        "gpu": {
+          "graphics_clock_mhz": 225,
+          "sm_clock_mhz": 225,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 16,
+          "memory_utilization_percent": 27,
+          "memory_used_bytes": 5339369472,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.319,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 1.5,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 145.75951295793848,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3206.7092850746467,
+          "reported_frequency_mhz": 1932.0,
+          "os_reported_current_frequency_mhz": 1932.4166666666667,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 13.883674490956944,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 210,
+          "sm_clock_mhz": 210,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 13,
+          "memory_utilization_percent": 27,
+          "memory_used_bytes": 5339369472,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.305,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 2.5,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 147.26014841199168,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3239.7232650638166,
+          "reported_frequency_mhz": 1934.0,
+          "os_reported_current_frequency_mhz": 1934.3333333333333,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 10.095083024534423,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 225,
+          "sm_clock_mhz": 225,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 18,
+          "memory_utilization_percent": 27,
+          "memory_used_bytes": 5339107328,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.32,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 3.5160000000032596,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 149.1405171421997,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3281.0913771283936,
+          "reported_frequency_mhz": 1844.0,
+          "os_reported_current_frequency_mhz": 1901.8333333333333,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 11.247505042158368,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 210,
+          "sm_clock_mhz": 210,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 12,
+          "memory_utilization_percent": 22,
+          "memory_used_bytes": 5350641664,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.125,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 4.5310000000172295,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 148.44581452634876,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3265.8079195796727,
+          "reported_frequency_mhz": 1961.0,
+          "os_reported_current_frequency_mhz": 1961.0833333333333,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 5.742095142705351,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 225,
+          "sm_clock_mhz": 225,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 10,
+          "memory_utilization_percent": 27,
+          "memory_used_bytes": 5350248448,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.22,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 5.546999999991385,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 156.41489303695087,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3441.1276468129195,
+          "reported_frequency_mhz": 2108.0,
+          "os_reported_current_frequency_mhz": 2049.0,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 13.106473741880098,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 210,
+          "sm_clock_mhz": 210,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 14,
+          "memory_utilization_percent": 28,
+          "memory_used_bytes": 5354180608,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.339,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 6.546999999991385,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 159.77899700122458,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3515.137934026941,
+          "reported_frequency_mhz": 2050.0,
+          "os_reported_current_frequency_mhz": 2020.3333333333333,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 16.3428058514393,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 240,
+          "sm_clock_mhz": 240,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 14,
+          "memory_utilization_percent": 28,
+          "memory_used_bytes": 5354180608,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.558,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 7.562000000005355,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 174.8235961852983,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3846.119116076563,
+          "reported_frequency_mhz": 2022.0,
+          "os_reported_current_frequency_mhz": 2052.8333333333335,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 18.75089080316833,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 210,
+          "sm_clock_mhz": 210,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 3,
+          "memory_utilization_percent": 27,
+          "memory_used_bytes": 5354180608,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.143,
+          "temperature_c": 41,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 8.578000000008615,
+        "stage": "initializing",
+        "cpu": {
+          "processor_performance_percent": 165.52023723319886,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3641.4452191303744,
+          "reported_frequency_mhz": 1989.0,
+          "os_reported_current_frequency_mhz": 1934.3333333333333,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 20.9081693416734,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 210,
+          "sm_clock_mhz": 210,
+          "memory_clock_mhz": 405,
+          "utilization_percent": 30,
+          "memory_utilization_percent": 20,
+          "memory_used_bytes": 5363216384,
+          "memory_total_bytes": 8585740288,
+          "power_w": 4.634,
+          "temperature_c": 42,
+          "pstate": 8,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 9.594000000011874,
+        "stage": "iteration_0",
+        "cpu": {
+          "processor_performance_percent": 153.00448430493273,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3366.09865470852,
+          "reported_frequency_mhz": 2079.0,
+          "os_reported_current_frequency_mhz": 2110.1666666666665,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 17.105764334578875,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 2100,
+          "sm_clock_mhz": 2100,
+          "memory_clock_mhz": 8201,
+          "utilization_percent": 0,
+          "memory_utilization_percent": 1,
+          "memory_used_bytes": 6001397760,
+          "memory_total_bytes": 8585740288,
+          "power_w": 13.982,
+          "temperature_c": 43,
+          "pstate": 0,
+          "throttle_reason_mask": 1,
+          "throttle_reasons": [
+            "gpu_idle"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 10.60899999999674,
+        "stage": "iteration_1",
+        "cpu": {
+          "processor_performance_percent": 170.94794072119166,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3760.8546958662164,
+          "reported_frequency_mhz": 2020.0,
+          "os_reported_current_frequency_mhz": 2052.8333333333335,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 10.812366713469036,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 2700,
+          "sm_clock_mhz": 2700,
+          "memory_clock_mhz": 8201,
+          "utilization_percent": 0,
+          "memory_utilization_percent": 1,
+          "memory_used_bytes": 6102061056,
+          "memory_total_bytes": 8585740288,
+          "power_w": 18.711,
+          "temperature_c": 45,
+          "pstate": 0,
+          "throttle_reason_mask": 1024,
+          "throttle_reasons": [
+            "reliability"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 11.625,
+        "stage": "iteration_2",
+        "cpu": {
+          "processor_performance_percent": 152.472722003246,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3354.3998840714116,
+          "reported_frequency_mhz": 1963.0,
+          "os_reported_current_frequency_mhz": 2079.5833333333335,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 13.807468576010118,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 2700,
+          "sm_clock_mhz": 2700,
+          "memory_clock_mhz": 8201,
+          "utilization_percent": 0,
+          "memory_utilization_percent": 1,
+          "memory_used_bytes": 6102061056,
+          "memory_total_bytes": 8585740288,
+          "power_w": 19.607,
+          "temperature_c": 46,
+          "pstate": 0,
+          "throttle_reason_mask": 1028,
+          "throttle_reasons": [
+            "software_power_cap",
+            "reliability"
+          ],
+          "errors": {}
+        }
+      },
+      {
+        "elapsed_seconds": 12.625,
+        "stage": "iteration_3",
+        "cpu": {
+          "processor_performance_percent": 137.102485985864,
+          "nominal_frequency_mhz": 2200.0,
+          "effective_frequency_mhz": 3016.254691689008,
+          "reported_frequency_mhz": 2050.0,
+          "os_reported_current_frequency_mhz": 2050.9166666666665,
+          "frequency_limit_mhz": 2200.0,
+          "system_utilization_percent": 9.010805304003588,
+          "errors": {}
+        },
+        "gpu": {
+          "graphics_clock_mhz": 2700,
+          "sm_clock_mhz": 2700,
+          "memory_clock_mhz": 8201,
+          "utilization_percent": 0,
+          "memory_utilization_percent": 1,
+          "memory_used_bytes": 6086332416,
+          "memory_total_bytes": 8585740288,
+          "power_w": 35.189,
+          "temperature_c": 46,
+          "pstate": 0,
+          "throttle_reason_mask": 1028,
+          "throttle_reasons": [
+            "software_power_cap",
+            "reliability"
+          ],
+          "errors": {}
+        }
+      }
+    ],
+    "errors": [],
+    "interval_seconds": 1,
+    "still_running": false
+  }
+}

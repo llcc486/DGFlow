@@ -1,0 +1,690 @@
+{
+  "run_id": "f5af62e75ec9405ea0a6e900aca6422e",
+  "status": "completed",
+  "config": {
+    "mode": "optimized",
+    "rounds": 3,
+    "seed": 42,
+    "attack": "none",
+    "malicious_clients": 1,
+    "non_iid": false,
+    "offline_aggregators": 0,
+    "train_limit": 60000,
+    "test_limit": 10000,
+    "local_epochs": 2,
+    "backend": "numpy"
+  },
+  "created_at": "2026-10-01T12:40:51.451658+00:00",
+  "current_round": 3,
+  "rounds": [
+    {
+      "round": 1,
+      "accuracy": 0.8217,
+      "loss": 0.9375104202621329,
+      "samples": 10000,
+      "accepted_clients": [
+        "client1",
+        "client2",
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "rejected_clients": [],
+      "collateral_clients": [],
+      "duration_s": 210.7515627000248,
+      "bytes_sent": 304729707,
+      "stage_times": {
+        "dkg_s": 27.675584999960847,
+        "client_stage_s": 16.01708250003867,
+        "training_wall_sum_s": 0.2614060997730121,
+        "encryption_wall_sum_s": 2.9879458001814783,
+        "proof_wall_sum_s": 80.03545520000625,
+        "validation_s": 121.99835310003255,
+        "aggregation_s": 45.04810540005565
+      },
+      "validations": [
+        {
+          "client_id": "client1",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.01874998629772804
+        },
+        {
+          "client_id": "client2",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.013496612218993774
+        },
+        {
+          "client_id": "client3",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.009763610381233035
+        },
+        {
+          "client_id": "client4",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.013967856518511776
+        },
+        {
+          "client_id": "client5",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.011269832376478666
+        },
+        {
+          "client_id": "client6",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.011809935236479777
+        }
+      ],
+      "model_hash": "8f5ae7ebeef221399fe706cd45c943669e438082a1e66527e0060487eeee19f2",
+      "attack_accepted": 0,
+      "attack_submitted": 0,
+      "honest_rejected": 0,
+      "honest_total": 6,
+      "reference_norm_squared": 1548825
+    },
+    {
+      "round": 2,
+      "accuracy": 0.832,
+      "loss": 0.8405567020774972,
+      "samples": 10000,
+      "accepted_clients": [
+        "client1",
+        "client2",
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "rejected_clients": [],
+      "collateral_clients": [],
+      "duration_s": 211.7357958999928,
+      "bytes_sent": 304739179,
+      "stage_times": {
+        "dkg_s": 27.448533600079827,
+        "client_stage_s": 16.208101400057785,
+        "training_wall_sum_s": 0.25277709995862097,
+        "encryption_wall_sum_s": 2.9320824001915753,
+        "proof_wall_sum_s": 81.57864209986292,
+        "validation_s": 123.92600879992824,
+        "aggregation_s": 44.12372919998597
+      },
+      "validations": [
+        {
+          "client_id": "client1",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.98439801465792
+        },
+        {
+          "client_id": "client2",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9849330266289746
+        },
+        {
+          "client_id": "client3",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9839572754310508
+        },
+        {
+          "client_id": "client4",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9842863842766367
+        },
+        {
+          "client_id": "client5",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9847354539327278
+        },
+        {
+          "client_id": "client6",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9848080998981207
+        }
+      ],
+      "model_hash": "88fe3dce6af21c12d249791445f4553130a3b18351ea9530f5bba4322b310db8",
+      "attack_accepted": 0,
+      "attack_submitted": 0,
+      "honest_rejected": 0,
+      "honest_total": 6,
+      "reference_norm_squared": 2313363
+    },
+    {
+      "round": 3,
+      "accuracy": 0.8295,
+      "loss": 0.8080428216133575,
+      "samples": 10000,
+      "accepted_clients": [
+        "client1",
+        "client2",
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "rejected_clients": [],
+      "collateral_clients": [],
+      "duration_s": 214.58079049992375,
+      "bytes_sent": 304741381,
+      "stage_times": {
+        "dkg_s": 27.693384199985303,
+        "client_stage_s": 16.32715649995953,
+        "training_wall_sum_s": 0.24685019976459444,
+        "encryption_wall_sum_s": 2.9989529999438673,
+        "proof_wall_sum_s": 81.8185465001734,
+        "validation_s": 124.93358279997483,
+        "aggregation_s": 45.612675499985926
+      },
+      "validations": [
+        {
+          "client_id": "client1",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9936897119123911
+        },
+        {
+          "client_id": "client2",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9940576921327565
+        },
+        {
+          "client_id": "client3",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9935994897456889
+        },
+        {
+          "client_id": "client4",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.993813893937751
+        },
+        {
+          "client_id": "client5",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9940743280641109
+        },
+        {
+          "client_id": "client6",
+          "decision": "accepted",
+          "proof_valid": true,
+          "reason": "通过并纳入聚合",
+          "score": 0.9939832560166797
+        }
+      ],
+      "model_hash": "e348251f6f8e7874f064ac10cec0f5c8be5e1e33ca293721f2dcc14fa6675ddd",
+      "attack_accepted": 0,
+      "attack_submitted": 0,
+      "honest_rejected": 0,
+      "honest_total": 6,
+      "reference_norm_squared": 2761439
+    }
+  ],
+  "events": [
+    {
+      "time": "2026-10-01T12:40:51.914127+00:00",
+      "stage": "health",
+      "message": "检查节点身份与双向 TLS 连接",
+      "round": 0
+    },
+    {
+      "time": "2026-10-01T12:40:51.977693+00:00",
+      "stage": "data",
+      "message": "各客户端从本机公开数据缓存建立独立分区；原始样本不经节点 RPC 上传",
+      "round": 0
+    },
+    {
+      "time": "2026-10-01T12:40:54.863295+00:00",
+      "stage": "dkg",
+      "message": "密钥节点共同建钥，核对同一公开转录",
+      "round": 1
+    },
+    {
+      "time": "2026-10-01T12:41:22.538922+00:00",
+      "stage": "training",
+      "message": "客户端本地训练、量化；安全模式生成密文与范围/范数证明",
+      "round": 1
+    },
+    {
+      "time": "2026-10-01T12:41:38.550066+00:00",
+      "stage": "received",
+      "message": "已收到 6 份客户端提交；接收完成后进入验证",
+      "round": 1
+    },
+    {
+      "time": "2026-10-01T12:41:38.555932+00:00",
+      "stage": "validation",
+      "message": "各密钥节点独立核验证明、授权内积、筛选与固定批次",
+      "round": 1
+    },
+    {
+      "time": "2026-10-01T12:43:40.558890+00:00",
+      "stage": "aggregation",
+      "message": "6 个客户端获准；等待至少两份聚合结果",
+      "round": 1
+    },
+    {
+      "time": "2026-10-01T12:44:25.621762+00:00",
+      "stage": "completed_round",
+      "message": "第 1 轮完成，测试准确率 82.17%",
+      "round": 1
+    },
+    {
+      "time": "2026-10-01T12:44:25.627797+00:00",
+      "stage": "dkg",
+      "message": "密钥节点共同建钥，核对同一公开转录",
+      "round": 2
+    },
+    {
+      "time": "2026-10-01T12:44:53.075441+00:00",
+      "stage": "training",
+      "message": "客户端本地训练、量化；安全模式生成密文与范围/范数证明",
+      "round": 2
+    },
+    {
+      "time": "2026-10-01T12:45:09.280950+00:00",
+      "stage": "received",
+      "message": "已收到 6 份客户端提交；接收完成后进入验证",
+      "round": 2
+    },
+    {
+      "time": "2026-10-01T12:45:09.284086+00:00",
+      "stage": "validation",
+      "message": "各密钥节点独立核验证明、授权内积、筛选与固定批次",
+      "round": 2
+    },
+    {
+      "time": "2026-10-01T12:47:13.232761+00:00",
+      "stage": "aggregation",
+      "message": "6 个客户端获准；等待至少两份聚合结果",
+      "round": 2
+    },
+    {
+      "time": "2026-10-01T12:47:57.376611+00:00",
+      "stage": "completed_round",
+      "message": "第 2 轮完成，测试准确率 83.20%",
+      "round": 2
+    },
+    {
+      "time": "2026-10-01T12:47:57.385657+00:00",
+      "stage": "dkg",
+      "message": "密钥节点共同建钥，核对同一公开转录",
+      "round": 3
+    },
+    {
+      "time": "2026-10-01T12:48:25.079613+00:00",
+      "stage": "training",
+      "message": "客户端本地训练、量化；安全模式生成密文与范围/范数证明",
+      "round": 3
+    },
+    {
+      "time": "2026-10-01T12:48:41.398777+00:00",
+      "stage": "received",
+      "message": "已收到 6 份客户端提交；接收完成后进入验证",
+      "round": 3
+    },
+    {
+      "time": "2026-10-01T12:48:41.406088+00:00",
+      "stage": "validation",
+      "message": "各密钥节点独立核验证明、授权内积、筛选与固定批次",
+      "round": 3
+    },
+    {
+      "time": "2026-10-01T12:50:46.345065+00:00",
+      "stage": "aggregation",
+      "message": "6 个客户端获准；等待至少两份聚合结果",
+      "round": 3
+    },
+    {
+      "time": "2026-10-01T12:51:31.970052+00:00",
+      "stage": "completed_round",
+      "message": "第 3 轮完成，测试准确率 82.95%",
+      "round": 3
+    },
+    {
+      "time": "2026-10-01T12:51:32.280864+00:00",
+      "stage": "finished",
+      "message": "全部配置轮次已完成",
+      "round": 3
+    }
+  ],
+  "error": null,
+  "summary": {
+    "accuracy": 0.8295,
+    "elapsed_s": 640.4559969000984,
+    "bytes_sent": 914233769,
+    "completed_rounds": 3
+  },
+  "evidence": {
+    "data": "MNIST public replay",
+    "crypto_backend": "BLS12-381 / arkworks 0.5.0",
+    "proof": "Pedersen range + linked square Sigma/Fiat-Shamir, research implementation",
+    "wire_measurement": "application request + response bytes, excluding TLS/HTTP framing",
+    "training_backend": "numpy",
+    "implementation": {
+      "source_sha256": "ac00368af00ca5356430ef748e849cbb424b3341756cabba664edbb461fa95ad",
+      "source_files": {
+        "__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+        "cli.py": "0356026e996fddaca184054a74f2c438342716630d1c030d94be860007b8bbcb",
+        "crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+        "crypto/backend.py": "748785025b63e423ec192eb24aa185fbfa711dddd199c8f0eede19bea86084d3",
+        "crypto/protocol.py": "48217b942e6de952012e30577dc3ddea07d8a6de8d6bb2965654a094db478d74",
+        "deployment.py": "86572d0f48873a3c0c756610f73e8d9422176e315d8973467c7bc4c06f56364a",
+        "experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+        "experiments/evidence.py": "5497b158f49c1661b0073b0ce5eef3e8dbd9e942f270e8249e6324eda2b1a4eb",
+        "experiments/runner.py": "a15e3dafd1e36cc5a04da10585608ddf230bfa769681b82130a1ab581da29407",
+        "experiments/telemetry.py": "a3ac8631ca453247ed757f2887c3bd59c5cc526b69cbbce2202814f3e4dd71c1",
+        "services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+        "services/control.py": "e0103def4a5d542cc08e5dcfd77f12fe21c281a0900e6424517ae57a8016d758",
+        "services/node.py": "7a37c52d167ee7fd4fbaafcc994943a74a8950c400bec98ea7071ef68c16b1b9",
+        "services/roles.py": "86f1b5ced31c000d867dd433e3ed306a8c49249f0618e54fdc53e5cfc4eb3c3f",
+        "training/__init__.py": "979cf13d7187c5dbf4a21bdfa9db81c4bb6abd8719f14cd2777b953476c014da",
+        "training/data.py": "4e6ad8ce3bce8e764f6e190749056e730705781ebbf02fb82a8ffb27f1624f30",
+        "training/model.py": "eea2209ec85472010d14cee3adf5f241e9534266bc8158c39288020f7c1158da",
+        "transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+        "transport/client.py": "4911fb0e7cee9dafb123d7dce60786b92e59c2335f9a6c25777e75d231bd3dd2",
+        "transport/security.py": "c21ab40e918e549fa247d13a16bfa0a2bcd9868401f476d7557d89263aaf8afc",
+        "validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+        "validation/policy.py": "167de01429dd3792f747035bdf296b0fbd3bb75d63a5ecbe3e07535ff35aafa6"
+      },
+      "dependencies": {
+        "numpy": "2.5.3",
+        "py-arkworks-bls12381": "0.5.0",
+        "cryptography": "50.0.2",
+        "fastapi": "0.142.2",
+        "httpx": "0.28.1"
+      },
+      "python": "3.12.14",
+      "platform": "Windows",
+      "machine": "AMD64"
+    },
+    "deployment": "single_host",
+    "initial_nodes": [
+      {
+        "id": "aggregator1",
+        "role": "aggregator",
+        "status": "online",
+        "host": "https://127.0.0.1:9201"
+      },
+      {
+        "id": "aggregator2",
+        "role": "aggregator",
+        "status": "online",
+        "host": "https://127.0.0.1:9202"
+      },
+      {
+        "id": "aggregator3",
+        "role": "aggregator",
+        "status": "online",
+        "host": "https://127.0.0.1:9203"
+      },
+      {
+        "id": "authority1",
+        "role": "authority",
+        "status": "online",
+        "host": "https://127.0.0.1:9101"
+      },
+      {
+        "id": "authority2",
+        "role": "authority",
+        "status": "online",
+        "host": "https://127.0.0.1:9102"
+      },
+      {
+        "id": "authority3",
+        "role": "authority",
+        "status": "online",
+        "host": "https://127.0.0.1:9103"
+      },
+      {
+        "id": "client1",
+        "role": "client",
+        "status": "online",
+        "host": "https://127.0.0.1:9301"
+      },
+      {
+        "id": "client2",
+        "role": "client",
+        "status": "online",
+        "host": "https://127.0.0.1:9302"
+      },
+      {
+        "id": "client3",
+        "role": "client",
+        "status": "online",
+        "host": "https://127.0.0.1:9303"
+      },
+      {
+        "id": "client4",
+        "role": "client",
+        "status": "online",
+        "host": "https://127.0.0.1:9304"
+      },
+      {
+        "id": "client5",
+        "role": "client",
+        "status": "online",
+        "host": "https://127.0.0.1:9305"
+      },
+      {
+        "id": "client6",
+        "role": "client",
+        "status": "online",
+        "host": "https://127.0.0.1:9306"
+      }
+    ],
+    "partitions": {
+      "client1": {
+        "config_hash": "7552d6858b51aca25ce48a53cf20786715bee3309f4dacc666a58f69ce3b55a3",
+        "partition_hash": "49dca88c777b9ff2dac5613f8a45a6daab5d0bd5622d4312c4578af28d94e1bf",
+        "policy": {
+          "batch_size": 2,
+          "bits": 8,
+          "dimension": 650,
+          "members": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "mode": "optimized",
+          "scale": 128
+        },
+        "policy_hash": "d15231ff0b340fab1e4f1b78d28b5cef736fd787a3eb6ff737a3f3d0d7aeddf9",
+        "samples": 10000
+      },
+      "client2": {
+        "config_hash": "7552d6858b51aca25ce48a53cf20786715bee3309f4dacc666a58f69ce3b55a3",
+        "partition_hash": "b986b549d62d4d66691e5f39dab8894295ddd2875c27fb11bb07ed2bc5b244c7",
+        "policy": {
+          "batch_size": 2,
+          "bits": 8,
+          "dimension": 650,
+          "members": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "mode": "optimized",
+          "scale": 128
+        },
+        "policy_hash": "d15231ff0b340fab1e4f1b78d28b5cef736fd787a3eb6ff737a3f3d0d7aeddf9",
+        "samples": 10000
+      },
+      "client3": {
+        "config_hash": "7552d6858b51aca25ce48a53cf20786715bee3309f4dacc666a58f69ce3b55a3",
+        "partition_hash": "af9c936a656cb13213c7184ef4390891d61dc21471a71d5768d201044f3bd560",
+        "policy": {
+          "batch_size": 2,
+          "bits": 8,
+          "dimension": 650,
+          "members": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "mode": "optimized",
+          "scale": 128
+        },
+        "policy_hash": "d15231ff0b340fab1e4f1b78d28b5cef736fd787a3eb6ff737a3f3d0d7aeddf9",
+        "samples": 10000
+      },
+      "client4": {
+        "config_hash": "7552d6858b51aca25ce48a53cf20786715bee3309f4dacc666a58f69ce3b55a3",
+        "partition_hash": "6040e5665ed241e8dc94aaa431af5aff03bb0316b915582131876234a3eedff3",
+        "policy": {
+          "batch_size": 2,
+          "bits": 8,
+          "dimension": 650,
+          "members": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "mode": "optimized",
+          "scale": 128
+        },
+        "policy_hash": "d15231ff0b340fab1e4f1b78d28b5cef736fd787a3eb6ff737a3f3d0d7aeddf9",
+        "samples": 10000
+      },
+      "client5": {
+        "config_hash": "7552d6858b51aca25ce48a53cf20786715bee3309f4dacc666a58f69ce3b55a3",
+        "partition_hash": "e7d92e27c7dde6c022d7fe85d0af6734f22f2000b615cbdbc7252b5be056ec30",
+        "policy": {
+          "batch_size": 2,
+          "bits": 8,
+          "dimension": 650,
+          "members": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "mode": "optimized",
+          "scale": 128
+        },
+        "policy_hash": "d15231ff0b340fab1e4f1b78d28b5cef736fd787a3eb6ff737a3f3d0d7aeddf9",
+        "samples": 10000
+      },
+      "client6": {
+        "config_hash": "7552d6858b51aca25ce48a53cf20786715bee3309f4dacc666a58f69ce3b55a3",
+        "partition_hash": "a0cecfcaf4bb5f66967eed76a84e952b59c2c56a1fa1c9a72778976c1d8795a0",
+        "policy": {
+          "batch_size": 2,
+          "bits": 8,
+          "dimension": 650,
+          "members": [
+            "client1",
+            "client2",
+            "client3",
+            "client4",
+            "client5",
+            "client6"
+          ],
+          "mode": "optimized",
+          "scale": 128
+        },
+        "policy_hash": "d15231ff0b340fab1e4f1b78d28b5cef736fd787a3eb6ff737a3f3d0d7aeddf9",
+        "samples": 10000
+      }
+    },
+    "memory": {
+      "peak_sampled_rss_bytes": 1889697792,
+      "samples": 421,
+      "interval_seconds": 1,
+      "scope": "local controller + recorded local role process trees; RSS sum may double-count shared pages"
+    }
+  },
+  "initial_metrics": {
+    "accuracy": 0.053,
+    "loss": 2.302594545233473,
+    "samples": 10000
+  },
+  "current_validations": [
+    {
+      "client_id": "client1",
+      "decision": "accepted",
+      "proof_valid": true,
+      "reason": "通过并纳入聚合",
+      "score": 0.9936897119123911
+    },
+    {
+      "client_id": "client2",
+      "decision": "accepted",
+      "proof_valid": true,
+      "reason": "通过并纳入聚合",
+      "score": 0.9940576921327565
+    },
+    {
+      "client_id": "client3",
+      "decision": "accepted",
+      "proof_valid": true,
+      "reason": "通过并纳入聚合",
+      "score": 0.9935994897456889
+    },
+    {
+      "client_id": "client4",
+      "decision": "accepted",
+      "proof_valid": true,
+      "reason": "通过并纳入聚合",
+      "score": 0.993813893937751
+    },
+    {
+      "client_id": "client5",
+      "decision": "accepted",
+      "proof_valid": true,
+      "reason": "通过并纳入聚合",
+      "score": 0.9940743280641109
+    },
+    {
+      "client_id": "client6",
+      "decision": "accepted",
+      "proof_valid": true,
+      "reason": "通过并纳入聚合",
+      "score": 0.9939832560166797
+    }
+  ],
+  "current_validations_round": 3
+}

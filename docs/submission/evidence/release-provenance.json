@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "raw_record_count": 23,
+  "experiment_source_sha256": "ac00368af00ca5356430ef748e849cbb424b3341756cabba664edbb461fa95ad",
+  "release_source_sha256": "ee1c0c2c05199c46865dbbdcc95e4d42329018cf0934e287ac3f636cb8953dc4",
+  "changed_runtime_source_files": {
+    "experiments/evidence.py": {
+      "experiment_sha256": "5497b158f49c1661b0073b0ce5eef3e8dbd9e942f270e8249e6324eda2b1a4eb",
+      "release_sha256": "d8379912495f28adeab95a3791e032dd6a1bd0f754d8008e0f9af91a3fd246b1"
+    },
+    "experiments/runner.py": {
+      "experiment_sha256": "a15e3dafd1e36cc5a04da10585608ddf230bfa769681b82130a1ab581da29407",
+      "release_sha256": "0c9828ce9c03b65a64696fa3af89cb057a9fe517acd4d1ff22081c64817f78fe"
+    }
+  },
+  "changes_explained": {
+    "experiments/evidence.py": "Atomic exports, preserve complete cached suites on resume, explicit completed/incomplete statistics, safe run identifiers.",
+    "experiments/runner.py": "Only attack_submitted counter changes from configured attackers minus logical dropouts to the intersection of actual replies and attackers."
+  },
+  "protocol_and_training_source_unchanged": true,
+  "historical_counter_check": {
+    "formal_completed_rounds_checked": 22,
+    "all_formal_received_six_clients": true,
+    "fault_cases_have_no_attackers": true,
+    "historical_attack_counts_unaffected": true
+  },
+  "final_reexport_bytes_preserved": true,
+  "raw_record_sha256": {
+    "faults/84e532d0ef3d492b85df5b2e2c994362/result.json": "e79c98831ba918d70ce217818796e8c599ae52065f09e7ce28e06cd3e30e482d",
+    "faults/9029eb7ca7fe4046b7d85f80e52578ed/result.json": "4d2aa120302f28673d6a4122069e3815896c3a8261973383f35ead403be24a8b",
+    "faults/92e382c1a29a4a33b954ed8188fe1166/result.json": "58889e92612bfe3e14cb49aa16fc94427807b3bd2be8bba318f4aae8875908a7",
+    "formal/16e4ad1c62f346458e084e700de3fd36/result.json": "8b1b1d62b8d7b7b631622a519d593692d624bbcb3beccc6d92b44d8e9ccfb946",
+    "formal/1b7e056dcf4840e1a0b21e144ae25cce/result.json": "d9568ed358b9c1532837e96589a2ac8cd279d9460925ca02197be52acbea68e5",
+    "formal/35b204ee43534de6951c7050a9e1648a/result.json": "ff5e88442d416e010680f56eb399731f5bcba95203f7f635200c803e1bcb158a",
+    "formal/36613715821b490482e396c76c406674/result.json": "aaa3551a140d15e6c041be86d7d71b83850aae898ebb483925015a1838114447",
+    "formal/404650d700084a15b2c2eae9adc68930/result.json": "46e6a7e1a24e744a5e729fc86d373f858c7e59c93151a0ebf414551562d22cdd",
+    "formal/4ae17432fa014f22878e3d8077adf1eb/result.json": "211b0e4da942fddd9734f3870b76d57083a8b7069294be261ca4131939859984",
+    "formal/4fdf0248ace9403b87de641fa04182e1/result.json": "69ca253fc284621493ade4402278ba390e7ad7e339b7f580ba83a52b7428ccea",
+    "formal/63dd108f24224e25bc10e8f60db3ef3e/result.json": "f065ceddb39f99371a71d50647f9095ef28dc1614e7e95e1cb8994b8ab97d169",
+    "formal/662b483bd01e4f5e87cc221a346588ae/result.json": "88118de96b0ee9c20acdc974810fcf3d0593def040892de2b398083a6988e035",
+    "formal/7889bab3ff0b41c18d6d8f8e728bc331/result.json": "dce8960db6a460473dd6627f4490e5dc8523d11d5d4648218716e7b3f32e1d4a",
+    "formal/801d73cc1ae84f088504c6bef1e39e7c/result.json": "e9fe49fdc2df48f47669ceb805da8ae76f284c886ca8a51fedc8647ac5223e31",
+    "formal/b64ba4afdb8746eda281e4c0604bf52b/result.json": "cff706cd069866d6eeacddc757b011d65aa18beea2faf532ed3b18b5411797d6",
+    "formal/ba8500fb69884a72911cc0f28636fa69/result.json": "4529ff792fcf23c24ca86477cb040f3d41a5a101de4e9a62d1ef0df2947014d2",
+    "formal/c853be5e27c640d78fdc1c3a041f2f5a/result.json": "c9bbd4307c095fb38b8f5c8258fc2d9bf76974649f6bccf865801026bfc7c774",
+    "formal/cc48fd2a242d44efa4542104e0e7b9ac/result.json": "98e8aa0b8ae75518e9d1364595b6ff2d2e111763f93f63c28fc03745d069ccc3",
+    "formal/ddec72460cf44e86989ed8ff51f8bb3d/result.json": "6e54b6bf64d3e872b0edc14ab9245c553a2fbfe22fefb2b8274a0c07abb6bc33",
+    "formal/f0af64bd9b6d44bcbde71d1db89cf112/result.json": "e21b134d5e32feec6d0abd97898e2513fefcbae76db9d762f5e151af72194ef7",
+    "formal/ff12d6245b894aed94466c458ee88108/result.json": "f8f20654df954453cc932493afa03002bd5fcc49a19e7e4bca8ee4703cbea159",
+    "full-data/e24674cfc4d14567b82f8243d97a144d/result.json": "c9517fb3ad54c00fe7f7f0bb0af09223072013d25cecb30bbf31c7991f765784",
+    "full-data/f5af62e75ec9405ea0a6e900aca6422e/result.json": "d113a4333b080985df55b5ecb519cb8b7a0b0cbc99dabc81c4a7f14780eada8e"
+  },
+  "archived_json_values_match_original_runtime_records": true,
+  "json_formatting": "An initial export normalized CRLF to LF without changing JSON values. All archived values were checked against the original runtime records. The final exporter preserves unchanged files, including legacy CRLF formatting.",
+  "version_boundary": "Experiment roles and coordinator were restarted together before the suite. The stored source manifest is an on-disk fingerprint, not remote attestation. All raw source fingerprints are retained."
+}

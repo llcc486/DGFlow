@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "variant": "native-v2-public-cyclotomic-verifier",
+  "record_date_local": "2026-10-05",
+  "timezone": "Asia/Shanghai",
+  "provenance": {
+    "kind": "retrospective_acceptance_record",
+    "description": "The commands and test results below were executed previously and reported through tool output. This JSON records those existing results; it is not a new raw test log.",
+    "current_record_actions": [
+      "Read-only SHA-256 and size verification of the frozen v2 wheel, isolated unpacked pyd, and current Rust source files.",
+      "Write this acceptance record."
+    ],
+    "tests_or_builds_rerun_for_this_record": false,
+    "raw_test_log_artifact": null
+  },
+  "artifacts": [
+    {
+      "path": "tmp/combine-optimization-native-v2-wheels/dgfl_native-0.2.0-cp312-cp312-win_amd64.whl",
+      "sha256": "6ac7ae361f8924933e087e2516adb031543b27fbfe69f80d90f49fb09d9c825c",
+      "bytes": 624548,
+      "sha256_verified_for_this_record": true
+    },
+    {
+      "path": "tmp/combine-optimization-native-v2/dgfl_native/dgfl_native.cp312-win_amd64.pyd",
+      "sha256": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b",
+      "bytes": 1560064,
+      "sha256_verified_for_this_record": true
+    },
+    {
+      "path": "native/dgfl-native/src/aggregate.rs",
+      "sha256": "cf8292ff8e97e65f207194d7e934da65c2d27ac0e11f4dc687d46e4072bb425d",
+      "bytes": 13246,
+      "sha256_verified_for_this_record": true
+    },
+    {
+      "path": "native/dgfl-native/src/lib.rs",
+      "sha256": "05599052f11005b587ae9ffffd989590134da00e6f49dda0f2e1b3d4bcc76d03",
+      "bytes": 6388,
+      "sha256_verified_for_this_record": true
+    }
+  ],
+  "historical_execution_environment": {
+    "shell": "PowerShell",
+    "working_directory": "D:/Desktop/全国密码技术竞赛/Project/DGFlow-source-671a850",
+    "python": ".venv/Scripts/python.exe",
+    "python_abi": "CPython 3.12",
+    "platform": "win_amd64",
+    "native_package_version": "0.2.0",
+    "build_environment_setup": [
+      "$env:CARGO_HOME = (Resolve-Path -LiteralPath 'tmp/native-toolchain/cargo').Path",
+      "$env:RUSTUP_HOME = (Resolve-Path -LiteralPath 'tmp/native-toolchain/rustup').Path",
+      "$env:PATH = (Join-Path $env:CARGO_HOME 'bin') + [IO.Path]::PathSeparator + $env:PATH",
+      "$env:PYO3_PYTHON = (Resolve-Path -LiteralPath '.venv/Scripts/python.exe').Path"
+    ],
+    "cargo_target_directory": "tmp/combine-optimization-native-v2-target",
+    "wheel_output_directory": "tmp/combine-optimization-native-v2-wheels",
+    "isolated_unpack_directory": "tmp/combine-optimization-native-v2",
+    "production_installation_by_recording_agent": false,
+    "v1_artifact_overwritten_by_recording_agent": false
+  },
+  "historical_executions": [
+    {
+      "purpose": "Rust release-mode unit tests, including exact subgroup and exponentiation oracles",
+      "command": "& (Join-Path $env:CARGO_HOME 'bin/cargo.exe') test --release --locked --offline --manifest-path native/dgfl-native/Cargo.toml --target-dir tmp/combine-optimization-native-v2-target",
+      "result": {
+        "exit_code": 0,
+        "passed": 13,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered_out": 0,
+        "test_elapsed_seconds": 0.31,
+        "release_build_elapsed_seconds": 27.06
+      },
+      "new_oracle_tests": [
+        "aggregate::tests::scalar_encoding_rejects_modulus_and_wrong_lengths",
+        "aggregate::tests::public_gt_table_matches_unmodified_exponentiation",
+        "aggregate::tests::exact_gt_guard_matches_generic_q_power_on_random_and_constructed_subgroups",
+        "aggregate::tests::public_cyclotomic_exponentiation_matches_generic_power_for_checked_gt"
+      ]
+    },
+    {
+      "purpose": "Build isolated v2 release wheel",
+      "command": ".venv/Scripts/python.exe -m maturin build --release --locked --offline --manifest-path native/dgfl-native/Cargo.toml --target-dir tmp/combine-optimization-native-v2-target --out tmp/combine-optimization-native-v2-wheels --interpreter .venv/Scripts/python.exe",
+      "result": {
+        "exit_code": 0,
+        "release_build_elapsed_seconds": 24.04,
+        "wheel_path": "tmp/combine-optimization-native-v2-wheels/dgfl_native-0.2.0-cp312-cp312-win_amd64.whl"
+      }
+    },
+    {
+      "purpose": "Native verifier, Python adapter, malicious partial-decryption, and service integration regressions against the isolated v2 module",
+      "command": ".venv/Scripts/python.exe -c \"import sys; sys.path.insert(0,'tmp/combine-optimization-native-v2'); import pytest; raise SystemExit(pytest.main(['tests/crypto/test_aggregate_native.py','tests/crypto/test_partial_decryption.py','tests/integration/test_roles.py','-q']))\"",
+      "result": {
+        "exit_code": 0,
+        "passed": 99,
+        "failed": 0,
+        "skipped": 0,
+        "elapsed_seconds": 11.54
+      }
+    },
+    {
+      "purpose": "Lint the native verifier regression test file",
+      "command": ".venv/Scripts/python.exe -m ruff check tests/crypto/test_aggregate_native.py",
+      "result": {
+        "exit_code": 0,
+        "summary": "All checks passed!"
+      }
+    }
+  ],
+  "oracle_coverage": {
+    "membership_oracle": "Unmodified Fq12::pow(Fr::MODULUS) with nonzero check",
+    "membership_values_checked": 133,
+    "membership_value_construction": "Five fixed values plus 32 seeded groups of four values: general Fq12, unitary non-cyclotomic, cyclotomic non-q-order, and valid q-order GT.",
+    "fixed_membership_values": ["zero", "one", "minus one", "two", "pairing generator"],
+    "unitary_fixture": "u = Frob6(x) / x; explicitly checked unitary and not cyclotomic",
+    "cyclotomic_non_q_fixture": "c = Frob2(u) * u; explicitly checked cyclotomic and ordinary c^q != 1",
+    "cyclotomic_non_q_exact_exponent_oracle": "cyclotomic_exp(q) == ordinary pow(q)",
+    "public_variable_base_exponent_oracle": "32 seeded valid GT/public scalar pairs and boundary exponents 0, 1, q-1, and bit 254 compared exactly with ordinary Fq12 power",
+    "public_fixed_base_table_oracle": "Exact comparison with ordinary exponentiation for 0, 1, 15, 16, 255, 256, bit 254, q-1, and q-1234567"
+  },
+  "regression_coverage": [
+    "Canonical G1, GT, and scalar decoding; malformed lengths and off-subgroup values.",
+    "Unitary but non-cyclotomic GT and cyclotomic but non-q-order GT rejected as T, B, and E through the native adapter; unmodified NativeGT decoder supplies an independent q-order oracle.",
+    "Wrong trusted DKG anchor, G/H/T binding, challenge, A, B, E, and each response rejected.",
+    "Opaque polynomial handle cannot be constructed or pickled; cross-verifier rebinding rejected.",
+    "Legacy valid proof equations remain compatible.",
+    "Adapter cache hit rechecks changed trusted constants; list[int] substituted for wire point or scalar rejected.",
+    "Dimension 65 exercises the parallel branch for workers 1, 2, and 4, including tampering in the last coordinate.",
+    "An authorized signer changing its E to alter aggregate 17 to 7 is rejected.",
+    "Self-consistent fake verification keys, forged identical D, and polynomial equivocation rejected against trusted DKG anchors; honest alternate cloud pair accepted.",
+    "Signed malicious service results rejected across all four client proof suites without finishing the round; a subsequent honest finish succeeds."
+  ],
+  "security_boundaries": {
+    "canonical_decoding": "Wire field elements and scalars retain exact length, canonical encoding, and round-trip checks; Python adapter additionally enforces bytes-like types.",
+    "gt_membership": "For canonical nonzero x, Frob4(x) * x == Frob2(x) establishes membership in Phi12(p); cyclotomic_exp(Fr::MODULUS) == 1 then separately establishes q-order subgroup membership.",
+    "nonzero_required_before_cyclotomic_gate": true,
+    "q_order_check_preserved": true,
+    "public_exponent_only": "Cyclotomic exponentiation and centered-exponent conjugate inversion are used only in public verification for already subgroup-checked E and a public challenge. The fixed T table is used only for public response exponents.",
+    "generic_gt_decoder_unchanged": true,
+    "generic_pow_bytes_unchanged": true,
+    "secret_and_prover_arithmetic_unchanged": true,
+    "equations": "Both G1 and GT proof equations are checked for every coordinate. No random residual aggregation or equation omission is introduced.",
+    "trust_binding": "Opaque polynomial handles bind the verifier G/H/T and checked DKG constant commitments; Python context, signatures, Fiat-Shamir challenge, authorized membership, and cache-hit anchor checks remain required.",
+    "t_identity_allowed": true,
+    "default_workers": 1,
+    "accepted_worker_range": [1, 4],
+    "proof_format_circuit_and_crs_unchanged": true,
+    "python_reference_fallback_retained": true
+  },
+  "review_and_limitations": {
+    "review": "Independent internal static review checked the Frobenius subgroup gate, subsequent q-order test, and public-only exponentiation domain; no blocking issue was reported.",
+    "primary_math_reference": "https://www.iacr.org/archive/pkc2010/60560212/60560212.pdf",
+    "primary_math_reference_title": "Granger and Scott, Faster Squaring in the Cyclotomic Subgroup of Sixth Degree Extensions, section 3",
+    "dependency_implementation_reviewed": "ark-ff 0.4.2 CyclotomicMultSubgroup local source",
+    "external_security_audit": false,
+    "constant_time_claim": false,
+    "performance_claim": null,
+    "performance_note": "This acceptance record makes no v2 performance claim. Parent-controlled full-role benchmarks are separate evidence.",
+    "scope": "Isolated native cryptographic acceptance and adapter/integration regressions; this JSON does not substitute for whole-project acceptance."
+  }
+}

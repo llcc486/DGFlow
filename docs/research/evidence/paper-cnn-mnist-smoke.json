@@ -1,0 +1,235 @@
+{
+  "scope": "single-client full-CNN training smoke; no FE/proof/network/federated run",
+  "model": {
+    "schema": "dgflow-paper-model-v1",
+    "model_name": "paper_cnn_mnist",
+    "input_shape": [
+      1,
+      28,
+      28
+    ],
+    "dtype": "float32",
+    "flatten_order": "named_parameters/C",
+    "dimension": 582026,
+    "parameters": [
+      {
+        "name": "conv1.weight",
+        "shape": [
+          32,
+          1,
+          5,
+          5
+        ],
+        "numel": 800,
+        "dtype": "float32"
+      },
+      {
+        "name": "conv1.bias",
+        "shape": [
+          32
+        ],
+        "numel": 32,
+        "dtype": "float32"
+      },
+      {
+        "name": "conv2.weight",
+        "shape": [
+          64,
+          32,
+          5,
+          5
+        ],
+        "numel": 51200,
+        "dtype": "float32"
+      },
+      {
+        "name": "conv2.bias",
+        "shape": [
+          64
+        ],
+        "numel": 64,
+        "dtype": "float32"
+      },
+      {
+        "name": "fc1.weight",
+        "shape": [
+          512,
+          1024
+        ],
+        "numel": 524288,
+        "dtype": "float32"
+      },
+      {
+        "name": "fc1.bias",
+        "shape": [
+          512
+        ],
+        "numel": 512,
+        "dtype": "float32"
+      },
+      {
+        "name": "fc2.weight",
+        "shape": [
+          10,
+          512
+        ],
+        "numel": 5120,
+        "dtype": "float32"
+      },
+      {
+        "name": "fc2.bias",
+        "shape": [
+          10
+        ],
+        "numel": 10,
+        "dtype": "float32"
+      }
+    ],
+    "layers": [
+      {
+        "name": "conv1",
+        "type": "Conv2d",
+        "in_channels": 1,
+        "out_channels": 32,
+        "kernel_size": [
+          5,
+          5
+        ],
+        "stride": [
+          1,
+          1
+        ],
+        "padding": [
+          0,
+          0
+        ],
+        "dilation": [
+          1,
+          1
+        ],
+        "groups": 1,
+        "bias": true,
+        "padding_mode": "zeros"
+      },
+      {
+        "name": "relu1",
+        "type": "ReLU",
+        "inplace": false
+      },
+      {
+        "name": "pool1",
+        "type": "MaxPool2d",
+        "kernel_size": 2,
+        "stride": 2,
+        "padding": 0,
+        "dilation": 1,
+        "ceil_mode": false,
+        "return_indices": false
+      },
+      {
+        "name": "conv2",
+        "type": "Conv2d",
+        "in_channels": 32,
+        "out_channels": 64,
+        "kernel_size": [
+          5,
+          5
+        ],
+        "stride": [
+          1,
+          1
+        ],
+        "padding": [
+          0,
+          0
+        ],
+        "dilation": [
+          1,
+          1
+        ],
+        "groups": 1,
+        "bias": true,
+        "padding_mode": "zeros"
+      },
+      {
+        "name": "relu2",
+        "type": "ReLU",
+        "inplace": false
+      },
+      {
+        "name": "pool2",
+        "type": "MaxPool2d",
+        "kernel_size": 2,
+        "stride": 2,
+        "padding": 0,
+        "dilation": 1,
+        "ceil_mode": false,
+        "return_indices": false
+      },
+      {
+        "name": "fc1",
+        "type": "Linear",
+        "in_features": 1024,
+        "out_features": 512,
+        "bias": true
+      },
+      {
+        "name": "relu3",
+        "type": "ReLU",
+        "inplace": false
+      },
+      {
+        "name": "fc2",
+        "type": "Linear",
+        "in_features": 512,
+        "out_features": 10,
+        "bias": true
+      }
+    ],
+    "architecture_hash": "8326f15cabd8ee10e7e239ad2e22894fa3c84e2a552c778593b19c1fa3e01c18"
+  },
+  "settings": {
+    "train_limit": 512,
+    "test_limit": 256,
+    "epochs": 2,
+    "learning_rate": 0.01,
+    "batch_size": 64,
+    "threads": 2,
+    "seed": 42,
+    "device": "cpu"
+  },
+  "preprocessing": "original 28x28, NCHW float32, divide by 255; reconstruction assumption",
+  "dataset_sha256": {
+    "train-images-idx3-ubyte.gz": "440fcabf73cc546fa21475e81ea370265605f56be210a4024d2ca8f203523609",
+    "train-labels-idx1-ubyte.gz": "3552534a0a558bbed6aed32b30c495cca23d567ec52cac8be1a0730e8010255c",
+    "t10k-images-idx3-ubyte.gz": "8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6",
+    "t10k-labels-idx1-ubyte.gz": "f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6"
+  },
+  "before": {
+    "cross_entropy": 2.2989758253097534,
+    "accuracy": 0.1640625,
+    "correct": 42,
+    "total": 256
+  },
+  "after": {
+    "cross_entropy": 2.2914413809776306,
+    "accuracy": 0.19140625,
+    "correct": 49,
+    "total": 256
+  },
+  "training_wall_seconds": 2.496236599981785,
+  "full_vector_dimension": 582026,
+  "first_convolution_changed": true,
+  "output_vector_sha256": "b80c56f4b0dcaa1cdfa74f74b8c026e09953dcded89812da48091cb0422aaa6b",
+  "source_sha256": {
+    "paper_models.py": "2682329df40c94e8f75e243f26087262732bfb3ef7c37a8c226ecdeb028574fa",
+    "data.py": "4e6ad8ce3bce8e764f6e190749056e730705781ebbf02fb82a8ffb27f1624f30",
+    "benchmark_paper_training.py": "d511bad63d73c99020f4a67e4a36fe123cf6a6da72cbda3a90ad4c6eba4339aa"
+  },
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1+cpu",
+    "cuda_build": null,
+    "cuda_available": false
+  }
+}

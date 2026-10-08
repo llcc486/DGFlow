@@ -1,0 +1,1 @@
+"""Authenticated node transport."""

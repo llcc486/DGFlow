@@ -1,0 +1,29 @@
+{
+  "scope": "controlled public-module reproduction after the role benchmark; not a role-process or in-memory attestation",
+  "platform": "Windows",
+  "python": "3.12.2",
+  "entry_point": ".venv/Scripts/python.exe",
+  "observation": "The subprocess process record identifies the Windows venv launcher; the imported extension is mapped in its interpreter child.",
+  "popen_pid": 120244,
+  "interpreter_pid": 106180,
+  "observations": [
+    {
+      "pid": 120244,
+      "executable": "python.exe",
+      "is_interpreter_pid": false,
+      "native_map_files": []
+    },
+    {
+      "pid": 106180,
+      "executable": "python.exe",
+      "is_interpreter_pid": true,
+      "native_map_files": [
+        "dgfl_native.cp312-win_amd64.pyd"
+      ]
+    }
+  ],
+  "workload": "child imports the isolated public dgfl_native extension, prints os.getpid(), and sleeps for three seconds; parent reads its own child process maps",
+  "exit_code": 0,
+  "private_role_state_read": false,
+  "conclusion": "The original mandatory OS-map check inspected a launcher rather than the interpreter. Authenticated role health supplies actual imported-module file hashes; OS maps remain a diagnostic."
+}

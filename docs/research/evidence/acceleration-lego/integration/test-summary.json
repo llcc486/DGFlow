@@ -1,0 +1,32 @@
+{
+  "scope": "Persistent Lego parameters, full proof dispatch, real client/authority integration, opt-in controller/API/UI and existing suites",
+  "python": {
+    "command": ".venv/Scripts/python.exe -m pytest -q",
+    "native_import_directory": "tmp/proof-ms-native-persistent",
+    "passed": 619,
+    "skipped": 15,
+    "wall_s": 49.90,
+    "warnings": ["Existing Starlette/httpx test-client deprecation"]
+  },
+  "rust": {
+    "command": "cargo test --locked --release --manifest-path native/dgfl-native/Cargo.toml --lib",
+    "passed": 6,
+    "failed": 0,
+    "scope": "Circuit witness ordering and bounds, Sigma equivalence and checked inputs, exact query layout, persistent PK import and length-prefix rejection"
+  },
+  "frontend": {
+    "command": "npm.cmd run build",
+    "result": "passed",
+    "performed_by": "delegated integration agent"
+  },
+  "independent_review": {
+    "targeted_tests_passed": 32,
+    "wall_s": 3.28,
+    "result": "No blocking CRS-source, witness-substitution, downgrade, or authorization-timing issue identified; this is an internal review, not a cryptographic audit"
+  },
+  "limitations": [
+    "Single-party development trusted setup is not a multiparty ceremony",
+    "Negative tests and an internal review do not establish a formal composition security proof or side-channel resistance",
+    "Full performance and aggregate equivalence evidence is recorded separately in report.json"
+  ]
+}

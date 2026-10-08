@@ -1,0 +1,31 @@
+{
+  "passed": 238,
+  "skipped": 6,
+  "failed": 0,
+  "errors": 0,
+  "seconds": 63.336,
+  "skip_messages": [
+    "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: '<local-path>' -> '<local-path>'",
+    "could not import 'pypdf': No module named 'pypdf'"
+  ],
+  "primary_command": "python -m pytest -q --tb=short --junitxml=tmp/final-tests.xml",
+  "skip_explanation": "主环境跳过 2 项 Windows 符号链接权限测试及 4 项缺少可选 pypdf 的测试；另在含 pypdf 的文档环境执行 5 项 PDF 元数据测试，全部通过。",
+  "optional_pdf_metadata_checks": {
+    "passed": 5,
+    "skipped": 0,
+    "failed": 0,
+    "errors": 0,
+    "seconds": 1.033,
+    "skip_messages": [],
+    "scope": "Bundled document runtime with pypdf and project pytest dependencies; five selected tests, not five additional unique primary-suite tests."
+  },
+  "frontend_build": {
+    "passed": true,
+    "command": "vite build",
+    "bundled_assets": "web/dist"
+  },
+  "warnings": [
+    "Upstream Starlette TestClient emits a deprecation notice for its httpx compatibility path; no test failure."
+  ],
+  "release_source_sha256": "ee1c0c2c05199c46865dbbdcc95e4d42329018cf0934e287ac3f636cb8953dc4"
+}

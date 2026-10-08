@@ -1,0 +1,119 @@
+{
+  "python": {
+    "passed": 960,
+    "skipped": 15,
+    "failures": 0,
+    "critical_native_partial_and_dkg_tests": 100,
+    "critical_tests_skipped": 0,
+    "skip_details": [
+      {
+        "class": "",
+        "name": "tests.training.test_paper_models",
+        "reason": "collection skipped"
+      },
+      {
+        "class": "tests.crypto.test_acceleration",
+        "name": "test_compact_blocks_cannot_be_omitted_reordered_or_reinterpreted[legacy-layout]",
+        "reason": "compact format only"
+      },
+      {
+        "class": "tests.crypto.test_acceleration",
+        "name": "test_compact_blocks_cannot_be_omitted_reordered_or_reinterpreted[legacy-duplicate]",
+        "reason": "compact format only"
+      },
+      {
+        "class": "tests.crypto.test_acceleration",
+        "name": "test_compact_blocks_cannot_be_omitted_reordered_or_reinterpreted[legacy-suite]",
+        "reason": "compact format only"
+      },
+      {
+        "class": "tests.crypto.test_acceleration",
+        "name": "test_compact_blocks_cannot_be_omitted_reordered_or_reinterpreted[legacy-block]",
+        "reason": "compact format only"
+      },
+      {
+        "class": "tests.crypto.test_acceleration",
+        "name": "test_compact_blocks_cannot_be_omitted_reordered_or_reinterpreted[legacy-norm_commitment]",
+        "reason": "compact format only"
+      },
+      {
+        "class": "tests.crypto.test_acceleration",
+        "name": "test_compact_blocks_cannot_be_omitted_reordered_or_reinterpreted[legacy-sum_blinding]",
+        "reason": "compact format only"
+      },
+      {
+        "class": "tests.packaging.test_package_submission",
+        "name": "test_symbolic_link_escape_rejected[file]",
+        "reason": "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'"
+      },
+      {
+        "class": "tests.packaging.test_package_submission",
+        "name": "test_symbolic_link_escape_rejected[directory]",
+        "reason": "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'"
+      },
+      {
+        "class": "tests.packaging.test_package_submission",
+        "name": "test_pdf_info_metadata_is_parsed_when_optional_parser_is_available[metadata0-None]",
+        "reason": "could not import 'pypdf': No module named 'pypdf'"
+      },
+      {
+        "class": "tests.packaging.test_package_submission",
+        "name": "test_pdf_info_metadata_is_parsed_when_optional_parser_is_available[metadata1-development path]",
+        "reason": "could not import 'pypdf': No module named 'pypdf'"
+      },
+      {
+        "class": "tests.packaging.test_package_submission",
+        "name": "test_pdf_info_metadata_is_parsed_when_optional_parser_is_available[metadata2-anonymous|identifying|author]",
+        "reason": "could not import 'pypdf': No module named 'pypdf'"
+      },
+      {
+        "class": "tests.packaging.test_package_submission",
+        "name": "test_compressed_pdf_xmp_private_path_is_rejected",
+        "reason": "could not import 'pypdf': No module named 'pypdf'"
+      },
+      {
+        "class": "tests.training.test_data",
+        "name": "test_pooling_matches_torch_adaptive_average_for_nontrivial_images",
+        "reason": "could not import 'torch': No module named 'torch'"
+      },
+      {
+        "class": "tests.training.test_model",
+        "name": "test_torch_and_numpy_optimize_same_objective",
+        "reason": "could not import 'torch': No module named 'torch'"
+      }
+    ]
+  },
+  "python_full_junit": "python-final-results.xml",
+  "python_reference_fallback": {
+    "passed": 39,
+    "skipped": 0,
+    "failures": 0,
+    "critical_native_partial_and_dkg_tests": 39,
+    "critical_tests_skipped": 0,
+    "skip_details": []
+  },
+  "native_extension": {
+    "sha256": "ea88320f7d611a7e066430fb6807c7927a2c3a6d7e6540095c176a20a958ff3b",
+    "new_complete_verifier_loaded": true
+  },
+  "frontend": {
+    "passed": 19,
+    "skipped": 0,
+    "production_build_passed": true
+  },
+  "ruff": {
+    "scope": "src tests scripts/benchmark_combine_roles.py",
+    "passed": true
+  },
+  "rust": {
+    "passed": 13,
+    "skipped": 0,
+    "record": "native-acceptance.json"
+  },
+  "frozen_old_proofs": {
+    "suites": 4,
+    "passed": 4,
+    "tampered_rejected": 4,
+    "record": "frozen-proof-compatibility.json"
+  }
+}

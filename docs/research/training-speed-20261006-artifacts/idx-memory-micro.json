@@ -1,0 +1,270 @@
+{
+  "scope": "offline real MNIST 6000/1000, grid8; fresh process per load",
+  "limitations": [
+    "tracemalloc adds measurement overhead",
+    "sampled RSS is process memory, not a total cluster guarantee",
+    "raw archive validation and feature/label hashes retained"
+  ],
+  "wmi_fallback": false,
+  "cases": {
+    "baseline": {
+      "samples": [
+        {
+          "elapsed_s": 0.18419420000282116,
+          "initial_rss_bytes": 37650432,
+          "sampled_peak_rss_bytes": 94822400,
+          "sampled_rss_increase_bytes": 57171968,
+          "tracemalloc_peak_bytes": 117524431,
+          "result_arrays": [
+            {
+              "shape": [
+                6000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "f7a771cdf6748e1967c90b7fd1286b2efc6937f351071de405855c471d1c2ac6"
+            },
+            {
+              "shape": [
+                6000
+              ],
+              "dtype": "int64",
+              "sha256": "4dcceb957a8a58c9a9ab980c87c34e1e10be02fbf00ed1af97cee01b78758dbc"
+            },
+            {
+              "shape": [
+                1000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "981203294a62b2e72b56011290af4a3e763c3c7469188ea8659e780391cb8124"
+            },
+            {
+              "shape": [
+                1000
+              ],
+              "dtype": "int64",
+              "sha256": "992b69438d87b900106a411d378c4337fedce245a9d6f4a4d0656e85b022e733"
+            }
+          ],
+          "source_file_sha256": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012"
+        },
+        {
+          "elapsed_s": 0.19082290001097135,
+          "initial_rss_bytes": 37736448,
+          "sampled_peak_rss_bytes": 91807744,
+          "sampled_rss_increase_bytes": 54071296,
+          "tracemalloc_peak_bytes": 117523664,
+          "result_arrays": [
+            {
+              "shape": [
+                6000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "f7a771cdf6748e1967c90b7fd1286b2efc6937f351071de405855c471d1c2ac6"
+            },
+            {
+              "shape": [
+                6000
+              ],
+              "dtype": "int64",
+              "sha256": "4dcceb957a8a58c9a9ab980c87c34e1e10be02fbf00ed1af97cee01b78758dbc"
+            },
+            {
+              "shape": [
+                1000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "981203294a62b2e72b56011290af4a3e763c3c7469188ea8659e780391cb8124"
+            },
+            {
+              "shape": [
+                1000
+              ],
+              "dtype": "int64",
+              "sha256": "992b69438d87b900106a411d378c4337fedce245a9d6f4a4d0656e85b022e733"
+            }
+          ],
+          "source_file_sha256": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012"
+        },
+        {
+          "elapsed_s": 0.18366270000115037,
+          "initial_rss_bytes": 37785600,
+          "sampled_peak_rss_bytes": 95522816,
+          "sampled_rss_increase_bytes": 57737216,
+          "tracemalloc_peak_bytes": 117524385,
+          "result_arrays": [
+            {
+              "shape": [
+                6000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "f7a771cdf6748e1967c90b7fd1286b2efc6937f351071de405855c471d1c2ac6"
+            },
+            {
+              "shape": [
+                6000
+              ],
+              "dtype": "int64",
+              "sha256": "4dcceb957a8a58c9a9ab980c87c34e1e10be02fbf00ed1af97cee01b78758dbc"
+            },
+            {
+              "shape": [
+                1000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "981203294a62b2e72b56011290af4a3e763c3c7469188ea8659e780391cb8124"
+            },
+            {
+              "shape": [
+                1000
+              ],
+              "dtype": "int64",
+              "sha256": "992b69438d87b900106a411d378c4337fedce245a9d6f4a4d0656e85b022e733"
+            }
+          ],
+          "source_file_sha256": "ba3fd05377b58c3d46eb0ba133b0901827808a80e67e70a3653ff2caf9666012"
+        }
+      ],
+      "median": {
+        "elapsed_s": 0.18419420000282116,
+        "sampled_rss_increase_bytes": 57171968,
+        "tracemalloc_peak_bytes": 117524385
+      }
+    },
+    "final": {
+      "samples": [
+        {
+          "elapsed_s": 0.17752480000490323,
+          "initial_rss_bytes": 37662720,
+          "sampled_peak_rss_bytes": 47431680,
+          "sampled_rss_increase_bytes": 9768960,
+          "tracemalloc_peak_bytes": 10857817,
+          "result_arrays": [
+            {
+              "shape": [
+                6000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "f7a771cdf6748e1967c90b7fd1286b2efc6937f351071de405855c471d1c2ac6"
+            },
+            {
+              "shape": [
+                6000
+              ],
+              "dtype": "int64",
+              "sha256": "4dcceb957a8a58c9a9ab980c87c34e1e10be02fbf00ed1af97cee01b78758dbc"
+            },
+            {
+              "shape": [
+                1000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "981203294a62b2e72b56011290af4a3e763c3c7469188ea8659e780391cb8124"
+            },
+            {
+              "shape": [
+                1000
+              ],
+              "dtype": "int64",
+              "sha256": "992b69438d87b900106a411d378c4337fedce245a9d6f4a4d0656e85b022e733"
+            }
+          ],
+          "source_file_sha256": "d2399243e529758738078dd29486d271509b3c1dc78e9886abf3ad3e5b816514"
+        },
+        {
+          "elapsed_s": 0.1777769000036642,
+          "initial_rss_bytes": 37814272,
+          "sampled_peak_rss_bytes": 47595520,
+          "sampled_rss_increase_bytes": 9781248,
+          "tracemalloc_peak_bytes": 10857789,
+          "result_arrays": [
+            {
+              "shape": [
+                6000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "f7a771cdf6748e1967c90b7fd1286b2efc6937f351071de405855c471d1c2ac6"
+            },
+            {
+              "shape": [
+                6000
+              ],
+              "dtype": "int64",
+              "sha256": "4dcceb957a8a58c9a9ab980c87c34e1e10be02fbf00ed1af97cee01b78758dbc"
+            },
+            {
+              "shape": [
+                1000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "981203294a62b2e72b56011290af4a3e763c3c7469188ea8659e780391cb8124"
+            },
+            {
+              "shape": [
+                1000
+              ],
+              "dtype": "int64",
+              "sha256": "992b69438d87b900106a411d378c4337fedce245a9d6f4a4d0656e85b022e733"
+            }
+          ],
+          "source_file_sha256": "d2399243e529758738078dd29486d271509b3c1dc78e9886abf3ad3e5b816514"
+        },
+        {
+          "elapsed_s": 0.184183999983361,
+          "initial_rss_bytes": 37720064,
+          "sampled_peak_rss_bytes": 47472640,
+          "sampled_rss_increase_bytes": 9752576,
+          "tracemalloc_peak_bytes": 10857789,
+          "result_arrays": [
+            {
+              "shape": [
+                6000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "f7a771cdf6748e1967c90b7fd1286b2efc6937f351071de405855c471d1c2ac6"
+            },
+            {
+              "shape": [
+                6000
+              ],
+              "dtype": "int64",
+              "sha256": "4dcceb957a8a58c9a9ab980c87c34e1e10be02fbf00ed1af97cee01b78758dbc"
+            },
+            {
+              "shape": [
+                1000,
+                64
+              ],
+              "dtype": "float64",
+              "sha256": "981203294a62b2e72b56011290af4a3e763c3c7469188ea8659e780391cb8124"
+            },
+            {
+              "shape": [
+                1000
+              ],
+              "dtype": "int64",
+              "sha256": "992b69438d87b900106a411d378c4337fedce245a9d6f4a4d0656e85b022e733"
+            }
+          ],
+          "source_file_sha256": "d2399243e529758738078dd29486d271509b3c1dc78e9886abf3ad3e5b816514"
+        }
+      ],
+      "median": {
+        "elapsed_s": 0.1777769000036642,
+        "sampled_rss_increase_bytes": 9768960,
+        "tracemalloc_peak_bytes": 10857789
+      }
+    }
+  },
+  "all_features_and_labels_identical": true
+}
