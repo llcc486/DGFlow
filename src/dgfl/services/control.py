@@ -3,6 +3,7 @@ import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -27,6 +28,9 @@ from dgfl.transport.client import RPCClient
 
 CONTROL_BODY_LIMIT = 32 * 1024
 DEPLOYMENT_SCHEMA_VERSION = 2
+GPU_AUTOMATIC_REFRESH_SECONDS = 30
+GPU_AUTOMATIC_RETRY_SECONDS = 1
+GPU_AUTOMATIC_RETRY_ROUNDS = 15
 
 
 def _origin(value: str):
@@ -106,7 +110,8 @@ class ControlSafetyMiddleware:
         await self.app(scope,checked_receive,send)
 
 
-class RunConfig(BaseModel):
+class ArchivedRunConfig(BaseModel):
+    """Read-only validation of historical declarations and experiment evidence."""
     model_config=ConfigDict(extra='forbid')
     dataset:Literal['mnist','cifar10']='mnist'
     mode:Literal['plain','encrypted','dgflow','optimized']='optimized'
@@ -162,13 +167,20 @@ class RunConfig(BaseModel):
             raise ValueError('GPU 模式用于密码批量计算，请选择加密实验模式')
         if self.proof_suite=='lego_norm_v1':
             if self.mode=='plain':
-                raise ValueError('Lego proof requires an encrypted experiment mode')
-            if self.proof_crs_hash is None:
+                if self.proof_crs_hash is not None:
+                    raise ValueError('Plain experiments do not use a proof CRS')
+            elif self.proof_crs_hash is None:
                 raise ValueError('Lego proof requires the fingerprint of an installed trusted setup')
-            self.proof_crs_hash=self.proof_crs_hash.lower()
+            if self.proof_crs_hash is not None:
+                self.proof_crs_hash=self.proof_crs_hash.lower()
         elif self.proof_crs_hash is not None:
             raise ValueError('proof_crs_hash is only valid for the Lego proof suite')
         return self
+
+
+class RunConfig(ArchivedRunConfig):
+    """New encrypted experiments support only the installed LegoGroth16 suite."""
+    proof_suite:Literal['lego_norm_v1']='lego_norm_v1'
 
 
 class DataConfig(BaseModel):
@@ -193,9 +205,23 @@ class DeploymentConfig(BaseModel):
         return self
 
 
-def create_control_app(runtime):
+def create_control_app(runtime, *, auto_prepare_compute=True):
     runtime=Path(runtime).resolve(); manager=RunManager(runtime)
-    app=FastAPI(title='DGFlow Lab',docs_url=None,redoc_url=None,openapi_url=None)
+    compute_shutdown=threading.Event(); compute_wakeup=threading.Event()
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        if auto_prepare_compute:
+            compute_wakeup.set()
+            worker=threading.Thread(target=automatic_compute_worker,name='dgflow-gpu-discovery',daemon=True)
+            worker.start()
+            _app.state.compute_discovery_worker=worker
+        try:
+            yield
+        finally:
+            compute_shutdown.set(); compute_wakeup.set()
+
+    app=FastAPI(title='DGFlow Lab',docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
     app.state.manager=manager
     app.add_middleware(ControlSafetyMiddleware)
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
@@ -227,6 +253,8 @@ def create_control_app(runtime):
                 raise HTTPException(409,str(exc)) from exc
             finally:
                 invalidate_nodes()
+            if auto_prepare_compute:
+                compute_wakeup.set()
             return result
 
     @app.post('/api/deployment/start')
@@ -248,6 +276,8 @@ def create_control_app(runtime):
                 raise HTTPException(409,str(exc)) from exc
             finally:
                 invalidate_nodes()
+            if auto_prepare_compute:
+                compute_wakeup.set()
             return result
 
     def refresh_nodes(cluster,topology):
@@ -338,7 +368,7 @@ def create_control_app(runtime):
                 **topology,'deployment_error':cluster_error,
                 'dataset_ready':ready,'datasets':datasets,'deployment':cluster['deployment'],'nodes':nodes,
                 'data_preparation':{'state':'preparing' if prepare_lock.locked() else 'idle'},
-                'capabilities':{'proofs':True,'threshold':True,'compute':compute,'training_backends':backends,
+                'capabilities':{'proofs':True,'proof_suites':['lego_norm_v1'],'threshold':True,'compute':compute,'training_backends':backends,
                                 'cloud_strategies':['auto','threshold','all']}}
 
     @app.get('/api/status')
@@ -355,6 +385,8 @@ def create_control_app(runtime):
         capability=compute_capabilities()['gpu']
         if not capability.get('hardware_available',capability.get('available')):
             raise HTTPException(409,capability.get('reason') or '没有可用的 CUDA 密码后端')
+        if capability.get('driver_available') is False or capability.get('compiler_available') is False:
+            raise HTTPException(409,capability.get('reason') or 'CUDA 驱动或编译依赖不可用；CPU 计算可用')
         with compute_lock:
             if compute_preparation['state']=='initializing':
                 return dict(compute_preparation)
@@ -368,18 +400,21 @@ def create_control_app(runtime):
                     cluster=json.loads((runtime/'cluster.json').read_text('utf8'))
                     topology=cluster_topology(cluster)
                 authorities=[f'authority{i}' for i in range(1,topology['authority_count']+1)]
+                if compute_shutdown.is_set():
+                    return
                 require_gpu()
                 rpc=RPCClient(runtime,cluster['nodes'])
                 rpc.client.timeout=httpx.Timeout(300,connect=3)
                 def one(node):
                     evidence=rpc.call(node,'prepare_compute',{'compute_device':'gpu'},retries=0)
-                    if not isinstance(evidence,dict) or not evidence.get('verified'):
+                    if (not isinstance(evidence,dict) or evidence.get('verified') is not True
+                            or evidence.get('available') is not True):
                         raise ValueError(f'{node} 的 GPU 密码内核未通过自检')
                 with ThreadPoolExecutor(max_workers=min(32,len(authorities))) as pool:
                     list(pool.map(one,authorities))
                 outcome='ready'; reason=f'CUDA 密码内核和 {len(authorities)} 个边缘节点已通过自检'
             except Exception as exc:
-                reason=str(exc)
+                reason=str(exc)+'；CPU 计算可用'
             finally:
                 if rpc is not None:
                     rpc.close()
@@ -391,6 +426,97 @@ def create_control_app(runtime):
         threading.Thread(target=initialize,name='dgflow-gpu-prepare',daemon=True).start()
         with compute_lock:
             return dict(compute_preparation)
+
+    def automatic_compute_state(state, reason):
+        with manager.lock, compute_lock:
+            # A manual request can begin while background health RPCs are
+            # in flight. Discovery cannot release its admission guard.
+            if compute_preparation['state']!='initializing':
+                compute_preparation.update(state=state,reason=reason)
+
+    def automatic_compute_attempt():
+        """Discover outside admission locks; compile only after roles are healthy."""
+        from dgfl.crypto.gpu import compute_capabilities
+
+        with manager.lock:
+            with compute_lock:
+                if compute_preparation['state']=='initializing':
+                    return False
+            if manager.active is not None or prepare_lock.locked():
+                automatic_compute_state('waiting','当前任务完成后自动核验 GPU；CPU 计算可用')
+                return True
+        capability=compute_capabilities()['gpu']
+        if (not capability.get('hardware_available',capability.get('available'))
+                or capability.get('driver_available') is False or capability.get('compiler_available') is False):
+            automatic_compute_state('unavailable',(capability.get('reason') or '没有可用的 CUDA 密码后端')+'；CPU 计算可用')
+            return False
+        with manager.lock:
+            if not (runtime/'cluster.json').exists():
+                automatic_compute_state('waiting','已识别 GPU，部署边缘节点后自动核验；CPU 计算可用')
+                return False
+            cluster=json.loads((runtime/'cluster.json').read_text('utf8'))
+            topology=cluster_topology(cluster)
+        authorities=[f'authority{i}' for i in range(1,topology['authority_count']+1)]
+        rpc=RPCClient(runtime,cluster['nodes'])
+        rpc.client.timeout=httpx.Timeout(2,connect=.5)
+        def one(node):
+            try:
+                health=rpc.call(node,'health',retries=0)
+                return node,health.get('capabilities',{}).get('compute',{}).get('gpu',{})
+            except Exception:
+                return node,None
+        try:
+            with ThreadPoolExecutor(max_workers=min(32,len(authorities))) as pool:
+                reported=dict(pool.map(one,authorities))
+        finally:
+            rpc.close()
+        if compute_shutdown.is_set():
+            return False
+        offline=[name for name,item in reported.items() if item is None]
+        if offline:
+            automatic_compute_state('waiting','等待边缘节点就绪后自动核验 GPU：'+', '.join(offline)+'；CPU 计算可用')
+            return True
+        unsupported=[name for name,item in reported.items()
+                     if (not item.get('hardware_available',item.get('available'))
+                         or item.get('driver_available') is False or item.get('compiler_available') is False)]
+        if unsupported:
+            automatic_compute_state('unavailable','以下边缘节点的 CUDA 驱动或编译依赖不可用：'+', '.join(unsupported)+'；CPU 计算可用')
+            return False
+        with manager.lock:
+            if manager.active is not None or prepare_lock.locked():
+                return True
+            if json.loads((runtime/'cluster.json').read_text('utf8'))!=cluster:
+                return True
+            with compute_lock:
+                if compute_preparation['state']=='initializing':
+                    return False
+            if (capability.get('available') is True and capability.get('verified') is True
+                    and all(item.get('available') is True and item.get('verified') is True for item in reported.values())):
+                automatic_compute_state('ready',f'CUDA 密码内核和 {len(authorities)} 个边缘节点已通过自检')
+                return False
+            begin_compute()
+        return False
+
+    def automatic_compute_worker():
+        while not compute_shutdown.is_set():
+            requested=compute_wakeup.wait(timeout=GPU_AUTOMATIC_REFRESH_SECONDS)
+            compute_wakeup.clear()
+            if compute_shutdown.is_set():
+                return
+            if not requested:
+                with compute_lock:
+                    if compute_preparation['state']!='waiting':
+                        continue
+            # Roles spawned immediately before the controller can still be
+            # booting. Retry healthy admission, never retry a failed self-test.
+            for _ in range(GPU_AUTOMATIC_RETRY_ROUNDS):
+                try:
+                    retry=automatic_compute_attempt()
+                except Exception as exc:
+                    automatic_compute_state('failed',str(exc)+'；CPU 计算可用')
+                    break
+                if not retry or compute_shutdown.wait(GPU_AUTOMATIC_RETRY_SECONDS):
+                    break
 
     @app.post('/api/compute/prepare',status_code=202)
     def prepare_compute():

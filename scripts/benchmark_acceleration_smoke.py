@@ -7,18 +7,57 @@ ports and independent credentials keep existing cluster state untouched.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-from pathlib import Path
+import re
 import time
+from pathlib import Path
 
 import psutil
 
-from dgfl.deployment import PROJECT_ROOT, DEFAULT_RUNTIME, init_cluster, start_nodes, stop_nodes, process_matches
+from dgfl.crypto.lego_registry import Registry
+from dgfl.deployment import DEFAULT_RUNTIME, PROJECT_ROOT, init_cluster, process_matches, start_nodes, stop_nodes
 from dgfl.experiments.evidence import compare_models
 from dgfl.experiments.runner import RunManager, implementation_evidence
 from dgfl.services.control import RunConfig
 from dgfl.transport.client import RPCClient
 from dgfl.transport.security import atomic_json
+
+
+def installed_parameters(runtime, crs_hash=None, *, workers=2):
+    """Validate and snapshot public PK/VK before creating the isolated cluster."""
+    registry=Registry(runtime)
+    if crs_hash is None:
+        matches=[value for value in registry.list() if value.get('suite')=='lego_norm_v1'
+                 and value.get('dimension')==650 and value.get('bits')==8]
+        if not matches:
+            raise ValueError('Install a 650-dimensional, 8-bit Lego CRS in --parameters-runtime before this benchmark')
+        if len(matches)!=1:
+            raise ValueError('Multiple matching Lego parameter sets are installed; select --crs-hash explicitly')
+        crs_hash=matches[0]['crs_hash']
+    if not isinstance(crs_hash,str) or re.fullmatch(r'[0-9a-fA-F]{64}',crs_hash) is None:
+        raise ValueError('--crs-hash requires a 64-digit hexadecimal installed Lego fingerprint')
+    prover,_,manifest=registry.load_prover(crs_hash.lower(),650,8,workers=workers)
+    # Snapshot through the validated prover, avoiding a second unvalidated read
+    # of a source file that might have changed after Registry.load_prover.
+    keys={'vk.bin':prover.verifying_key_bytes(),'pk.bin':prover.proving_key_bytes()}
+    for name,value in keys.items():
+        key=name[:2]
+        if len(value)!=manifest[key+'_bytes'] or hashlib.sha256(value).hexdigest()!=manifest[key+'_sha256']:
+            raise ValueError('Lego public parameter encoding differs from the installed manifest')
+    manifest={key:value for key,value in manifest.items() if key not in ('load_wall_s','prover_cached')}
+    return manifest,keys
+
+
+def install_parameters(runtime, manifest, keys, *, workers=2):
+    """Install the checked public snapshot only into this fresh benchmark runtime."""
+    folder=runtime/'proof-parameters'/manifest['crs_hash']
+    folder.mkdir(parents=True)
+    for name,value in keys.items():
+        with (folder/name).open('xb') as stream:
+            stream.write(value)
+    atomic_json(folder/'manifest.json',manifest)
+    Registry(runtime).load_prover(manifest['crs_hash'],650,8,workers=workers)
 
 
 def wait_ready(runtime,cluster):
@@ -91,11 +130,14 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime',type=Path,required=True)
     parser.add_argument('--port-offset',type=int,default=20000)
-    parser.add_argument('--proof-suite',choices=('legacy','compact_range_v1','compact_norm_v1'),default='compact_norm_v1')
+    parser.add_argument('--proof-suite',choices=('lego_norm_v1',),default='lego_norm_v1')
+    parser.add_argument('--parameters-runtime',type=Path,default=DEFAULT_RUNTIME,
+                        help='Read installed public Lego parameters from this runtime; never generate a new CRS')
+    parser.add_argument('--crs-hash',help='Select an installed 650-dimensional, 8-bit CRS; omit only for a unique match')
     parser.add_argument('--verification',choices=('deterministic','randomized'),default='deterministic')
     parser.add_argument('--verification-workers',type=int,default=2)
+    parser.add_argument('--verification-threads',type=int,default=2)
     parser.add_argument('--rpc-workers',type=int,default=2)
-    parser.add_argument('--block-size',type=int,default=128)
     parser.add_argument('--train-limit',type=int,default=1200)
     parser.add_argument('--test-limit',type=int,default=400)
     args=parser.parse_args(argv)
@@ -109,11 +151,19 @@ def main(argv=None):
     common={'rounds':1,'seed':42,'attack':'none','malicious_clients':0,'non_iid':False,
             'offline_aggregators':0,'train_limit':args.train_limit,'test_limit':args.test_limit,
             'local_epochs':2,'backend':'numpy','grid':8,'execution':'parallel','rpc_workers':args.rpc_workers}
-    secure=RunConfig(**common,mode='dgflow',proof_suite=args.proof_suite,verification=args.verification,
-                     verification_workers=args.verification_workers,proof_block_size=args.block_size).model_dump()
-    plain=RunConfig(**common,mode='plain').model_dump()
+    try:
+        parameters,keys=installed_parameters(args.parameters_runtime.resolve(),args.crs_hash,
+                                            workers=args.verification_threads)
+        secure=RunConfig(**common,mode='dgflow',proof_suite=args.proof_suite,
+                         proof_crs_hash=parameters['crs_hash'],verification=args.verification,
+                         verification_workers=args.verification_workers,
+                         verification_threads=args.verification_threads).model_dump(exclude_none=True)
+        plain=RunConfig(**common,mode='plain').model_dump(exclude_none=True)
+    except (OSError,ValueError) as exc:
+        parser.error(str(exc))
     cluster=init_cluster(runtime)
-    for node,item in cluster['nodes'].items():
+    install_parameters(runtime,parameters,keys,workers=args.verification_threads)
+    for item in cluster['nodes'].values():
         item['port']+=args.port_offset
         if item['port']>65535: parser.error('custom node port exceeds 65535')
         item['url']=f'https://127.0.0.1:{item["port"]}'
@@ -131,6 +181,7 @@ def main(argv=None):
         report={'scope':'one fresh-key 650-coordinate, six-client, real-role integration smoke pair',
                 'encrypted_run_id':records[0]['run_id'],'plain_run_id':records[1]['run_id'],
                 'model_equivalence':equivalence,'all_submitted_proofs_valid':proof_valid,
+                'proof_parameters':parameters,
                 'implementation_at_finish':implementation_evidence(),
                 'runs':[{'run_id':record['run_id'],'config':record['config'],'summary':record['summary'],
                          'rounds':record['rounds'],'resources':record['evidence']['resources']} for record in records],

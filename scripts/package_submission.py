@@ -29,8 +29,9 @@ MAX_PACKAGE_BYTES = 4 * 1024**3
 CHUNK_BYTES = 1024 * 1024
 ALLOWED_TREES = ("src/dgfl", "tests", "configs", "web", "docs/submission", "docs/protocol",
                  "docs/research/evidence/acceleration-5b", "docs/research/evidence/acceleration-lego")
-ALLOWED_FILES = ("pyproject.toml", "requirements-lock.txt", "requirements-torch.txt", "README.md", "THIRD_PARTY_NOTICES.md",
+ALLOWED_FILES = ("pyproject.toml", "requirements-lock.txt", "requirements-torch.txt", "requirements-gpu.txt", "README.md", "SOURCE-PACKAGE.md", "THIRD_PARTY_NOTICES.md",
                  "scripts/package_submission.py", "scripts/start_demo.ps1", "scripts/start_demo.sh",
+                 "scripts/setup_environment.py", "scripts/deployment_native.py",
                  "scripts/prepare_offline.py", "scripts/run_experiments.py", "scripts/validate_release.py",
                  "scripts/build_report.py", "scripts/build_figures.py", "scripts/run_fault_checks.py",
                  "scripts/build_native.ps1", "native/dgfl-native/Cargo.toml", "native/dgfl-native/Cargo.lock",
@@ -48,6 +49,7 @@ ALLOWED_FILES = ("pyproject.toml", "requirements-lock.txt", "requirements-torch.
                  "docs/research/evidence/full-optimization-20261005/analysis.json",
                  "docs/research/evidence/full-optimization-20261005/live-validation.json",
                  "docs/research/evidence/full-optimization-20261005/activation.json",
+                 "docs/research/evidence/deployment-ready-20261008.json",
                  "docs/research/optimization-results.md")
 REQUIRED_FILES = ("README.md", "pyproject.toml", "docs/submission/design-report.md")
 EXCLUDED_DIRECTORIES = {"data", "__pycache__", ".venv", ".git", ".superpowers", "tmp", "runtime", "target", "node_modules", ".pytest_cache"}
@@ -55,7 +57,7 @@ SENSITIVE_SUFFIXES = {".key", ".pem", ".crt", ".cer", ".cert", ".der", ".csr", "
 STRUCTURED_SUFFIXES = {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env"}
 TEXT_SUFFIXES = STRUCTURED_SUFFIXES | {".py", ".md", ".txt", ".csv", ".tsv", ".jsonl", ".html", ".htm",
     ".xml", ".svg", ".tex", ".bib", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".vue",
-    ".ps1", ".sh", ".bat", ".cmd", ".rst", ".lock", ".map", ".rs"}
+    ".ps1", ".sh", ".bat", ".cmd", ".rst", ".lock", ".map", ".rs", ".cu", ".cuh", ".sha256"}
 TEXT_NAMES = {".gitignore", ".gitattributes", ".npmrc", ".nvmrc", ".editorconfig", "license", "notice", "makefile"}
 MAX_METADATA_BYTES = 2 * 1024**2
 IDENTITY_NAME = re.compile(r"(?:^|[-_.])(?:identit(?:y|ies)|credentials?|secrets?|private[-_]?keys?)(?:[-_.]|$)", re.I)

@@ -26,6 +26,9 @@ def test_torch_can_run_when_only_clients_have_optional_dependency(tmp_path, monk
     result = manager.start(config('torch'))
     assert result['status'] == 'queued'
     assert manager.records[result['run_id']]['config']['backend'] == 'torch'
+    saved = manager.records[result['run_id']]['config']
+    assert saved['proof_suite'] == 'lego_norm_v1'
+    assert 'proof_crs_hash' not in saved
     assert {node for node, _ in calls} == {'client1', 'client2'}
 
 
@@ -60,7 +63,7 @@ def test_direct_run_rechecks_training_capability_before_data_or_dkg(tmp_path, mo
 
 def config(backend):
     return {'mode': 'plain', 'backend': backend, 'client_count': 2, 'compute_device': 'cpu',
-            'proof_suite': 'legacy', 'execution': 'parallel', 'rpc_workers': 2,
+            'proof_suite': 'lego_norm_v1', 'execution': 'parallel', 'rpc_workers': 2,
             'rounds': 1, 'seed': 21, 'attack': 'none', 'malicious_clients': 0,
             'non_iid': False, 'offline_aggregators': 0, 'train_limit': 120, 'test_limit': 100,
             'local_epochs': 1, 'grid': 2}

@@ -199,6 +199,10 @@ def test_missing_native_wheel_declares_fallback_without_index_dependency(offline
     assert not any(item['path'].startswith('native-wheels/') for item in result['files'])
     instructions = (root/'offline/INSTALL.txt').read_text('utf8')
     assert 'Python GT fallback' in instructions and 'Do not fetch dgfl-native' in instructions
+    assert 'only the NumPy/MNIST demonstration, not full deployment' in instructions
+    assert 'dgfl.cli prepare-data --offline' in instructions and 'dgfl.cli demo' in instructions
+    assert 'powershell -File scripts/start_demo.ps1 -Offline' not in instructions
+    assert 'then run bash scripts/start_demo.sh --offline' not in instructions
     assert 'dgfl-native' not in (root/'offline/requirements-lock.txt').read_text('utf8')
 
 

@@ -19,6 +19,36 @@ def manager(tmp_path):
     return runner.RunManager(tmp_path)
 
 
+@pytest.mark.parametrize('suite',['legacy','compact_range_v1','compact_norm_v1','unknown',None])
+@pytest.mark.parametrize('mode',['plain','encrypted','dgflow'])
+def test_new_run_entry_rejects_removed_suites_before_creating_a_task(manager,suite,mode):
+    with pytest.raises(ValueError,match='LegoGroth16'):
+        manager.start({'mode':mode,'proof_suite':suite,'proof_crs_hash':'ab'*32})
+    assert manager.active is None and manager.records=={}
+    assert not (manager.runtime/'results').exists()
+
+
+def test_omitted_suite_is_lego_and_secure_runs_require_crs(manager):
+    with pytest.raises(ValueError,match='CRS'):
+        manager.start({'mode':'encrypted'})
+    assert manager.active is None and manager.records=={}
+
+
+def test_plain_run_needs_no_native_proof_or_crs(manager,monkeypatch):
+    monkeypatch.setattr(lego_registry,'available',lambda:pytest.fail('Plain admission queried native proofs'))
+    monkeypatch.setattr(lego_registry.Registry,'describe',lambda *a:pytest.fail('Plain admission loaded CRS'))
+    class DormantThread:
+        def __init__(self,**kwargs): pass
+        def start(self): pass
+    monkeypatch.setattr(runner.threading,'Thread',DormantThread)
+    monkeypatch.setattr(runner,'implementation_evidence',lambda:{'scope':'test'})
+    result=manager.start({'mode':'plain'})
+    record=manager.snapshot(result['run_id'])
+    assert record['config']['proof_suite']=='lego_norm_v1'
+    assert 'proof_crs_hash' not in record['config']
+    assert record['evidence']['proof']=='none (plain baseline)'
+
+
 @pytest.mark.parametrize('damage',['missing_hash','bad_hash','missing_native','missing_crs'])
 def test_lego_is_rejected_before_creating_a_run(manager,monkeypatch,damage):
     config={'mode':'dgflow','proof_suite':'lego_norm_v1','proof_crs_hash':'ab'*32,'grid':8}

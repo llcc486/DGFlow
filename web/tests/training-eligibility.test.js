@@ -125,7 +125,11 @@ function formHarness(status) {
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
   runInContext(executable, context)
-  return { form: context.component.setup({}, { expose() {}, emit() {} }), close() {
+  const form = context.component.setup({}, { expose() {}, emit() {} })
+  form.proofParametersAvailable.value = true
+  form.proofParameters.value = [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }]
+  form.form.proof_crs_hash = 'a'.repeat(64)
+  return { form, close() {
     stops.forEach(stop => stop())
     store.status.value = null; store.connected.value = false; store.currentRun.value = null
     store.runs.value = []; store.selectedDataset.value = 'mnist'
@@ -174,8 +178,9 @@ test('tolerated absences cannot bypass GPU, CRS, backend, dataset or configurati
     harness.form.form.compute_device = 'gpu'
     assert.match(harness.form.blockedReason.value, /GPU.*不可用/)
     harness.form.form.compute_device = 'cpu'
-    harness.form.form.proof_suite = 'lego_norm_v1'
+    harness.form.proofParametersAvailable.value = false
     assert.match(harness.form.blockedReason.value, /Lego.*原生扩展/)
+    harness.form.form.proof_crs_hash = null
     harness.form.proofParametersAvailable.value = true
     harness.form.proofParameters.value = [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }]
     await nextTick()
@@ -183,7 +188,6 @@ test('tolerated absences cannot bypass GPU, CRS, backend, dataset or configurati
     harness.form.form.proof_crs_hash = 'a'.repeat(64)
     await nextTick()
     assert.equal(harness.form.blockedReason.value, '')
-    harness.form.form.proof_suite = 'legacy'
     harness.form.form.backend = 'torch'
     store.status.value.capabilities.training_backends.torch = { available: false, reason: '注册客户端未在线', unsupported_nodes: ['client6'] }
     assert.match(harness.form.blockedReason.value, /torch.*不可用/)
@@ -204,4 +208,107 @@ test('store submission refuses insufficient cloud eligibility without making an 
     assert.equal(await store.startRun({ ...configuration(), backend: 'numpy' }), null)
     assert.match(store.operationError.value, /不足 2\/4/)
   } finally { api.startRun = previous; harness.close() }
+})
+
+test('deployment defaults, reset and all presets retain only LegoGroth16', () => {
+  const harness = formHarness(registered())
+  try {
+    assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
+    assert.ok(harness.form.presets.some(preset => preset.id === 'lego'))
+    assert.ok(harness.form.presets.every(preset => preset.id !== '5b'))
+    for (const preset of harness.form.presets) {
+      harness.form.form.proof_suite = 'legacy'
+      harness.form.applyPreset(preset)
+      assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
+    }
+    harness.form.applyPreset({ id: 'saved-preset', apply: { proof_suite: 'compact_norm_v1' } })
+    assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
+    harness.form.form.proof_suite = 'compact_range_v1'
+    harness.form.reset()
+    assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
+    assert.equal(harness.form.form.proof_crs_hash, null)
+    const template = parse(source).descriptor.template.content
+    const options = template.match(/<select v-model="form.proof_suite"[^>]*>([\s\S]*?)<\/select>/)[1]
+    assert.deepEqual([...options.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]), ['lego_norm_v1'])
+  } finally { harness.close() }
+})
+
+test('old proof schemes injected into current form state cannot reach the run API', async () => {
+  const harness = formHarness(registered()), previous = api.startRun
+  let requests = 0
+  api.startRun = async () => { requests += 1; assert.fail('obsolete proof suite reached API') }
+  try {
+    for (const mode of ['plain', 'encrypted', 'dgflow', 'optimized']) {
+      harness.form.form.mode = mode
+      for (const suite of ['legacy', 'compact_range_v1', 'compact_norm_v1', null]) {
+        harness.form.form.proof_suite = suite
+        assert.match(harness.form.blockedReason.value, /仅支持 LegoGroth16/)
+        await harness.form.launch()
+      }
+    }
+    assert.equal(requests, 0)
+  } finally { api.startRun = previous; harness.close() }
+})
+
+test('every secure mode requires matching 8-bit CRS and explicit Lego node capability', async () => {
+  const harness = formHarness(registered())
+  try {
+    for (const mode of ['encrypted', 'dgflow', 'optimized']) {
+      harness.form.form.mode = mode
+      harness.form.proofParametersAvailable.value = false
+      assert.match(harness.form.blockedReason.value, /Lego.*原生扩展/)
+      harness.form.proofParametersAvailable.value = true
+      assert.equal(harness.form.blockedReason.value, '')
+      assert.equal(harness.form.runConfiguration().proof_crs_hash, 'a'.repeat(64))
+    }
+    harness.form.proofParameters.value = [
+      { dimension: 650, bits: 7, crs_hash: 'b'.repeat(64) },
+      { dimension: 1930, bits: 8, crs_hash: 'c'.repeat(64) },
+      { dimension: '650', bits: 8, crs_hash: 'd'.repeat(64) },
+      { dimension: 650, bits: '8', crs_hash: 'e'.repeat(64) },
+    ]
+    await nextTick()
+    assert.equal(harness.form.matchingParameters.value.length, 0)
+    assert.match(harness.form.blockedReason.value, /没有匹配.*维度和 8 位/)
+    harness.form.proofParameters.value = [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }]
+    await nextTick()
+    harness.form.form.proof_crs_hash = 'b'.repeat(64)
+    assert.match(harness.form.blockedReason.value, /请选择.*CRS/)
+    harness.form.form.proof_crs_hash = 'a'.repeat(64)
+    assert.equal(harness.form.blockedReason.value, '')
+    const client = store.status.value.nodes.find(node => node.id === 'client1')
+    for (const capability of [undefined, false, 1, 'true']) {
+      client.capabilities.lego_norm_v1 = capability
+      assert.match(harness.form.blockedReason.value, /client1/)
+    }
+    client.capabilities.lego_norm_v1 = true
+    assert.equal(harness.form.blockedReason.value, '')
+  } finally { harness.close() }
+})
+
+test('plain baseline launches without Lego, CRS or edge/cloud availability and never sends a stale CRS', async () => {
+  const status = registered()
+  for (const node of status.nodes) {
+    node.capabilities.lego_norm_v1 = false
+    if (node.role !== 'client') node.status = 'offline'
+  }
+  const harness = formHarness(status), previousStart = api.startRun, previousList = api.listRuns
+  let sent
+  api.startRun = async config => { sent = config; return { run_id: 'plain-without-crs' } }
+  api.listRuns = async () => ({ runs: [] })
+  try {
+    harness.form.form.mode = 'plain'
+    harness.form.proofParametersAvailable.value = false
+    harness.form.proofParametersLoading.value = true
+    harness.form.proofParametersError.value = 'CRS registry unavailable'
+    harness.form.proofParameters.value = []
+    harness.form.form.proof_crs_hash = 'stale-history-crs'
+    assert.equal(harness.form.blockedReason.value, '')
+    assert.equal(Object.hasOwn(harness.form.runConfiguration(), 'proof_crs_hash'), false)
+    await harness.form.launch()
+    assert.equal(sent.mode, 'plain')
+    assert.equal(sent.proof_suite, 'lego_norm_v1')
+    assert.equal(Object.hasOwn(sent, 'proof_crs_hash'), false)
+    assert.equal(store.selectedRunId.value, 'plain-without-crs')
+  } finally { api.startRun = previousStart; api.listRuns = previousList; harness.close() }
 })

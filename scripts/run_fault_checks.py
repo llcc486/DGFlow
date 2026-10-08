@@ -3,6 +3,7 @@
 Only a healthy, idle, single-host deployment is allowed. This script terminates
 only verified recorded active aggregator and client1 processes, never a
 process-name match. Its finally block restores this invocation's stopped roles.
+An installed Lego CRS is selected and pinned before any role is stopped.
 Run with the same Python environment used to start the project's node processes.
 """
 from __future__ import annotations
@@ -20,13 +21,15 @@ from urllib.parse import urlsplit
 import psutil
 
 from dgfl import deployment
+from dgfl.services.control import RunConfig
 from dgfl.topology import TOPOLOGY_FIELDS, cluster_topology
+from dgfl.training.datasets import feature_count
 from dgfl.transport.security import atomic_json
 
 STOPPABLE = frozenset({*(f'aggregator{i}' for i in range(1,33)),'client1'})
 TERMINAL = frozenset({'completed','aborted','failed'})
 POLL_SECONDS = 5
-CONFIG = {'mode':'optimized','rounds':1,'seed':42,'attack':'none',
+CONFIG = {'mode':'optimized','proof_suite':'lego_norm_v1','rounds':1,'seed':42,'attack':'none',
           'malicious_clients':0,'non_iid':False,'offline_aggregators':0,
           'train_limit':1200,'test_limit':400,'local_epochs':2,'backend':'numpy','batch_strategy':'fixed'}
 
@@ -218,7 +221,33 @@ def _observation(name,record,expected_config,stopped_nodes):
     raise ValueError('unknown fault scenario')
 
 
-def run_checks(runtime,output,base='http://127.0.0.1:8765',timeout=3600):
+def _pin_run_config(config,base,crs_hash=None):
+    """Check current API admission and installed proof material before signalling."""
+    config=dict(config)
+    if crs_hash is not None:
+        config=RunConfig(**{**config,'proof_crs_hash':crs_hash}).model_dump(exclude_none=True)
+        crs_hash=config['proof_crs_hash']
+    dimension=(feature_count(config.get('dataset','mnist'),config.get('grid',8))+1)*10
+    listing=api_request(base,'/api/proof-parameters')
+    if not isinstance(listing,dict) or listing.get('available') is not True:
+        raise ValueError('fault checks require the loaded Lego native backend')
+    parameters=listing.get('parameters')
+    if not isinstance(parameters,list) or not all(isinstance(item,dict) for item in parameters):
+        raise ValueError('invalid installed Lego parameter listing')
+    matches=[item for item in parameters if item.get('suite')=='lego_norm_v1'
+             and item.get('dimension')==dimension and item.get('bits')==8
+             and (crs_hash is None or item.get('crs_hash')==crs_hash)]
+    if not matches:
+        raise ValueError(f'No matching installed Lego CRS for dimension {dimension}, bits 8; install matching parameters before fault checks')
+    if len(matches)!=1:
+        raise ValueError('Multiple matching Lego CRS; select one with --proof-crs-hash before fault checks')
+    fingerprint=matches[0].get('crs_hash')
+    if not isinstance(fingerprint,str) or re.fullmatch(r'[0-9a-f]{64}',fingerprint) is None:
+        raise ValueError('invalid installed Lego parameter fingerprint')
+    return RunConfig(**{**config,'proof_crs_hash':fingerprint}).model_dump(exclude_none=True)
+
+
+def run_checks(runtime,output,base='http://127.0.0.1:8765',timeout=3600,*,proof_crs_hash=None):
     runtime=Path(runtime).resolve(); output=Path(output).resolve()
     if timeout<=0: raise ValueError('timeout must be positive')
     if (output/'index.json').exists():
@@ -233,6 +262,7 @@ def run_checks(runtime,output,base='http://127.0.0.1:8765',timeout=3600):
         raise RuntimeError('an experiment is active; wait for the formal suite to finish')
     if set(nodes.values())!={'online'} or not before.get('dataset_ready'):
         raise RuntimeError(f"fault checks require all {len(config['nodes'])} nodes online and a prepared dataset")
+    run_config=_pin_run_config(run_config,base,proof_crs_hash)
     index={'schema_version':2,'status':'running','started_at':utc(),'config':run_config,'topology':topology,
            'preconditions':{'single_host':True,'all_nodes_online':True,'node_count':len(config['nodes']),'no_active_run':True},
            'cases':[],'process_stops':[],'restoration':{'status':'pending'},'errors':[]}
@@ -301,9 +331,10 @@ def main(argv=None):
     parser.add_argument('--output',type=Path,default=Path('docs/submission/evidence/faults'))
     parser.add_argument('--url',default='http://127.0.0.1:8765')
     parser.add_argument('--timeout',type=float,default=3600,help='maximum seconds per task; polling is fixed at 5 seconds')
+    parser.add_argument('--proof-crs-hash',help='select an installed Lego CRS when more than one matches the task circuit')
     args=parser.parse_args(argv)
     try:
-        run_checks(args.runtime,args.output,args.url,args.timeout)
+        run_checks(args.runtime,args.output,args.url,args.timeout,proof_crs_hash=args.proof_crs_hash)
     except (ValueError,OSError,RuntimeError) as exc:
         print(str(exc),file=sys.stderr)
         return 1

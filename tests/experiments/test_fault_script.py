@@ -99,7 +99,12 @@ def test_other_roles_and_missing_records_are_refused(script,tmp_path,monkeypatch
         script.stop_recorded_node(tmp_path,'aggregator3',set())
 
 
-def suite_harness(script,tmp_path,monkeypatch,*,wrong_third=False,api_failure=False,n=6,w=3,v=3,e=2):
+def parameter_listing(*hashes):
+    return {'available':True,'parameters':[{'suite':'lego_norm_v1','dimension':650,'bits':8,
+                                          'crs_hash':fingerprint} for fingerprint in hashes or ['ab'*32]]}
+
+
+def suite_harness(script,tmp_path,monkeypatch,*,wrong_third=False,api_failure=False,n=6,w=3,v=3,e=2,listing=None):
     config=configuration(script,n,w,v,e); online=set(config['nodes']); stopped=[]; restored=[]; configs=[]
     monkeypatch.setattr(script.deployment,'load_cluster',lambda runtime:config)
     monkeypatch.setattr(script.time,'sleep',lambda seconds:None)
@@ -113,8 +118,13 @@ def suite_harness(script,tmp_path,monkeypatch,*,wrong_third=False,api_failure=Fa
     monkeypatch.setattr(script,'restore_recorded_nodes',restore)
     def request(base,path,payload=None):
         if path=='/api/status': return status(config,online)
+        if path=='/api/proof-parameters':
+            assert not stopped, 'The task CRS must be checked before the first process stop, once per invocation'
+            return parameter_listing() if listing is None else listing
         if path=='/api/runs':
             assert payload['offline_aggregators']==0 and payload['mode']=='optimized' and payload['rounds']==1
+            assert payload==script.RunConfig(**payload).model_dump(exclude_none=True)
+            assert payload['proof_suite']=='lego_norm_v1' and payload['proof_crs_hash']
             configs.append(dict(payload)); return {'run_id':f'{len(configs):032x}'}
         if path.startswith('/api/runs/'):
             case=int(path.rsplit('/',1)[1],16)
@@ -144,11 +154,69 @@ def test_three_scenarios_use_real_stop_path_and_restore_before_client_fault(scri
     assert stopped==['aggregator3','aggregator2','client1']
     assert restored==[{'aggregator2','aggregator3'},{'aggregator2','aggregator3','client1'}]
     assert len(configs)==3 and index['status']=='passed'
+    assert all(config['proof_crs_hash']=='ab'*32 for config in configs)
+    assert index['config']==configs[0]==configs[1]==configs[2]
     assert len(index['cases'])==3
     for case in index['cases']:
         assert case['status']=='passed' and case['observation']
         assert (output/case['run_id']/'result.json').is_file()
     assert index['restoration']['status']=='restored'
+
+
+@pytest.mark.parametrize('listing,error',[
+    ({'available':False,'parameters':[]},'loaded Lego'),
+    ({'available':True,'parameters':[]},'No matching installed Lego'),
+    ({'available':True,'parameters':None},'parameter listing'),
+    ({'available':True,'parameters':[{'suite':'compact_norm_v1','dimension':650,'bits':8,'crs_hash':'ab'*32}]},'No matching'),
+    ({'available':True,'parameters':[{'suite':'lego_norm_v1','dimension':1930,'bits':8,'crs_hash':'ab'*32}]},'No matching'),
+    ({'available':True,'parameters':[{'suite':'lego_norm_v1','dimension':650,'bits':16,'crs_hash':'ab'*32}]},'No matching'),
+    (parameter_listing('ab'*32,'cd'*32),'Multiple matching'),
+    (parameter_listing('../unsafe'),'fingerprint'),
+])
+def test_bad_or_ambiguous_lego_preflight_never_stops_or_restores_a_process(script,tmp_path,monkeypatch,listing,error):
+    stopped,restored,configs=suite_harness(script,tmp_path,monkeypatch,listing=listing)
+    output=tmp_path/'evidence'
+    with pytest.raises(ValueError,match=error):
+        script.run_checks(tmp_path/'runtime',output)
+    assert stopped==restored==configs==[]
+    assert not output.exists(), 'A refused preflight must not publish a running fault-check index'
+
+
+@pytest.mark.parametrize('invalid',[
+    {'proof_suite':'compact_norm_v1'}, {'train_limit':0}, {'verification_threads':0},
+])
+def test_current_api_validation_precedes_any_process_stop(script,tmp_path,monkeypatch,invalid):
+    stopped,restored,configs=suite_harness(script,tmp_path,monkeypatch)
+    monkeypatch.setattr(script,'CONFIG',{**script.CONFIG,**invalid})
+    with pytest.raises(ValueError):
+        script.run_checks(tmp_path/'runtime',tmp_path/'evidence')
+    assert stopped==restored==configs==[]
+
+
+@pytest.mark.parametrize('fingerprint',['invalid','ef'*32])
+def test_explicit_crs_must_be_valid_and_installed_before_stopping(script,tmp_path,monkeypatch,fingerprint):
+    stopped,restored,configs=suite_harness(script,tmp_path,monkeypatch)
+    with pytest.raises(ValueError):
+        script.run_checks(tmp_path/'runtime',tmp_path/'evidence',proof_crs_hash=fingerprint)
+    assert stopped==restored==configs==[]
+
+
+def test_explicit_crs_selects_one_installed_hash_and_pins_all_three_fault_runs(script,tmp_path,monkeypatch):
+    _,_,configs=suite_harness(script,tmp_path,monkeypatch,listing=parameter_listing('ab'*32,'cd'*32))
+    output=tmp_path/'evidence'
+    index=script.run_checks(tmp_path/'runtime',output,proof_crs_hash='CD'*32)
+    assert all(config['proof_crs_hash']=='cd'*32 for config in configs)
+    assert index['config']['proof_crs_hash']=='cd'*32
+    assert json.loads((output/'index.json').read_text('utf8'))['config']==index['config']
+
+
+def test_cli_forwards_explicit_crs_without_starting_a_real_fault_check(script,tmp_path,monkeypatch):
+    calls=[]
+    monkeypatch.setattr(script,'run_checks',lambda *args,**kwargs:calls.append((args,kwargs)))
+    assert script.main(['--runtime',str(tmp_path/'runtime'),'--output',str(tmp_path/'evidence'),
+                        '--proof-crs-hash','cd'*32])==0
+    assert calls==[((tmp_path/'runtime',tmp_path/'evidence','http://127.0.0.1:8765',3600),
+                    {'proof_crs_hash':'cd'*32})]
 
 
 @pytest.mark.parametrize('n,w,v,e',[(20,4,5,3),(6,3,4,2),(6,2,2,2),(3,2,2,2),(11,3,4,3)])

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from dgfl.crypto import gpu
+from dgfl.crypto import gpu, lego_registry
 from dgfl.deployment import node_ports
 from dgfl.experiments import runner
 from dgfl.services import control, node, roles
@@ -116,7 +116,8 @@ def test_api_rejects_unavailable_torch_before_creating_task_or_dkg(tmp_path,monk
     app=control.create_control_app(tmp_path)
     monkeypatch.setattr(app.state.manager,'_run',lambda record:None)
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'malicious_clients':0})
+        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'malicious_clients':0,
+                                             'proof_crs_hash':'ab'*32})
         assert response.status_code==409
         assert 'client3' in response.json()['detail']
         assert 'PyTorch' in response.json()['detail']
@@ -127,24 +128,39 @@ def test_api_rejects_unavailable_torch_before_creating_task_or_dkg(tmp_path,monk
 
 
 def test_api_preserves_explicit_torch_backend_when_all_clients_support_it(tmp_path,monkeypatch):
-    install_training_cluster(tmp_path,monkeypatch)
+    calls=install_training_cluster(tmp_path,monkeypatch)
+    described=[]
+    def describe(registry,crs_hash,dimension,bits):
+        assert registry.runtime==tmp_path
+        assert (crs_hash,dimension,bits)==('ab'*32,650,8)
+        described.append((crs_hash,dimension,bits))
+        return {'crs_hash':crs_hash,'dimension':dimension,'bits':bits}
+    monkeypatch.setattr(lego_registry,'available',lambda:True)
+    monkeypatch.setattr(lego_registry.Registry,'describe',describe)
     app=control.create_control_app(tmp_path)
     monkeypatch.setattr(app.state.manager,'_run',lambda record:None)
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'malicious_clients':0})
+        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'malicious_clients':0,
+                                             'proof_crs_hash':'ab'*32})
         assert response.status_code==202
         record=client.get('/api/runs/'+response.json()['run_id']).json()
     assert record['config']['backend']=='torch'
     assert record['config']['compute_device']=='cpu'
+    assert record['config']['proof_suite']=='lego_norm_v1'
+    assert record['config']['proof_crs_hash']=='ab'*32
+    assert described==[('ab'*32,650,8)]
+    assert {node for node,action in calls if action=='health'}=={'client1','client2','client3'}
 
 
 def test_numpy_submission_does_not_run_new_training_or_cuda_probes(tmp_path,monkeypatch):
     calls=install_training_cluster(tmp_path,monkeypatch,missing='client3')
-    app=control.create_control_app(tmp_path)
+    # Isolate submission admission from the separately tested startup detector.
+    app=control.create_control_app(tmp_path,auto_prepare_compute=False)
     monkeypatch.setattr(app.state.manager,'_run',lambda record:None)
     monkeypatch.setattr(gpu,'compute_capabilities',lambda:pytest.fail('NumPy CPU submission probed CUDA'))
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'backend':'numpy','client_count':3,'malicious_clients':0})
+        response=client.post('/api/runs',json={'mode':'plain','backend':'numpy','client_count':3,
+                                             'malicious_clients':0})
     assert response.status_code==202
     assert calls==[]
 
@@ -158,7 +174,7 @@ def test_torch_train_import_failure_is_controlled_and_exact_retry_never_repeats(
         def __init__(self,*args): pass
         def execute(self,action,payload):
             calls.append((action,payload))
-            raise ImportError('private implementation path C:/sensitive/torch/loader.dll')
+            raise ImportError('private implementation path C:' + '/sensitive/torch/loader.dll')
     monkeypatch.setattr(roles,'RoleWorker',BrokenWorker)
     coordinator=Identity(tmp_path/'keys','coordinator')
     request=coordinator.seal('client1','rpc',{'action':action,'payload':{'backend':backend}},'torch-import')

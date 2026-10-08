@@ -6,9 +6,11 @@ must use a new output directory, because old identifiers belong to its old runti
 """
 import argparse
 import json
+import re
 import sys
 import time
 import urllib.request
+from copy import deepcopy
 from pathlib import Path
 
 import yaml
@@ -30,6 +32,64 @@ def request(base,path,payload=None):
     with urllib.request.urlopen(req,timeout=30) as response: return json.load(response)
 
 
+def resolve_suite_parameters(suite,base,*,pinned_suite=None,mapped=()):
+    """Pin each new Lego task to an installed circuit before API validation.
+
+    Null hashes select a unique installed CRS once. Saved declarations retain
+    that choice on resume. Already mapped historical tasks are only refreshed;
+    their original proof scheme and measurements remain unchanged.
+    """
+    from dgfl.training.datasets import feature_count
+
+    if not isinstance(suite,dict) or set(suite)!={'cases'} or not isinstance(suite['cases'],list):
+        raise ValueError('suite requires nonempty cases')
+    suite=deepcopy(suite)
+    pinned={case['name']:case['config'] for case in (pinned_suite or {}).get('cases',[])}
+    parameters=None
+    for case in suite['cases']:
+        if not isinstance(case,dict) or set(case)!={'name','config'} or not isinstance(case['config'],dict):
+            raise ValueError('case requires name and config')
+        config=case['config']; previous=pinned.get(case['name'],{})
+        if case['name'] in mapped:
+            # Only a persisted mapping may refresh a historical protocol run.
+            # Missing optional values in a current declaration reuse its pin.
+            if previous.get('proof_suite')=='lego_norm_v1':
+                config.setdefault('proof_suite','lego_norm_v1')
+                if config.get('proof_crs_hash') is None and previous.get('proof_crs_hash') is not None:
+                    config['proof_crs_hash']=previous['proof_crs_hash']
+            continue
+        if config.get('proof_suite','lego_norm_v1')!='lego_norm_v1':
+            raise ValueError('New experiment cases support only proof_suite=lego_norm_v1; historical configurations cannot start new runs')
+        config['proof_suite']='lego_norm_v1'
+        if config.get('mode','optimized')=='plain' or config.get('proof_crs_hash') is not None:
+            continue
+        dataset=config.get('dataset','mnist'); grid=config.get('grid',8)
+        dimension=(feature_count(dataset,grid)+1)*10
+        if (previous.get('proof_suite')=='lego_norm_v1'
+                and previous.get('dataset','mnist')==dataset and previous.get('grid',8)==grid
+                and previous.get('proof_crs_hash') is not None):
+            config['proof_crs_hash']=previous['proof_crs_hash']
+            continue
+        if parameters is None:
+            listing=request(base,'/api/proof-parameters')
+            if not isinstance(listing,dict) or listing.get('available') is not True:
+                raise ValueError('Controller requires the loaded Lego native backend before starting this suite')
+            parameters=listing.get('parameters')
+            if not isinstance(parameters,list) or not all(isinstance(item,dict) for item in parameters):
+                raise ValueError('Invalid installed Lego parameter listing')
+        matches=[item for item in parameters if item.get('suite')=='lego_norm_v1'
+                 and item.get('dimension')==dimension and item.get('bits')==8]
+        if not matches:
+            raise ValueError(f'No installed Lego CRS for dimension {dimension}, bits 8; explicitly install matching parameters with setup_lego_parameters.py')
+        if len(matches)!=1:
+            raise ValueError(f'Multiple installed Lego CRS for dimension {dimension}, bits 8; set proof_crs_hash explicitly')
+        fingerprint=matches[0].get('crs_hash')
+        if not isinstance(fingerprint,str) or re.fullmatch(r'[0-9a-f]{64}',fingerprint) is None:
+            raise ValueError('Invalid installed Lego parameter fingerprint')
+        config['proof_crs_hash']=fingerprint
+    return suite
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path,default=Path('configs/experiments.yaml'))
@@ -39,16 +99,21 @@ def main(argv=None):
     parser.add_argument('--cloud-strategy',choices=('auto','threshold','all'),
                         help='Override the cloud collection strategy for every declared case')
     args=parser.parse_args(argv)
-    suite=validate_suite(yaml.safe_load(args.config.read_text('utf8')))
+    state_path=args.output/'suite.json'; old_path=args.output/'config.json'
+    state=json.loads(state_path.read_text('utf8')) if state_path.exists() else None
+    if state is not None and (not isinstance(state,dict) or not isinstance(state.get('cases'),dict)):
+        raise ValueError('invalid persisted suite mapping')
+    pinned_suite=json.loads(old_path.read_text('utf8')) if old_path.exists() else None
+    suite=validate_suite(resolve_suite_parameters(yaml.safe_load(args.config.read_text('utf8')),args.url,
+                                                 pinned_suite=pinned_suite,mapped=state['cases'] if state else ()))
     if args.cloud_strategy is not None:
         for case in suite['cases']: case['config']['cloud_strategy']=args.cloud_strategy
     suite_hash=digest(suite)
-    args.output.mkdir(parents=True,exist_ok=True); state_path=args.output/'suite.json'
-    state=json.loads(state_path.read_text('utf8')) if state_path.exists() else {'suite_hash':suite_hash,'cases':{}}
+    args.output.mkdir(parents=True,exist_ok=True)
+    if state is None: state={'suite_hash':suite_hash,'cases':{}}
     if state['suite_hash']!=suite_hash:
         # Keep the original declaration and its hash when newly added optional
         # defaults are the only difference from a historical suite.
-        old_path=args.output/'config.json'
         old_suite=validate_suite(json.loads(old_path.read_text('utf8')),normalize=False) if old_path.exists() else None
         if old_suite is None or validate_suite(old_suite)!=suite:
             raise ValueError('suite changed; choose another output directory')

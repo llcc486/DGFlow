@@ -55,7 +55,10 @@ def _parser():
     prepare.add_argument('--mnist-source', help='Use only this HTTPS base URL for missing MNIST archives')
     prepare.add_argument('--mnist-timeout', type=float, help='MNIST socket timeout in seconds (1-300; default 30)')
     prepare.add_argument('--mnist-retries', type=int, help='Additional MNIST mirror rounds (0-5; default 2)')
-    prepare.add_argument('--offline', action='store_true', help='Verify MNIST cache without any network access')
+    prepare.add_argument('--cifar-source', help='Use only this HTTPS base URL for the missing CIFAR-10 binary archive')
+    prepare.add_argument('--cifar-timeout', type=float, help='CIFAR-10 socket timeout in seconds (1-300; default 60)')
+    prepare.add_argument('--cifar-retries', type=int, help='Additional CIFAR-10 mirror rounds (0-5; default 2)')
+    prepare.add_argument('--offline', action='store_true', help='Verify and prepare the selected cached dataset without network access')
     return parser
 
 
@@ -166,19 +169,27 @@ def main(argv=None):
         elif command == 'prepare-data':
             from dgfl.transport.security import atomic_json
             data_dir = arguments.data_dir or DEFAULT_DATA.parent/arguments.dataset
-            options = {key: value for key, value in (
+            mnist_options = {key: value for key, value in (
                 ('source', arguments.mnist_source), ('timeout', arguments.mnist_timeout),
                 ('retries', arguments.mnist_retries)) if value is not None}
+            cifar_options = {key: value for key, value in (
+                ('source', arguments.cifar_source), ('timeout', arguments.cifar_timeout),
+                ('retries', arguments.cifar_retries)) if value is not None}
+            if arguments.dataset == 'cifar10':
+                if mnist_options:
+                    raise ValueError('--mnist-source, --mnist-timeout and --mnist-retries apply only to MNIST')
+                from dgfl.training.cifar10 import prepare_cifar10
+                options = cifar_options
+                prepare = prepare_cifar10
+            else:
+                if cifar_options:
+                    raise ValueError('--cifar-source, --cifar-timeout and --cifar-retries apply only to CIFAR-10')
+                from dgfl.training.data import prepare_mnist
+                options = mnist_options
+                prepare = prepare_mnist
             if arguments.offline:
                 options['offline'] = True
-            if arguments.dataset == 'cifar10':
-                if options:
-                    raise ValueError('--mnist-source, --mnist-timeout, --mnist-retries and --offline apply only to MNIST')
-                from dgfl.training.cifar10 import prepare_cifar10
-                result = prepare_cifar10(data_dir)
-            else:
-                from dgfl.training.data import prepare_mnist
-                result = prepare_mnist(data_dir, **options)
+            result = prepare(data_dir, **options)
             atomic_json(data_dir/'metadata.json', result)
         elif command == 'doctor':
             result = doctor(runtime, arguments.data_dir)

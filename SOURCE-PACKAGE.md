@@ -1,16 +1,20 @@
 # DGFlow 源码项目说明
 
-当前目录已直接整理为最新纯净源码项目，包含 MNIST 下载容错和此前 P1/P2 修复。运行材料和生成物已移到项目外归档；源代码、测试、配置、必要文档及 Git 历史保留。
+当前源码版本包含双数据集镜像下载、完整部署准备、GPU 自动识别和此前 P1/P2 修复。源码、测试、配置和必要文档保留；运行材料由部署脚本生成，并由 Git 忽略。
 
 ## 本次源码版本
 
-版本标识：`dgflow-20261008-mnist-download-fix-source`。
+版本标识：`dgflow-20261008-complete-deployment-source`。
 
-在 P1/P2 修复基础上加入 MNIST 下载容错：默认两个 HTTPS 下载源，网络失败后有限重试；支持指定 HTTPS 源、调整网络超时和重试轮数，以及 `prepare-data --offline` 校验本地缓存。Windows/Linux 启动脚本会将离线选项传递给数据准备命令。相关训练数据、CLI、启动脚本及控制 API 回归共 379 项通过、1 项跳过，修改文件的 Ruff 检查通过。
+MNIST 与 CIFAR-10 均支持 HTTPS 镜像、有限重试、自定义下载源及 `prepare-data --offline`。CIFAR-10 优先使用 MindSpore 官方镜像，回退原始站点，固定校验原始 MD5。部署助手在打开服务之前完成训练依赖、完整原生密码扩展、GPU 编译依赖、两种数据集和前端准备。
 
-纯源码打包与现有交付打包的相关回归另有 83 项通过、2 项跳过。
+GPU 硬件识别不依赖 NVIDIA Python 包；部署时自动安装所需 NVRTC，控制服务启动后自动对主控与边缘节点执行精确密码运算自检。默认计算设备仍为 CPU，自检通过后可在页面选择 GPU。
 
-当前目录包含前端源码和依赖锁文件，首次使用需要安装依赖并构建前端。上次生成的 ZIP、交付清单与校验文件已移入归档；工作目录不保留生成的清单。需要再次发布时，按本文末尾命令重新冻结当前源码。
+当前新建加密实验只使用 LegoGroth16（`lego_norm_v1`），必须安装并选择当前模型维度、8 位量化对应的 CRS。`plain` 明文基线不生成密码证明，无需 CRS。旧逐坐标、5A/5B 方案及原性能证据保留用于历史记录与研究核对，不再是当前新实验的选项。
+
+本机已完成全新环境部署、禁网离线检查和 CIFAR-10 / Torch / GPU 真实流程验证，详见[部署验收记录](docs/research/evidence/deployment-ready-20261008.json)。
+
+纯源码包包含前端源码和依赖清单，不包含已安装的环境、完整数据缓存、前端构建产物或运行密钥。需要发布时，按本文末尾命令冻结当前源码。
 
 ## 保留内容
 
@@ -23,50 +27,42 @@
 
 完整 CNN 仍是独立本地训练模块，尚未接入安全联邦服务。单归属验证、门限可用性和开发 CRS 的边界仍以 README 与协议说明为准。
 
-## 已归档内容
+## 生成物与既有部署
 
-本次归档位于项目同级目录 `DGFlow-source-671a850-archive-20261008-02/`，其中保持原相对路径：
-
-单独分发当前源码目录时不包含该归档。全新安装不依赖旧部署归档；已有公开数据缓存可单独复用以避免再次下载。
+全新安装不依赖旧部署归档。以下内容由部署或实验生成，不应加入源码包：
 
 - `runtime/`：原部署、身份密钥、CRS、实验结果、节点状态和日志。
-- `data/`：已校验的完整 MNIST 公开数据缓存。
+- `data/`：已校验的 MNIST 与 CIFAR-10 公开数据缓存。
 - `dist/`：上次生成的源码 ZIP、交付清单和校验文件。
 - `.venv/`、`web/node_modules/`：原依赖环境。
 - `web/dist/`：前端构建产物。
 - Python 缓存、egg-info，以及根目录的 `SOURCE-MANIFEST.json`。
+- `tmp/native-toolchain/`：项目私有 Rust 工具链、Cargo 缓存、匹配 wheel 与构建指纹。
 
-归档目录内的 `cleanup-manifest.json` 记录移动路径及整理前摘要，`cleanup-verification.json` 记录整理后的校验结果；`before-docs/` 保存整理前的入口文档和忽略规则。归档保留原始数据，未进行不可恢复删除。
+若自行保留过旧部署归档，可以恢复对应 `runtime/` 和公开数据后继续使用原身份、拓扑、CRS 与历史记录；不要先创建新的同名部署再覆盖。旧虚拟环境不要跨机器或跨操作系统复制。
 
 ## 从源码启动
 
-在项目根目录创建新的 Python 环境，并构建前端：
+安装 Python 3.12、Node.js 22.12+ 与 npm，并具备系统 C/C++ 构建工具。Windows 原生构建需要 Visual Studio C++ 工具和 Windows SDK，Linux 需要 C/C++ 编译器。NVIDIA GPU 需要系统驱动；其余项目依赖由脚本准备。在项目根目录执行：
 
 ```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-Push-Location web
-npm.cmd ci
-npm.cmd run build
-Pop-Location
-powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1
+powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly
+powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
 ```
 
-启动脚本会准备 MNIST 并为不存在的运行目录初始化新部署。CIFAR-10、可选 Torch、原生扩展及 Lego 参数的准备见 README。归档的虚拟环境仅作备份，开发时按上述命令重新创建环境。
+第一条联网完成部署，不启动任何节点或控制服务；第二条仅使用已部署环境和缓存启动。直接省略 `-SetupOnly` 也可完成部署后立即启动。Linux 对应 `bash scripts/start_demo.sh --setup-only` 和 `bash scripts/start_demo.sh --offline`。
 
-MNIST 下载超时时，可以延长 `prepare-data --mnist-timeout 120` 的等待时间，或在联网机器准备后复制四个原始 `.gz` 文件到 `data/mnist/raw`，再执行 `prepare-data --offline` 验证。默认已支持备用 HTTPS 源和有限重试；完整命令与缓存清单见[部署说明](docs/submission/deployment.md#mnist-下载超时与离线复用)。
+部署成功后 `.venv/dgflow-deployment.json` 记录依赖版本、原生源码与二进制摘要、GPU 自检、数据及前端状态。失败时不会发布就绪标记，也不会启动服务。源码变化后会重新核对原生与前端构建指纹，旧版本号相同的原生二进制不能冒充当前构建。
 
-本机已将完整 MNIST 缓存保存到本次归档。安装依赖后，若当前源码目录还没有 `data/`，可复用缓存：
+下载源可在部署时指定：
 
 ```powershell
-Copy-Item -LiteralPath ..\DGFlow-source-671a850-archive-20261008-02\data -Destination .\data -Recurse
-.\.venv\Scripts\python.exe -m dgfl.cli prepare-data --offline
+powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly -CifarSource https://mindspore-website.obs.cn-north-4.myhuaweicloud.com/notebook/datasets/
 ```
 
-若要沿用旧部署，先将归档中的 `runtime/` 和需要的数据缓存复制回原相对路径，再启动服务。这样才能继续使用原身份、拓扑、CRS 与历史记录；不要先创建新的同名部署再覆盖。
+Linux 使用 `DGFL_MNIST_SOURCE` / `DGFL_CIFAR_SOURCE` 环境变量。镜像和离线缓存校验详见[部署说明](docs/submission/deployment.md)。运行中的训练不会下载数据或安装依赖，GPU 内核只在本地编译。Lego 的模型专用 CRS 需单独建立；默认 MNIST 为 650 维、CIFAR-10 为 1,930 维，均为 8 位量化，命令见 [README](README.md)。当前本机 `runtime` 已安装这两组开发参数，但它们不随源码包分发，新机器或新运行目录需另行准备。仅增加参数后，在网页刷新已安装参数并选择匹配指纹即可，无需重启服务。
 
-首次安装原生扩展时，按 README 从 `native/dgfl-native` 构建，或使用另行保留且经摘要核对的平台匹配 wheel。本次归档没有原生 wheel 或 `source-history.bundle`；部分依赖旧 Git bundle 的历史微基准需要另行取得对应历史材料。
+`scripts/prepare_offline.py` 仍是基础 NumPy + MNIST 材料工具，不包含完整启动所需的 Torch、GPU、当前原生扩展和 CIFAR-10，也不包含模型专用 CRS。只安装这个旧式基础包可用于明文最小演示，不足以通过完整部署检查或运行新加密实验；完整离线启动应先在目标平台完成上述部署，并为加密实验单独准备参数。
 
 ## 验证与发布
 
@@ -79,12 +75,12 @@ npm.cmd run build
 Pop-Location
 ```
 
-P1/P2 修复验收保留在 `docs/research/evidence/p1p2-fixes-20261008.json`。本次目录整理不改变该代码版本。
+测试依赖需开发者另行安装，例如 `python -m pip install -e ".[test]"`；应用运行不依赖 pytest 或 Ruff。历史 P1/P2 验收保留在 `docs/research/evidence/p1p2-fixes-20261008.json`。
 
 生成纯源码包时，先完成相关测试，然后运行：
 
 ```powershell
-.\.venv\Scripts\python.exe -B scripts/freeze_source.py --source-only --release-id dgflow-20261008-mnist-download-fix-source --archive dist/source-release/dgflow-20261008-mnist-download-fix-source/source.zip
+.\.venv\Scripts\python.exe -B scripts/freeze_source.py --source-only --release-id dgflow-20261008-complete-deployment-source --archive dist/source-release/dgflow-20261008-complete-deployment-source/source.zip
 .\.venv\Scripts\python.exe -B scripts/freeze_source.py --verify
 ```
 

@@ -35,8 +35,8 @@ const form = reactive({
   grid: 8,
   execution: 'auto', rpc_workers: 6,
   cloud_strategy: 'auto',
-  proof_suite: 'legacy', verification: 'deterministic',
-  verification_workers: 1, verification_threads: 2, proof_block_size: 128, proof_crs_hash: null,
+  proof_suite: 'lego_norm_v1', verification: 'deterministic',
+  verification_workers: 1, verification_threads: 2, proof_crs_hash: null,
   min_cosine: 0, max_norm_squared: null, max_norm_ratio: 2, batch_strategy: 'regroup',
 })
 const advanced = ref(false)
@@ -118,8 +118,9 @@ async function refreshProofParameters() {
   }
 }
 
-watch([() => form.proof_suite, matchingParameters], () => {
-  if (form.proof_suite !== 'lego_norm_v1' || !matchingParameters.value.some(parameter => parameter.crs_hash === form.proof_crs_hash)) {
+watch([() => form.mode, () => form.proof_suite, matchingParameters], () => {
+  if (form.mode === 'plain' || form.proof_suite !== 'lego_norm_v1'
+      || !matchingParameters.value.some(parameter => parameter.crs_hash === form.proof_crs_hash)) {
     form.proof_crs_hash = null
   }
 })
@@ -131,14 +132,14 @@ const presets = [
   { id: 'smoke', name: '快速验证', apply: { rounds: 1, train_limit: 1200, test_limit: 400, local_epochs: 1, mode: 'optimized' } },
   { id: 'standard', name: '标准实验', apply: { rounds: 5, train_limit: 6000, test_limit: 1000, local_epochs: 1, mode: 'dgflow' } },
   { id: 'full', name: '完整数据', apply: { rounds: 3, train_limit: 60000, test_limit: 10000, local_epochs: 2, mode: 'optimized' } },
-  { id: '5b', name: '5B 加速实验', apply: { rounds: 1, train_limit: 1200, test_limit: 400,
+  { id: 'lego', name: 'LegoGroth16 实验', apply: { rounds: 1, train_limit: 1200, test_limit: 400,
     local_epochs: 1, mode: 'optimized', execution: 'parallel', rpc_workers: 6,
-    proof_suite: 'compact_norm_v1', verification: 'randomized', verification_workers: 2, proof_block_size: 128 } },
+    proof_suite: 'lego_norm_v1', verification: 'deterministic', verification_workers: 2 } },
 ]
 function applyPreset(preset) {
-  Object.assign(form, preset.apply)
+  Object.assign(form, preset.apply, { proof_suite: 'lego_norm_v1' })
   form.train_limit = Math.min(form.train_limit, selectedDataset.value.trainCount)
-  if (preset.id === '5b') advanced.value = true
+  if (preset.id === 'lego') advanced.value = true
   if (form.attack !== 'none') form.malicious_clients = Math.max(1, form.malicious_clients)
 }
 
@@ -199,16 +200,15 @@ const formErrors = computed(() => {
   if (!Number.isFinite(form.min_cosine) || form.min_cosine < -1 || form.min_cosine > 1) errors.push('最低余弦相似度需为 −1 到 1 之间的数值。')
   if (!Number.isFinite(form.max_norm_ratio) || form.max_norm_ratio < 1) errors.push('最大范数倍率需为至少 1 的数值。')
   if (form.max_norm_squared !== null && form.max_norm_squared !== '' && (!Number.isSafeInteger(form.max_norm_squared) || form.max_norm_squared < 1)) errors.push('平方范数上限需为正整数或留空。')
-  if (form.proof_suite !== 'lego_norm_v1') checkInteger(form.proof_block_size, 1, 1024, '证明分块坐标数')
-  if (form.proof_suite === 'lego_norm_v1') {
-    if (form.mode === 'plain') errors.push('Lego 证明需要加密实验模式。')
+  if (form.proof_suite !== 'lego_norm_v1') errors.push('当前仅支持 LegoGroth16 证明方案，请重置实验配置。')
+  if (form.mode !== 'plain') {
     if (proofParametersLoading.value) errors.push('正在检查已安装的证明参数。')
     else if (proofParametersError.value) errors.push(proofParametersError.value)
     else if (!proofParametersAvailable.value) errors.push('后端缺少 Lego 原生扩展，请安装后重启服务。')
     else if (!matchingParameters.value.length) errors.push('没有匹配当前模型维度和 8 位量化的已安装 CRS。')
     else if (!matchingParameters.value.some(parameter => parameter.crs_hash === form.proof_crs_hash)) errors.push('请选择当前模型对应的已安装 CRS。')
     const unsupported = store.nodes.value.filter(node =>
-      ['client', 'authority'].includes(node.role) && node.status === 'online' && !node.capabilities?.lego_norm_v1,
+      ['client', 'authority'].includes(node.role) && node.status === 'online' && node.capabilities?.lego_norm_v1 !== true,
     )
     if (unsupported.length) errors.push(`以下节点需要安装 Lego 扩展并重启：${unsupported.map(node => node.id).join('、')}。`)
   }
@@ -234,13 +234,20 @@ const blockedReason = computed(() => {
 
 const onlineCount = computed(() => store.connected.value ? store.nodes.value.filter(n => n.status === 'online').length : null)
 
-async function launch() {
-  if (store.submitting.value || blockedReason.value) return
-  const id = await store.startRun(withCloudStrategy({
-    ...form,
+function runConfiguration() {
+  const { proof_crs_hash, ...configuration } = form
+  return withCloudStrategy({
+    ...configuration,
+    proof_suite: 'lego_norm_v1',
+    ...(form.mode === 'plain' ? {} : { proof_crs_hash }),
     max_norm_squared: form.max_norm_squared === '' ? null : form.max_norm_squared,
     malicious_clients: form.attack === 'none' ? 0 : form.malicious_clients,
-  }, store.status.value))
+  }, store.status.value)
+}
+
+async function launch() {
+  if (store.submitting.value || blockedReason.value) return
+  const id = await store.startRun(runConfiguration())
   if (id) emit('deployed', id)
 }
 
@@ -252,7 +259,7 @@ function reset() {
     local_epochs: 1, backend: 'numpy', dataset: 'mnist', compute_device: 'cpu', grid: 8,
     execution: 'auto', rpc_workers: 6,
     cloud_strategy: 'auto',
-    proof_suite: 'legacy', verification: 'deterministic', verification_workers: 1, verification_threads: 2, proof_block_size: 128, proof_crs_hash: null,
+    proof_suite: 'lego_norm_v1', verification: 'deterministic', verification_workers: 1, verification_threads: 2, proof_crs_hash: null,
     min_cosine: 0, max_norm_squared: null, max_norm_ratio: 2, batch_strategy: 'regroup',
   })
   if (!deployment.value.locked) topologyTouched.value = false
@@ -260,7 +267,7 @@ function reset() {
 }
 
 function exportConfig() {
-  const blob = new Blob([JSON.stringify(form, null, 2)], { type: 'application/json' })
+  const blob = new Blob([JSON.stringify(runConfiguration(), null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -492,7 +499,7 @@ function exportConfig() {
             <LabIcon name="alert" :size="16" />
             <div>{{ gpuPreparationError }}</div>
           </div>
-          <p v-if="computeStatus.gpuHardwareAvailable && !computeStatus.gpuAvailable" class="nb-note" style="margin:0">首次启用需要编译密码内核，并检查主控及实际边缘服务器的计算结果；完成后 GPU 选项自动开放。</p>
+          <p v-if="computeStatus.gpuHardwareAvailable && !computeStatus.gpuAvailable" class="nb-note" style="margin:0">服务启动与部署更新后会自动核验主控及实际边缘服务器的 GPU；首次核验需要编译密码内核，完成后 GPU 选项自动开放。</p>
           <p class="nb-note" style="margin:0">此选项控制密码计算。模型训练仍使用所选训练后端；选择 GPU 密码计算不要求安装 PyTorch。GPU 模式需要加密实验策略，启动时会再次检查设备能力。</p>
         </StepCard>
 
@@ -508,15 +515,13 @@ function exportConfig() {
             </label>
             <label class="nb-field">
               <label>证明方案</label>
-              <select v-model="form.proof_suite">
-                <option value="legacy">原逐位范围与范数证明</option>
-                <option value="compact_range_v1">5A 紧凑范围证明（实验性）</option>
-                <option value="compact_norm_v1">5B 紧凑范围与范数证明（实验性）</option>
+              <select v-model="form.proof_suite" :disabled="form.mode === 'plain'">
                 <option value="lego_norm_v1">LegoGroth16 范围与范数证明（实验性，可信设置）</option>
               </select>
-              <small v-if="form.proof_suite !== 'legacy'">实验性证明已有篡改测试，尚无独立安全审计。</small>
+              <small v-if="form.mode === 'plain'">明文基线不生成证明，无需可信设置参数。</small>
+              <small v-else>实验性证明已有篡改测试，尚无独立安全审计。</small>
             </label>
-            <label v-if="form.proof_suite === 'lego_norm_v1'" class="nb-field">
+            <label v-if="form.mode !== 'plain'" class="nb-field">
               <label>已安装的可信设置参数 <small>CRS</small></label>
               <select v-model="form.proof_crs_hash" :disabled="proofParametersLoading || !proofParametersAvailable || !matchingParameters.length">
                 <option :value="null">请选择匹配的 CRS</option>
@@ -574,8 +579,7 @@ function exportConfig() {
               { key: 'rpc_workers', label: '并行请求数', max: 24 },
               { key: 'verification_workers', label: '每个验证节点的工作进程数', max: 8 },
               { key: 'verification_threads', label: '每个验证节点的线程预算（Lego）', max: 4 },
-              { key: 'proof_block_size', label: '每块证明的坐标数', max: 1024 },
-            ].filter(setting => (setting.key !== 'proof_block_size' || form.proof_suite !== 'lego_norm_v1') && (setting.key !== 'verification_threads' || form.proof_suite === 'lego_norm_v1'))" :key="setting.key" class="nb-field">
+            ]" :key="setting.key" class="nb-field">
               <label>{{ setting.label }}</label>
               <input v-model.number="form[setting.key]" type="number" min="1" :max="setting.max" required />
               <small v-if="setting.key === 'verification_threads'">在工作进程间分配，总预算不叠加；实际边缘服务器会同时使用 CPU。</small>
@@ -636,10 +640,10 @@ function exportConfig() {
             <div><dt>边缘 / 云服务器</dt><dd>{{ form.authority_count }} / {{ form.aggregator_count }}</dd></div>
             <div><dt>边缘 / 云门限</dt><dd>{{ form.authority_threshold }} / {{ form.authority_count }} · {{ form.aggregator_threshold }} / {{ form.aggregator_count }}</dd></div>
             <div><dt>执行策略</dt><dd>{{ modeName(form.mode) }}</dd></div>
-            <div><dt>执行方式 / 证明</dt><dd>{{ form.execution }} / {{ form.proof_suite }}</dd></div>
+            <div><dt>执行方式 / 证明</dt><dd>{{ form.execution }} / {{ form.mode === 'plain' ? '明文基线，无需证明' : 'LegoGroth16' }}</dd></div>
             <div><dt>密码计算设备</dt><dd>{{ form.compute_device.toUpperCase() }}</dd></div>
             <div><dt>接纳分组</dt><dd>{{ form.batch_strategy === 'regroup' ? '合格成员重新组队' : '固定两人批次' }}</dd></div>
-            <div v-if="form.proof_suite === 'lego_norm_v1'"><dt>可信设置摘要</dt><dd class="mono">{{ form.proof_crs_hash ? form.proof_crs_hash.slice(0, 16) + '…' : '尚未选择' }}</dd></div>
+            <div v-if="form.mode !== 'plain'"><dt>可信设置摘要</dt><dd class="mono">{{ form.proof_crs_hash ? form.proof_crs_hash.slice(0, 16) + '…' : '尚未选择' }}</dd></div>
             <div><dt>全局 / 本地轮数</dt><dd>{{ form.rounds }} / {{ form.local_epochs }}</dd></div>
             <div><dt>随机种子</dt><dd class="mono">{{ form.seed }}</dd></div>
             <div><dt>数据划分</dt><dd>{{ form.non_iid ? 'Non-IID' : 'IID' }}</dd></div>

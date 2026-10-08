@@ -1,5 +1,6 @@
+# Current LegoGroth16 suite. Null hashes select and freeze the local matching CRS.
 cases:
   - name: plain_full_mnist_42
-    config: {mode: plain, rounds: 3, seed: 42, train_limit: 60000, test_limit: 10000, attack: none}
+    config: {mode: plain, proof_suite: lego_norm_v1, rounds: 3, seed: 42, train_limit: 60000, test_limit: 10000, attack: none}
   - name: optimized_full_mnist_42
-    config: {mode: optimized, rounds: 3, seed: 42, train_limit: 60000, test_limit: 10000, attack: none}
+    config: {mode: optimized, proof_suite: lego_norm_v1, proof_crs_hash: null, rounds: 3, seed: 42, train_limit: 60000, test_limit: 10000, attack: none}

@@ -93,6 +93,55 @@ def test_whitelist_and_manifest_match_actual_zip_bytes(packager, project):
     assert str(project) not in json.dumps(manifest)
 
 
+def test_complete_deployment_inputs_are_packaged_with_their_actual_content(packager, project):
+    source_root = SCRIPT.parents[1]
+    required = ("requirements-gpu.txt", "scripts/setup_environment.py", "scripts/deployment_native.py",
+                "src/dgfl/crypto/gpu.py", "tests/crypto/test_gpu_detection.py",
+                "src/dgfl/experiments/hardware.py", "tests/integration/test_training_backends.py")
+    required += tuple(path.relative_to(source_root).as_posix()
+                      for path in sorted((source_root / "src/dgfl/crypto/cuda").glob("*.cuh")))
+    for relative in required:
+        target = project / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((source_root / relative).read_bytes())
+
+    output = project / "dist/submission"
+    manifest = packager.build_package(project, output)
+    assert not set(required).intersection(manifest["missing_optional_paths"])
+    with zipfile.ZipFile(output / "source.zip") as archive:
+        for relative in required:
+            assert archive.read(relative) == (source_root / relative).read_bytes()
+
+
+@pytest.mark.parametrize("suffix", [".cu", ".cuh"])
+def test_cuda_sources_are_text_scanned_before_packaging(packager, project, suffix):
+    target = project / "src/dgfl/crypto/cuda" / ("kernel" + suffix)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source = 'extern "C" __global__ void kernel() {}\n'
+    target.write_text(source, encoding="utf8")
+    output = project / "dist/submission"
+    packager.build_package(project, output)
+    with zipfile.ZipFile(output / "source.zip") as archive:
+        assert archive.read(target.relative_to(project).as_posix()) == target.read_bytes()
+
+    target.write_text(source + "// " + str(project / "private") + "\n", encoding="utf8")
+    with pytest.raises(ValueError, match="development path"):
+        packager.build_package(project, output)
+
+
+def test_frontend_source_checksum_is_packaged_and_text_scanned(packager, project):
+    stamp = project / "web/dist/source.sha256"
+    stamp.write_text(hashlib.sha256(b"frontend source fixture").hexdigest() + "\n", encoding="ascii")
+    output = project / "dist/submission"
+    packager.build_package(project, output)
+    with zipfile.ZipFile(output / "source.zip") as archive:
+        assert archive.read("web/dist/source.sha256") == stamp.read_bytes()
+
+    stamp.write_text(str(project / "private") + "\n", encoding="utf8")
+    with pytest.raises(ValueError, match="development path"):
+        packager.build_package(project, output)
+
+
 @pytest.mark.parametrize("required", ["README.md", "pyproject.toml", "src/dgfl", "docs/submission/design-report.md"])
 def test_missing_critical_input_fails_without_empty_package(packager, project, required):
     target = project / required

@@ -209,6 +209,41 @@ class FakeNvml:
         return 0
 
 
+@pytest.mark.parametrize("custom_paths", [False, True])
+@pytest.mark.parametrize("location", ["system", "driver"])
+def test_nvml_windows_paths_preserve_environment_priority_and_system_drive_fallback(
+        tmp_path, monkeypatch, custom_paths, location):
+    system_drive = tmp_path / "system-drive"
+    monkeypatch.setenv("SYSTEMDRIVE", str(system_drive))
+    monkeypatch.setattr(hardware, "sys", SimpleNamespace(platform="win32"))
+    windows = system_drive / "Windows"
+    program_files = system_drive / "Program Files"
+    if custom_paths:
+        default_library = windows / "System32/nvml.dll"
+        default_library.parent.mkdir(parents=True)
+        default_library.touch()
+        windows = tmp_path / "selected-windows"
+        program_files = tmp_path / "selected-program-files"
+        monkeypatch.setenv("SYSTEMROOT", str(windows))
+        monkeypatch.setenv("PROGRAMFILES", str(program_files))
+    else:
+        monkeypatch.delenv("SYSTEMROOT", raising=False)
+        monkeypatch.delenv("PROGRAMFILES", raising=False)
+    driver_library = program_files / "NVIDIA Corporation/NVSMI/nvml.dll"
+    driver_library.parent.mkdir(parents=True)
+    driver_library.touch()
+    expected = driver_library
+    if location == "system":
+        expected = windows / "System32/nvml.dll"
+        expected.parent.mkdir(parents=True, exist_ok=True)
+        expected.touch()
+    loaded = []
+    library = object()
+    monkeypatch.setattr(hardware.ct, "CDLL", lambda path: loaded.append(path) or library)
+    assert hardware._nvml_library() is library
+    assert loaded == [str(expected)]
+
+
 def test_nvml_units_clocks_utilization_and_throttle_are_recorded():
     library = FakeNvml()
     sampler = hardware.NvidiaGpu(library)

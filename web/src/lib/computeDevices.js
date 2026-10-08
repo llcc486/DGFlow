@@ -15,9 +15,9 @@ export function computeDeviceStatus(compute, connected) {
     ? '连接实验引擎后检查 GPU 密码计算能力。'
     : gpuAvailable
       ? ''
-      : ['initializing', 'failed'].includes(preparationState) && preparationReason
+      : ['initializing', 'failed', 'waiting', 'unavailable'].includes(preparationState) && preparationReason
         ? preparationReason
-        : gpu?.reason || 'GPU 密码内核尚未通过精确计算自检，请先检测并启用 GPU。'
+        : gpu?.reason || 'GPU 密码内核尚未通过自动精确计算自检；CPU 计算可用。'
   const operations = Array.isArray(gpu?.accelerated_operations)
     ? [...new Set(gpu.accelerated_operations)].map(key => OPERATION_LABELS[key] || key)
     : []
@@ -26,7 +26,8 @@ export function computeDeviceStatus(compute, connected) {
     gpuName: gpu?.name || 'GPU 尚未识别',
     gpuAvailable,
     gpuHardwareAvailable,
-    canPrepareGpu: gpuHardwareAvailable && !gpuAvailable && preparationState !== 'initializing',
+    canPrepareGpu: gpuHardwareAvailable && !gpuAvailable && preparationState !== 'initializing'
+      && gpu?.driver_available !== false && gpu?.compiler_available !== false,
     gpuReason: reason,
     preparationState,
     preparationReason,

@@ -8,10 +8,13 @@ evaluate the complete public G1 and GT equations and exact GT subgroup tests.
 from __future__ import annotations
 
 import copy
+import csv
 import ctypes as ct
 import hashlib
 import importlib.util
 import os
+import shutil
+import subprocess
 import threading
 import time
 from collections import OrderedDict
@@ -32,7 +35,10 @@ OPERATIONS = ['ec_batch', 'gt_exp_batch', 'gt_subgroup_batch']
 
 
 def _nvrtc_path():
-    spec = importlib.util.find_spec('nvidia.cuda_nvrtc')
+    try:
+        spec = importlib.util.find_spec('nvidia.cuda_nvrtc')
+    except (ImportError, ModuleNotFoundError, ValueError):
+        spec = None
     if spec is None or not spec.submodule_search_locations:
         raise GPUUnavailable('GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）')
     folder = Path(next(iter(spec.submodule_search_locations)))
@@ -56,6 +62,64 @@ def _bind(library, name, arguments):
     function.argtypes = arguments
     function.restype = ct.c_int
     return function
+
+
+def detect_gpu_hardware():
+    """Identify NVIDIA hardware without importing/installing CUDA Python packages.
+
+    ``available`` here describes hardware only. Cryptographic availability must
+    use compute_capabilities()/require_gpu(), including exact kernel self-tests.
+    No context, compiler, network request or package installer is used here.
+    """
+    failure = ''
+    try:
+        driver = _library('nvcuda.dll' if os.name == 'nt' else 'libcuda.so.1')
+        def call(name, arguments, *values):
+            code = _bind(driver, name, arguments)(*values)
+            if code:
+                raise GPUUnavailable(f'{name} 返回 CUDA 状态码 {code}')
+        call('cuInit', [ct.c_uint], 0)
+        count = ct.c_int()
+        call('cuDeviceGetCount', [ct.POINTER(ct.c_int)], ct.byref(count))
+        if count.value < 1:
+            raise GPUUnavailable('没有可用的 NVIDIA CUDA 显卡')
+        device = ct.c_int()
+        call('cuDeviceGet', [ct.POINTER(ct.c_int), ct.c_int], ct.byref(device), 0)
+        name = ct.create_string_buffer(256)
+        call('cuDeviceGetName', [ct.c_void_p, ct.c_int, ct.c_int], name, len(name), device)
+        total, version = ct.c_size_t(), ct.c_int()
+        call('cuDeviceTotalMem_v2', [ct.POINTER(ct.c_size_t), ct.c_int], ct.byref(total), device)
+        call('cuDriverGetVersion', [ct.POINTER(ct.c_int)], ct.byref(version))
+        return {'available': True, 'hardware_available': True, 'driver_available': True,
+                'name': name.value.decode('utf8', 'replace'), 'device_index': 0,
+                'memory_bytes': total.value, 'driver_version': version.value,
+                'detection_source': 'cuda_driver', 'reason': ''}
+    except (GPUUnavailable, OSError, AttributeError) as exc:
+        failure = str(exc)
+    executable = shutil.which('nvidia-smi')
+    if executable is None and os.name == 'nt':
+        program_files = Path(os.environ.get('PROGRAMFILES') or (
+            os.environ.get('SYSTEMDRIVE', 'C:') + '/Program Files'))
+        candidate = program_files/'NVIDIA Corporation'/'NVSMI'/'nvidia-smi.exe'
+        if candidate.is_file():
+            executable = str(candidate)
+    if executable is not None:
+        try:
+            options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+            answer = subprocess.run([executable, '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
+                                    capture_output=True, text=True, timeout=3, check=True, **options)
+            rows = list(csv.reader(answer.stdout.splitlines()))
+            if rows and len(rows[0]) == 2 and rows[0][0].strip():
+                return {'available': True, 'hardware_available': True, 'driver_available': False,
+                        'name': rows[0][0].strip(), 'device_index': 0,
+                        'memory_bytes': int(rows[0][1].strip()) * 1024**2,
+                        'detection_source': 'nvidia-smi',
+                        'reason': '已识别 NVIDIA 显卡，但 CUDA 驱动接口不可用：' + failure}
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pass
+    return {'available': False, 'hardware_available': False, 'driver_available': False,
+            'name': '', 'backend': 'cuda_nvrtc', 'detection_source': 'unavailable',
+            'reason': failure or '未检测到 NVIDIA CUDA 显卡；CPU 计算可用'}
 
 
 class CudaRuntime:
@@ -599,21 +663,29 @@ def compute_capabilities():
     cpu_name = system_info.cpu_name()
     if _runtime is not None:
         gpu = {**_runtime.info, 'hardware_available':True,
-               'available':_runtime.verified, 'verified':_runtime.verified}
+               'available':_runtime.verified, 'verified':_runtime.verified,
+               'driver_available':True, 'compiler_available':True}
         if not _runtime.verified:
-            gpu['reason']=gpu.get('reason') or '请在部署页检测并启用 GPU 密码后端'
+            gpu['reason']=gpu.get('reason') or 'CUDA 密码内核尚未通过自动自检；CPU 计算可用'
     elif _probe is not None:
         gpu = dict(_probe)
     else:
-        try:
-            gpu = CudaRuntime(compile_kernels=False).info
-        except (GPUUnavailable, ModuleNotFoundError, AttributeError) as exc:
-            gpu = {'available': False, 'name': '', 'backend': 'cuda_nvrtc',
-                   'reason': str(exc), 'accelerated_operations': [], 'verified': False}
+        hardware = detect_gpu_hardware()
+        compiler_available = False
+        reason = hardware['reason']
+        if hardware['driver_available']:
+            try:
+                _nvrtc_path()
+                compiler_available = True
+                reason = '正在等待 CUDA 密码内核自动自检；CPU 计算可用'
+            except GPUUnavailable as exc:
+                reason = str(exc) + '；请在部署阶段安装 gpu 依赖，CPU 计算可用'
+        gpu = {**hardware, 'available':False, 'backend':'cuda_nvrtc', 'verified':False,
+               'compiler_available':compiler_available, 'accelerated_operations':[], 'reason':reason}
         _probe = dict(gpu)
     if _runtime is None and gpu.get('available'):
         gpu={**gpu,'hardware_available':True,'available':False,
-             'reason':'请在部署页检测并启用 GPU 密码后端'}
+             'reason':'CUDA 密码内核尚未通过自动自检；CPU 计算可用'}
     return {'cpu': {'available': True, 'name': cpu_name, 'logical_processors': os.cpu_count()}, 'gpu': gpu}
 
 

@@ -13,10 +13,8 @@ Package it with the source using package_submission.py --include-offline.
 from __future__ import annotations
 
 import argparse
-from email.parser import Parser
 import hashlib
 import json
-from pathlib import Path, PurePosixPath
 import platform
 import shutil
 import subprocess
@@ -24,6 +22,8 @@ import sys
 import sysconfig
 import tempfile
 import zipfile
+from email.parser import Parser
+from pathlib import Path, PurePosixPath
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.tags import sys_tags
@@ -32,7 +32,7 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT/'src') not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT/'src'))
-from dgfl.training.data import MNIST_FILES, MNIST_SOURCE, PREPROCESSING, MAX_DOWNLOAD_BYTES, load_mnist
+from dgfl.training.data import MAX_DOWNLOAD_BYTES, MNIST_FILES, MNIST_SOURCE, PREPROCESSING, load_mnist
 
 MAX_PACKAGE_BYTES = 4 * 1024**3
 CHUNK_BYTES = 1024 * 1024
@@ -151,23 +151,30 @@ def _installation_text(native=None):
     instructions = '''Offline NumPy demonstration setup
 
 Use the same Python minor version and platform recorded in manifest.json.
-These wheels are not a cross-platform or CUDA bundle. A matching Python must
-already be installed. No node identities are distributed in this directory.
+These wheels cover only the NumPy/MNIST demonstration, not full deployment.
+Torch, CUDA/NVRTC, CIFAR-10 and the current native build are not included.
+A matching Python must already be installed. No node identities are distributed.
 
 From the extracted source project root on Windows:
   py -3.12 -m venv .venv
   .venv\\Scripts\\python -m pip install --no-index --find-links offline/wheelhouse -r offline/requirements-lock.txt
   .venv\\Scripts\\python -m pip install --no-index --no-build-isolation --no-deps -e .
   .venv\\Scripts\\python -c "import shutil; shutil.copytree('offline/data/mnist', 'data/mnist', dirs_exist_ok=True)"
-  powershell -File scripts/start_demo.ps1 -Offline
+  .venv\\Scripts\\python -m dgfl.cli prepare-data --offline
+  .venv\\Scripts\\python -m dgfl.cli demo
 
 On another supported platform, first prepare wheels on that platform, create
 .venv with its matching Python, use .venv/bin/python for the two offline pip
-commands and data copy, then run bash scripts/start_demo.sh --offline.
+commands and data copy, then run .venv/bin/python -m dgfl.cli prepare-data --offline
+and .venv/bin/python -m dgfl.cli demo. A prebuilt web/dist is required for the UI.
 
 Do not run plain pip install without --no-index when demonstrating offline.
-start_demo offline mode requires this prepared environment and local data;
-it does not install missing dependencies or download missing MNIST files.
+Use CPU/NumPy and MNIST in plain mode; this baseline does not generate proofs
+or require a CRS. New encrypted experiments require installed Lego parameters
+and the native backend.
+For complete deployment, run start_demo.ps1 -SetupOnly (or start_demo.sh
+--setup-only) online on the target platform before using start_demo -Offline.
+The full startup script deliberately rejects this incomplete base-only bundle.
 '''.replace('py -3.12', f'py -{sys.version_info.major}.{sys.version_info.minor}')
     if native is not None:
         instructions += ('\nOptional native GT extension (same Python/platform only):\n'

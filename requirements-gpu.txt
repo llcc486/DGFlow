@@ -1,0 +1,2 @@
+# Exact CUDA crypto uses NVRTC and the system NVIDIA driver, independently of Torch.
+nvidia-cuda-nvrtc-cu12>=12.9,<13

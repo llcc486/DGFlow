@@ -4,14 +4,15 @@ set -euo pipefail
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_root"
 offline=false
-if [[ "${1:-}" == '--offline' ]]; then
-    offline=true
+setup_only=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --offline) offline=true ;;
+        --setup-only) setup_only=true ;;
+        *) echo 'Usage: bash scripts/start_demo.sh [--offline] [--setup-only]' >&2; exit 2 ;;
+    esac
     shift
-fi
-if [[ $# -ne 0 ]]; then
-    echo 'Usage: bash scripts/start_demo.sh [--offline]' >&2
-    exit 2
-fi
+done
 runtime="${DGFL_RUNTIME:-$project_root/runtime}"
 client_count="${DGFL_CLIENT_COUNT:-}"
 authority_count="${DGFL_AUTHORITY_COUNT:-}"
@@ -45,7 +46,8 @@ else
 fi
 "$dgfl_python" -c 'import sys; assert sys.version_info >= (3,11), "Python 3.11 or newer is required"'
 lock_file="$project_root/requirements-lock.txt"
-fingerprint="$("$dgfl_python" -c 'import hashlib,pathlib,sys; print("".join(hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sys.argv[1:] if pathlib.Path(p).exists()))' "$project_root/pyproject.toml" "$lock_file")"
+# Bind the project stamp to this interpreter and venv; all stored fields are ASCII hashes.
+fingerprint="$("$dgfl_python" -c 'import hashlib,pathlib,sys; identity="\0".join(str(pathlib.Path(p).resolve()) for p in (sys.executable,sys.prefix)); print(hashlib.sha256(identity.encode("utf-8")).hexdigest()+"".join(hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sys.argv[1:] if pathlib.Path(p).exists()))' "$project_root/pyproject.toml" "$lock_file")"
 stamp_file="$environment_root/dgflow-install.sha256"
 installed_fingerprint=''
 if [[ -f "$stamp_file" ]]; then installed_fingerprint="$(cat "$stamp_file")"; fi
@@ -53,7 +55,7 @@ if ! $offline && [[ "$installed_fingerprint" != "$fingerprint" ]]; then
     echo 'First setup or changed dependencies: pip may access the network.'
     if [[ -f "$lock_file" ]]; then
         "$dgfl_python" -m pip install -r "$lock_file"
-        "$dgfl_python" -m pip install --no-deps -e "$project_root"
+        "$dgfl_python" -m pip install --no-build-isolation --no-deps -e "$project_root"
     else
         "$dgfl_python" -m pip install -e "$project_root"
     fi
@@ -64,7 +66,7 @@ if ! $offline; then
     mkdir -p "$environment_root"
     printf '%s\n' "$fingerprint" > "$stamp_file"
 fi
-data_directory="$project_root/data/mnist"
+data_directory="$("$dgfl_python" -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve().parent / "data" / "mnist")' "$runtime")"
 missing_data=false
 for archive in train-images-idx3-ubyte.gz train-labels-idx1-ubyte.gz t10k-images-idx3-ubyte.gz t10k-labels-idx1-ubyte.gz; do
     if [[ ! -f "$data_directory/raw/$archive" ]]; then missing_data=true; fi
@@ -78,9 +80,16 @@ if $missing_data; then
 else
     echo 'Verifying the existing local MNIST cache; no dataset download is needed.'
 fi
-prepare_arguments=(-m dgfl.cli prepare-data --data-dir "$data_directory")
-if $offline; then prepare_arguments+=(--offline); fi
-"$dgfl_python" "${prepare_arguments[@]}"
+setup_arguments=(-B "$project_root/scripts/setup_environment.py" --runtime "$runtime")
+if $offline; then setup_arguments+=(--offline); fi
+if [[ -n "${DGFL_MNIST_SOURCE:-}" ]]; then setup_arguments+=(--mnist-source "$DGFL_MNIST_SOURCE"); fi
+if [[ -n "${DGFL_CIFAR_SOURCE:-}" ]]; then setup_arguments+=(--cifar-source "$DGFL_CIFAR_SOURCE"); fi
+echo 'Preparing all runtime dependencies, both datasets and the frontend before opening the application.'
+"$dgfl_python" "${setup_arguments[@]}"
+if $setup_only; then
+    echo 'Deployment completed. Run this script with --offline to start without further downloads.'
+    exit 0
+fi
 demo_arguments=(-m dgfl.cli demo --runtime "$runtime")
 if [[ -n "$client_count" ]]; then demo_arguments+=(--client-count "$client_count"); fi
 if [[ -n "$authority_count" ]]; then demo_arguments+=(--authority-count "$authority_count"); fi

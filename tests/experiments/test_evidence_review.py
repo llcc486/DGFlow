@@ -114,9 +114,14 @@ def test_experiment_cli_forwards_cloud_strategy_and_pins_it_in_suite_hash(tmp_pa
     received=[]
 
     def request(base,path,payload=None):
+        if path=='/api/proof-parameters':
+            return {'available':True,'parameters':[{'suite':'lego_norm_v1','dimension':650,'bits':8,
+                                                  'crs_hash':'ab'*32}]}
         if path=='/api/runs':
             received.append(payload)
             assert payload['cloud_strategy']==strategy
+            assert payload['proof_suite']=='lego_norm_v1'
+            assert payload['proof_crs_hash']=='ab'*32
             return {'run_id':'cloud-run'}
         assert path=='/api/runs/cloud-run'
         return make_record('cloud-run',received[0])

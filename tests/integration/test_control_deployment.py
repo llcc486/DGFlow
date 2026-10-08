@@ -71,7 +71,7 @@ def test_busy_control_rejects_topology_data_and_new_runs(control_app,monkeypatch
         for endpoint in ('init','start'):
             assert client.post('/api/deployment/'+endpoint,json={'client_count':3}).status_code==409
         assert client.post('/api/data/prepare').status_code==409
-        if busy=='compute':assert client.post('/api/runs',json={}).status_code==409
+        if busy=='compute':assert client.post('/api/runs',json={'mode':'plain'}).status_code==409
 
 
 def test_run_count_defaults_and_malicious_count_bound(control_app,monkeypatch):
@@ -81,10 +81,11 @@ def test_run_count_defaults_and_malicious_count_bound(control_app,monkeypatch):
         received.append(config);return {'run_id':'mock','status':'queued'}
     monkeypatch.setattr(app.state.manager,'start',start)
     with TestClient(app) as client:
-        assert client.post('/api/runs',json={}).status_code==202
-        assert client.post('/api/runs',json={'client_count':3,'malicious_clients':3}).status_code==202
-        assert client.post('/api/runs',json={'client_count':3,'malicious_clients':4}).status_code==422
-        assert client.post('/api/runs',json={'client_count':3.0}).status_code==422
+        request={'proof_crs_hash':'ab'*32}
+        assert client.post('/api/runs',json=request).status_code==202
+        assert client.post('/api/runs',json={**request,'client_count':3,'malicious_clients':3}).status_code==202
+        assert client.post('/api/runs',json={**request,'client_count':3,'malicious_clients':4}).status_code==422
+        assert client.post('/api/runs',json={**request,'client_count':3.0}).status_code==422
     assert received[0]['client_count']==6
     assert received[1]['client_count']==3
 
@@ -156,7 +157,8 @@ def test_run_api_preserves_topology_and_can_test_a_cloud_threshold_failure(contr
     received=[]
     monkeypatch.setattr(control_app.state.manager,'start',lambda config:received.append(config) or {'run_id':'mock'})
     request={'client_count':100,'authority_count':12,'aggregator_count':8,
-             'authority_threshold':7,'aggregator_threshold':5,'offline_aggregators':8,'malicious_clients':100}
+             'authority_threshold':7,'aggregator_threshold':5,'offline_aggregators':8,'malicious_clients':100,
+             'proof_crs_hash':'ab'*32}
     with TestClient(control_app) as client:
         response=client.post('/api/runs',json=request)
         assert response.status_code==202,response.text

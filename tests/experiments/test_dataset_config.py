@@ -13,8 +13,8 @@ from dgfl.training.datasets import feature_count, load_dataset
 
 
 def test_run_config_preserves_mnist_default_and_accepts_explicit_cifar10():
-    assert RunConfig().dataset == 'mnist'
-    value = RunConfig(dataset='cifar10', grid=8)
+    assert RunConfig(proof_crs_hash='ab'*32).dataset == 'mnist'
+    value = RunConfig(dataset='cifar10', grid=8, proof_crs_hash='ab'*32)
     assert value.model_dump()['dataset'] == 'cifar10'
     assert feature_count(value.dataset, value.grid) == 192
     assert _model_geometry(1930, 'cifar10') == (192, 8)
@@ -28,26 +28,27 @@ def test_run_config_preserves_mnist_default_and_accepts_explicit_cifar10():
 @pytest.mark.parametrize('dataset', ['CIFAR-10', 'cifar100', '', None, 10, True])
 def test_unknown_dataset_is_rejected_before_execution(dataset):
     with pytest.raises(ValueError):
-        RunConfig(dataset=dataset)
+        RunConfig(dataset=dataset, proof_crs_hash='ab'*32)
     with pytest.raises(ValueError):
         check_wire_resources({'dataset': dataset, 'mode': 'plain'})
 
 
 @pytest.mark.parametrize('mode', ['plain', 'encrypted', 'dgflow', 'optimized'])
 def test_cifar10_model_dimension_limit_applies_before_any_training(mode):
-    assert RunConfig(dataset='cifar10', mode=mode, grid=25).grid == 25
+    proof = {'proof_crs_hash': None if mode == 'plain' else 'ab'*32}
+    assert RunConfig(dataset='cifar10', mode=mode, grid=25, **proof).grid == 25
     with pytest.raises(ValueError, match='20,000'):
-        RunConfig(dataset='cifar10', mode=mode, grid=26)
-    assert RunConfig(dataset='mnist', mode=mode, grid=28).grid == 28
+        RunConfig(dataset='cifar10', mode=mode, grid=26, **proof)
+    assert RunConfig(dataset='mnist', mode=mode, grid=28, **proof).grid == 28
     with pytest.raises(ValueError):
-        RunConfig(dataset='mnist', mode=mode, grid=29)
+        RunConfig(dataset='mnist', mode=mode, grid=29, **proof)
 
 
 def test_cifar10_limits_use_its_training_split_instead_of_mnist_size():
-    assert RunConfig(dataset='cifar10', train_limit=50000).train_limit == 50000
+    assert RunConfig(dataset='cifar10', train_limit=50000, proof_crs_hash='ab'*32).train_limit == 50000
     with pytest.raises(ValueError, match='50000'):
-        RunConfig(dataset='cifar10', train_limit=50001)
-    assert RunConfig(dataset='mnist', train_limit=60000).train_limit == 60000
+        RunConfig(dataset='cifar10', train_limit=50001, proof_crs_hash='ab'*32)
+    assert RunConfig(dataset='mnist', train_limit=60000, proof_crs_hash='ab'*32).train_limit == 60000
 
 
 def test_resource_lower_bounds_include_all_three_rgb_channels():
@@ -133,13 +134,45 @@ def test_prepare_cli_only_passes_explicit_mnist_options(tmp_path, monkeypatch, c
 
 @pytest.mark.parametrize('options', [
     ['--mnist-timeout', '30'], ['--mnist-retries', '0'],
-    ['--mnist-source', 'https://dataset.example/'], ['--offline'],
+    ['--mnist-source', 'https://dataset.example/'],
 ])
 def test_prepare_cli_rejects_mnist_options_for_cifar10_before_downloading(tmp_path, monkeypatch, capsys, options):
     monkeypatch.setattr(data, 'prepare_mnist', lambda *a, **k: pytest.fail('wrong dataset reached MNIST'))
     monkeypatch.setattr(cifar10, 'prepare_cifar10', lambda *a, **k: pytest.fail('unsupported options reached CIFAR'))
     assert cli.main(['prepare-data', '--dataset', 'cifar10', '--data-dir', str(tmp_path), *options]) == 1
     assert 'mnist' in capsys.readouterr().err.lower()
+    assert not (tmp_path / 'metadata.json').exists()
+
+
+@pytest.mark.parametrize('options, expected', [
+    (['--cifar-timeout', '90'], {'timeout': 90.0}),
+    (['--cifar-retries', '0'], {'retries': 0}),
+    (['--cifar-source', 'https://dataset.example/cifar'], {'source': 'https://dataset.example/cifar'}),
+    (['--offline'], {'offline': True}),
+    (['--cifar-timeout', '120', '--cifar-retries', '3', '--cifar-source', 'https://dataset.example/', '--offline'],
+     {'timeout': 120.0, 'retries': 3, 'source': 'https://dataset.example/', 'offline': True}),
+])
+def test_prepare_cli_passes_explicit_cifar_options_and_shared_offline(tmp_path, monkeypatch, capsys, options, expected):
+    calls = []
+    def prepare(path, **kwargs):
+        calls.append((path, kwargs))
+        return {'dataset': 'CIFAR-10', 'files': []}
+    monkeypatch.setattr(cifar10, 'prepare_cifar10', prepare)
+    monkeypatch.setattr(data, 'prepare_mnist', lambda *a, **k: pytest.fail('wrong dataset'))
+    assert cli.main(['prepare-data', '--dataset', 'cifar10', '--data-dir', str(tmp_path), *options]) == 0
+    assert calls == [(tmp_path, expected)]
+    assert json.loads((tmp_path / 'metadata.json').read_text('utf8')) == {'dataset': 'CIFAR-10', 'files': []}
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize('options', [
+    ['--cifar-timeout', '60'], ['--cifar-retries', '0'], ['--cifar-source', 'https://dataset.example/'],
+])
+def test_prepare_cli_rejects_cifar_options_for_mnist_before_downloading(tmp_path, monkeypatch, capsys, options):
+    monkeypatch.setattr(data, 'prepare_mnist', lambda *a, **k: pytest.fail('unsupported options reached MNIST'))
+    monkeypatch.setattr(cifar10, 'prepare_cifar10', lambda *a, **k: pytest.fail('wrong dataset reached CIFAR'))
+    assert cli.main(['prepare-data', '--data-dir', str(tmp_path), *options]) == 1
+    assert 'cifar' in capsys.readouterr().err.lower()
     assert not (tmp_path / 'metadata.json').exists()
 
 

@@ -9,17 +9,27 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import http.client
+import logging
+import math
 import tarfile
 import tempfile
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import zlib
-from numbers import Integral
+from numbers import Integral, Real
 from pathlib import Path
 
 import numpy as np
 
 CIFAR10_HOMEPAGE = "https://cave.cs.toronto.edu/kriz/cifar.html"
 CIFAR10_URL = "https://cave.cs.toronto.edu/kriz/cifar-10-binary.tar.gz"
+# The unchanged binary archive published in MindSpore's official tutorial:
+# https://www.mindspore.cn/tutorials/zh-CN/master/dataset/sampler.html
+CIFAR10_MIRROR = ("https://mindspore-website.obs.cn-north-4.myhuaweicloud.com/"
+                  "notebook/datasets/cifar-10-binary.tar.gz")
 CIFAR10_MD5 = "c32a1d4ab5d03f1284b67883e8d87530"
 ARCHIVE_NAME = "cifar-10-binary.tar.gz"
 BINARY_DIRECTORY = "cifar-10-batches-bin"
@@ -32,6 +42,7 @@ RECORDS_PER_READ = 32
 MAX_DOWNLOAD_BYTES = 180 * 1024 * 1024
 CLASS_NAMES = ("airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
 _AUXILIARY_LIMITS = {"batches.meta.txt": 4096, "readme.html": 64 * 1024}
+logger = logging.getLogger(__name__)
 
 
 def _grid(grid):
@@ -208,38 +219,86 @@ def _extract_archive(archive: Path, stage: Path) -> Path:
     return folder
 
 
-def _download_archive(raw: Path, destination: Path):
-    with tempfile.NamedTemporaryFile(dir=raw, prefix="cifar10-download-", suffix=".part", delete=False) as output:
-        temporary = Path(output.name)
-        try:
-            with urllib.request.urlopen(CIFAR10_URL, timeout=30) as response:
-                if hasattr(response, "geturl") and not response.geturl().startswith("https://"):
-                    raise ValueError("CIFAR-10 download redirected to non-HTTPS transport")
-                size = 0
-                while chunk := response.read(min(READ_BYTES, MAX_DOWNLOAD_BYTES - size + 1)):
-                    size += len(chunk)
-                    if size > MAX_DOWNLOAD_BYTES:
-                        raise ValueError("CIFAR-10 download exceeds allowed size")
-                    output.write(chunk)
-            output.close()
-            _checked_archive(temporary)
-            temporary.replace(destination)
-        finally:
-            output.close()
-            temporary.unlink(missing_ok=True)
+def _cifar10_sources(source: str | None) -> tuple[str, ...]:
+    if source is None:
+        return (CIFAR10_MIRROR, CIFAR10_URL)
+    if not isinstance(source, str):
+        raise ValueError("CIFAR-10 source must be an absolute HTTPS base URL")
+    parsed = urllib.parse.urlsplit(source)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
+            or parsed.password is not None or parsed.query or parsed.fragment):
+        raise ValueError("CIFAR-10 source must be an absolute HTTPS base URL without credentials, query or fragment")
+    if parsed.port is not None and not 1 <= parsed.port <= 65535:
+        raise ValueError("CIFAR-10 source port must be in [1, 65535]")
+    return (source.rstrip("/") + "/" + ARCHIVE_NAME,)
 
 
-def prepare_cifar10(data_dir: str | Path) -> dict:
+def _download_archive(raw: Path, destination: Path, sources: tuple[str, ...],
+                      timeout: float, retries: int) -> str:
+    last_error = None
+    for attempt in range(retries + 1):
+        if attempt:
+            time.sleep(min(2 ** (attempt - 1), 4))
+        for url in sources:
+            with tempfile.NamedTemporaryFile(dir=raw, prefix="cifar10-download-", suffix=".part", delete=False) as output:
+                temporary = Path(output.name)
+                try:
+                    try:
+                        with urllib.request.urlopen(url, timeout=timeout) as response:
+                            if hasattr(response, "geturl") and not response.geturl().startswith("https://"):
+                                raise ValueError("CIFAR-10 download redirected to non-HTTPS transport")
+                            size = 0
+                            while chunk := response.read(min(READ_BYTES, MAX_DOWNLOAD_BYTES - size + 1)):
+                                size += len(chunk)
+                                if size > MAX_DOWNLOAD_BYTES:
+                                    raise ValueError("CIFAR-10 download exceeds allowed size")
+                                output.write(chunk)
+                    except (OSError, urllib.error.URLError, http.client.HTTPException) as exc:
+                        last_error = exc
+                        logger.warning("CIFAR-10 download failed: %s (round %s/%s): %s",
+                                       url, attempt + 1, retries + 1, exc)
+                        continue
+                    output.close()
+                    _checked_archive(temporary)
+                    temporary.replace(destination)
+                    return url
+                finally:
+                    output.close()
+                    temporary.unlink(missing_ok=True)
+    raise OSError(
+        f"CIFAR-10 download failed after {len(sources) * (retries + 1)} attempts: {last_error}. "
+        "Existing cached files were preserved. Retry with --cifar-timeout 120, use --cifar-source "
+        "with an accessible HTTPS mirror, or copy cifar-10-binary.tar.gz into data-dir/raw "
+        "and run prepare-data --dataset cifar10 --offline."
+    ) from last_error
+
+
+def prepare_cifar10(data_dir: str | Path, *, timeout: float = 60, retries: int = 2,
+                    source: str | None = None, offline: bool = False) -> dict:
     """Explicitly download, verify, and safely unpack the official binary archive.
 
     Existing invalid caches are rejected, not overwritten. Extracted cache files
     are compared to a fresh bounded extraction of the verified archive.
+    Network failures try the mirror then the original publisher in each round;
+    retries counts additional rounds and timeout bounds each socket operation.
+    A custom HTTPS base URL replaces both defaults. Offline preparation requires
+    the original archive, verifies its checksum and can extract it locally.
     """
+    if (isinstance(timeout, bool) or not isinstance(timeout, Real)
+            or not math.isfinite(timeout) or not 1 <= timeout <= 300):
+        raise ValueError("CIFAR-10 timeout must be a finite number in [1, 300] seconds")
+    if isinstance(retries, bool) or not isinstance(retries, Integral) or not 0 <= retries <= 5:
+        raise ValueError("CIFAR-10 retries must be an integer in [0, 5]")
+    sources = _cifar10_sources(source)
     raw = Path(data_dir) / "raw"
-    raw.mkdir(parents=True, exist_ok=True)
     archive = raw / ARCHIVE_NAME
+    url = sources[0]
     if not archive.exists() and not archive.is_symlink():
-        _download_archive(raw, archive)
+        if offline:
+            raise FileNotFoundError("Offline CIFAR-10 cache is missing: " + ARCHIVE_NAME
+                                    + ". Copy the original binary archive into " + str(raw))
+        raw.mkdir(parents=True, exist_ok=True)
+        url = _download_archive(raw, archive, sources, timeout, retries)
     archive_metadata = _checked_archive(archive)
     destination = raw / BINARY_DIRECTORY
     with tempfile.TemporaryDirectory(dir=raw, prefix="cifar10-prepare-") as stage:
@@ -252,10 +311,11 @@ def prepare_cifar10(data_dir: str | Path) -> dict:
             extracted.replace(destination)
     from dgfl.training.datasets import preprocessing_description
 
-    return {"dataset": "CIFAR-10", "source": CIFAR10_URL, "homepage": CIFAR10_HOMEPAGE,
+    return {"dataset": "CIFAR-10", "source": CIFAR10_URL, "download_sources": list(sources),
+            "homepage": CIFAR10_HOMEPAGE,
             "format": "official binary; one uint8 label followed by 3072 RGB CHW uint8 pixels",
             "preprocessing": preprocessing_description("cifar10"),
-            "files": [{"path": f"raw/{ARCHIVE_NAME}", "url": CIFAR10_URL, **archive_metadata},
+            "files": [{"path": f"raw/{ARCHIVE_NAME}", "url": url, **archive_metadata},
                       *({"path": f"raw/{BINARY_DIRECTORY}/{name}", **value}
                         for name, value in sorted(files.items()))]}
 

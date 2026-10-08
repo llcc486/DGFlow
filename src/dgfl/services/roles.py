@@ -114,7 +114,13 @@ def _proof_policy(value):
     settings={k:value.get(k,default) for k,default in _PROOF_DEFAULTS.items()}
     if value.get('proof_crs_hash') is not None:
         settings['proof_crs_hash']=value['proof_crs_hash']
-    p.proof_settings(settings)
+    if value.get('mode')=='plain' and settings['proof_suite']==_LEGO_SUITE:
+        if 'proof_crs_hash' in settings:
+            raise ValueError('plain task policy does not use a proof CRS')
+        if type(settings['proof_block_size']) is not int or not 1<=settings['proof_block_size']<=1024:
+            raise ValueError('unsupported proof block size')
+    else:
+        p.proof_settings(settings)
     if settings['compute_device'] not in ('cpu','gpu'):
         raise ValueError('invalid compute device policy')
     if settings['verification'] not in ('deterministic','randomized'):
@@ -129,7 +135,10 @@ def _proof_policy(value):
 
 
 def _matches_proof_policy(ctx,policy):
-    settings=_proof_policy(policy); suite,block_size=p.proof_settings(ctx)
+    settings=_proof_policy(policy)
+    if policy.get('mode')=='plain' and settings['proof_suite']==_LEGO_SUITE:
+        return all(ctx.get(name) is None for name in ('proof_suite','proof_crs_hash','proof_block_size'))
+    suite,block_size=p.proof_settings(ctx)
     if suite==_LEGO_SUITE:
         return suite==settings['proof_suite'] and ctx.get('proof_crs_hash')==settings.get('proof_crs_hash')
     return suite==settings['proof_suite'] and (suite=='legacy' or block_size==settings['proof_block_size'])
@@ -233,8 +242,6 @@ def _policy(value):
         _model_geometry(value['dimension'],value['dataset'])
     settings=_proof_policy(value)
     screening_settings(value)
-    if settings['proof_suite']==_LEGO_SUITE and value['mode']=='plain':
-        raise ValueError('Lego proof suite requires a secure task policy')
     if settings['compute_device']=='gpu' and value['mode']=='plain':
         raise ValueError('GPU mode requires an encrypted task policy')
     members=value['members']
@@ -437,7 +444,7 @@ class RoleWorker:
         dataset=policy.get('dataset','mnist')
         _features,grid=_model_geometry(policy['dimension'],dataset)
         parameters_extra={}
-        if policy.get('proof_suite')==_LEGO_SUITE:
+        if policy.get('proof_suite')==_LEGO_SUITE and policy['mode']!='plain':
             start=time.perf_counter()
             _,_,evidence=self._registry().load_prover(policy['proof_crs_hash'],policy['dimension'],policy['bits'],workers=4)
             parameters_extra={'proof_parameters_load_s':time.perf_counter()-start,'proof_parameters':evidence}
@@ -872,7 +879,7 @@ class RoleWorker:
                 or any(type(x) is not int or not -offset<=x<offset for x in reference)):
             raise ValueError('public model mismatch')
         proof_options={}; parameters_extra={}
-        if policy.get('proof_suite')==_LEGO_SUITE:
+        if policy.get('proof_suite')==_LEGO_SUITE and mode!='plain':
             start=time.perf_counter()
             prover,parameters,evidence=self._registry().load_prover(policy['proof_crs_hash'],d,ctx['bits'],workers=4)
             parameters_extra={'proof_parameters_load_s':time.perf_counter()-start,'proof_parameters':evidence}

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT_FILES=('.gitignore','README.md','SOURCE-PACKAGE.md','THIRD_PARTY_NOTICES.md',
-            'pyproject.toml','requirements-lock.txt','requirements-torch.txt','source-history.bundle')
+            'pyproject.toml','requirements-lock.txt','requirements-torch.txt','requirements-gpu.txt','source-history.bundle')
 TREES=('.github','configs','docs','src','tests','scripts','web','offline')
 NATIVE_FILES=('Cargo.toml','Cargo.lock','pyproject.toml','src/lib.rs','src/lego.rs','src/sigma.rs',
               'src/linked.rs','src/aggregate.rs','src/batch.rs')

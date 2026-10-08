@@ -109,10 +109,11 @@ def test_streamed_json_is_preserved_for_workload_parser(tmp_path,monkeypatch):
     received=[]
     monkeypatch.setattr(app.state.manager,'start',lambda config:received.append(config) or {'run_id':'parsed'})
     with TestClient(app,base_url='http://localhost:8765') as client:
-        response=client.post('/api/runs',content=iter([b'{"rounds":',b'1}']),
+        response=client.post('/api/runs',content=iter([b'{"rounds":',b'1,"mode":"plain"}']),
                              headers={'Content-Type':'application/json','Origin':'http://localhost:8765'})
     assert response.status_code==202
     assert received[0]['rounds']==1
+    assert received[0]['mode']=='plain'
 
 
 @pytest.mark.parametrize('length',[b'32769',b'-1',b'invalid',b'9'*5000])
@@ -140,14 +141,15 @@ def test_duplicate_content_lengths_are_rejected_before_stop(stop_app):
 ])
 def test_robustness_parameters_reject_invalid_configuration(config):
     with pytest.raises(ValueError):
-        control.RunConfig(**config)
+        control.RunConfig(proof_crs_hash='ab'*32,**config)
 
 
 def test_explicit_robustness_parameters_reach_manager(tmp_path,monkeypatch):
     app=control.create_control_app(tmp_path)
     received=[]
     monkeypatch.setattr(app.state.manager,'start',lambda config:received.append(config) or {'run_id':'robust'})
-    config={'min_cosine':0.3,'max_norm_squared':1000,'max_norm_ratio':1.5,'batch_strategy':'fixed'}
+    config={'min_cosine':0.3,'max_norm_squared':1000,'max_norm_ratio':1.5,'batch_strategy':'fixed',
+            'proof_crs_hash':'ab'*32}
     with TestClient(app) as client:
         response=client.post('/api/runs',json=config)
     assert response.status_code==202

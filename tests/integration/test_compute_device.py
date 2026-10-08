@@ -91,11 +91,14 @@ def install_cluster(runtime, monkeypatch, hardware, *, missing=None, offline=Non
     {'compute_device': 'gpu', 'mode': 'plain'},
 ])
 def test_invalid_device_combinations_are_rejected_before_task_creation(tmp_path, monkeypatch, hardware, config):
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     calls = []
     monkeypatch.setattr(app.state.manager, 'start', lambda value: calls.append(value))
     with TestClient(app) as client:
-        response = client.post('/api/runs', json=config)
+        request = dict(config)
+        if request.get('mode') != 'plain':
+            request['proof_crs_hash'] = 'ab'*32
+        response = client.post('/api/runs', json=request)
         assert response.status_code == 422
         assert client.get('/api/runs').json() == {'runs': []}
     assert calls == []
@@ -103,15 +106,17 @@ def test_invalid_device_combinations_are_rejected_before_task_creation(tmp_path,
 
 @pytest.mark.parametrize('device', ['cpu', 'gpu'])
 def test_api_keeps_crypto_device_separate_from_training_backend(tmp_path, monkeypatch, hardware, device):
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     received = []
     monkeypatch.setattr(app.state.manager, 'start',
                         lambda config: received.append(config) or {'run_id': 'test-device', 'status': 'queued'})
     with TestClient(app) as client:
-        response = client.post('/api/runs', json={'compute_device': device, 'mode': 'dgflow', 'backend': 'numpy'})
+        response = client.post('/api/runs', json={'compute_device': device, 'mode': 'dgflow', 'backend': 'numpy',
+                                                 'proof_crs_hash': 'ab'*32})
     assert response.status_code == 202
     assert received[0]['compute_device'] == device
     assert received[0]['backend'] == 'numpy'
+    assert received[0]['proof_crs_hash'] == 'ab'*32
 
 
 @pytest.mark.parametrize('failure', ['missing_capability', 'offline', 'missing_authority', 'unverified'])
@@ -121,7 +126,7 @@ def test_status_disables_gpu_when_any_authority_cannot_use_it(tmp_path, monkeypa
                     offline='authority2' if failure == 'offline' else None,
                     unverified='authority2' if failure == 'unverified' else None,
                     authorities=2 if failure == 'missing_authority' else 3)
-    with TestClient(control.create_control_app(tmp_path)) as client:
+    with TestClient(control.create_control_app(tmp_path, auto_prepare_compute=False)) as client:
         response = client.get('/api/status')
     assert response.status_code == 200
     compute = response.json()['capabilities']['compute']
@@ -133,7 +138,7 @@ def test_status_disables_gpu_when_any_authority_cannot_use_it(tmp_path, monkeypa
 
 def test_status_exposes_real_gpu_scope_when_required_nodes_support_it(tmp_path, monkeypatch, hardware):
     install_cluster(tmp_path, monkeypatch, hardware)
-    with TestClient(control.create_control_app(tmp_path)) as client:
+    with TestClient(control.create_control_app(tmp_path, auto_prepare_compute=False)) as client:
         status = client.get('/api/status').json()
     compute = status['capabilities']['compute']
     assert compute['gpu']['available'] is True
@@ -144,9 +149,9 @@ def test_status_exposes_real_gpu_scope_when_required_nodes_support_it(tmp_path, 
 
 def test_unavailable_coordinator_gpu_rejects_submission_without_creating_a_record(tmp_path, hardware):
     hardware['gpu'].update(available=False, reason='Test CUDA unavailable')
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     with TestClient(app) as client:
-        response = client.post('/api/runs', json={'compute_device': 'gpu'})
+        response = client.post('/api/runs', json={'compute_device': 'gpu', 'proof_crs_hash': 'ab'*32})
         assert response.status_code == 409
         assert 'Test CUDA unavailable' in response.json()['detail']
         assert client.get('/api/runs').json() == {'runs': []}
@@ -155,14 +160,18 @@ def test_unavailable_coordinator_gpu_rejects_submission_without_creating_a_recor
 
 
 def test_unavailable_authority_gpu_rejects_submission_without_creating_a_record(tmp_path, monkeypatch, hardware):
+    from dgfl.crypto.lego_registry import Registry
+
     install_cluster(tmp_path, monkeypatch, hardware, missing='authority2')
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     # Do not execute a real experiment if a regression erroneously queues one.
     monkeypatch.setattr(app.state.manager, '_run', lambda record: None)
+    monkeypatch.setattr(Registry, 'describe', lambda *args: pytest.fail('GPU preflight must precede CRS loading'))
     with TestClient(app) as client:
         assert client.get('/api/status').json()['capabilities']['compute']['gpu']['available'] is False
-        response = client.post('/api/runs', json={'compute_device': 'gpu'})
+        response = client.post('/api/runs', json={'compute_device': 'gpu', 'proof_crs_hash': 'ab'*32})
         assert response.status_code == 409
+        assert 'authority2' in response.json()['detail'] and 'GPU' in response.json()['detail']
         assert client.get('/api/runs').json() == {'runs': []}
     assert app.state.manager.active is None
     assert list(tmp_path.glob('results/*/result.json')) == []
@@ -171,7 +180,7 @@ def test_unavailable_authority_gpu_rejects_submission_without_creating_a_record(
 @pytest.mark.parametrize('explicit', [False, True])
 def test_cpu_default_and_explicit_selection_do_not_probe_or_initialize_cuda(tmp_path, monkeypatch, hardware, explicit):
     install_cluster(tmp_path, monkeypatch, hardware)
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     ran = threading.Event()
     monkeypatch.setattr(app.state.manager, '_run', lambda record: ran.set())
 
@@ -180,12 +189,17 @@ def test_cpu_default_and_explicit_selection_do_not_probe_or_initialize_cuda(tmp_
 
     monkeypatch.setattr(gpu, 'compute_capabilities', forbidden_probe)
     with TestClient(app) as client:
-        response = client.post('/api/runs', json={'compute_device': 'cpu'} if explicit else {})
+        request = {'mode': 'plain'}
+        if explicit:
+            request['compute_device'] = 'cpu'
+        response = client.post('/api/runs', json=request)
         assert response.status_code == 202
         record = client.get(f"/api/runs/{response.json()['run_id']}").json()
     assert ran.wait(1)
     assert record['config']['compute_device'] == 'cpu'
     assert record['config']['backend'] == 'numpy'
+    assert record['config']['mode'] == 'plain'
+    assert record['evidence']['proof'] == 'none (plain baseline)'
     assert record['evidence']['compute'] == {'requested': 'cpu', 'resolved': 'cpu'}
 
 
@@ -201,7 +215,7 @@ def wait_for_preparation(app, expected):
 def test_gpu_prepare_rejects_missing_hardware_before_cuda_calls(tmp_path, hardware):
     hardware['gpu'].update(hardware_available=False, available=False, verified=False,
                            reason='Test CUDA hardware missing')
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     with TestClient(app) as client:
         response = client.post('/api/compute/prepare', json={})
     assert response.status_code == 409
@@ -211,7 +225,7 @@ def test_gpu_prepare_rejects_missing_hardware_before_cuda_calls(tmp_path, hardwa
 
 
 def test_gpu_prepare_rejects_active_run_before_cuda_calls(tmp_path, hardware):
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     app.state.manager.active = 'existing-task'
     with TestClient(app) as client:
         response = client.post('/api/compute/prepare', json={})
@@ -230,7 +244,7 @@ def test_gpu_prepare_verifies_coordinator_and_all_three_authorities(tmp_path, mo
         return deepcopy(hardware['gpu'])
 
     monkeypatch.setattr(gpu, 'require_gpu', prepare_local)
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     with TestClient(app) as client:
         response = client.post('/api/compute/prepare', json={})
         assert response.status_code == 202
@@ -253,7 +267,7 @@ def test_gpu_prepare_reports_authority_selftest_failure_without_creating_a_run(t
         return deepcopy(hardware['gpu'])
 
     monkeypatch.setattr(gpu, 'require_gpu', prepare_local)
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     with TestClient(app) as client:
         assert client.post('/api/compute/prepare', json={}).status_code == 202
         wait_for_preparation(app, 'failed')
@@ -281,7 +295,7 @@ def test_repeated_gpu_prepare_requests_share_one_background_initialization(tmp_p
         return deepcopy(hardware['gpu'])
 
     monkeypatch.setattr(gpu, 'require_gpu', prepare_local)
-    app = control.create_control_app(tmp_path)
+    app = control.create_control_app(tmp_path, auto_prepare_compute=False)
     try:
         with TestClient(app) as client:
             first = client.post('/api/compute/prepare', json={})

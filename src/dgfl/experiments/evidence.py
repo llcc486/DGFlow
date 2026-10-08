@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def validate_suite(value, *, normalize=True):
-    from dgfl.services.control import RunConfig
+    from dgfl.services.control import ArchivedRunConfig as RunConfig
     if set(value)!={'cases'} or not value['cases']: raise ValueError('suite requires nonempty cases')
     cases=[]; seen=set()
     for case in value['cases']:
@@ -31,7 +31,7 @@ def validate_record(record, requested, run_id, *, resolved_config=None):
     separately so a later poll or resume cannot silently change that deployment.
     """
     from dgfl.crypto.backend import digest
-    from dgfl.services.control import RunConfig
+    from dgfl.services.control import ArchivedRunConfig as RunConfig
     from dgfl.topology import TOPOLOGY_FIELDS, client_authorities, validate_topology
 
     validate_run_id(run_id)
@@ -146,7 +146,8 @@ def export_records(records,output):
     summary=json.dumps(rows,ensure_ascii=False,indent=2,allow_nan=False)
     stream=io.StringIO(newline='')
     if rows:
-        writer=csv.DictWriter(stream,fieldnames=list(rows[0])); writer.writeheader()
+        fields=list(dict.fromkeys(key for row in rows for key in row))
+        writer=csv.DictWriter(stream,fieldnames=fields); writer.writeheader()
         writer.writerows({k:json.dumps(v,ensure_ascii=False) if isinstance(v,(list,dict)) else v for k,v in row.items()} for row in rows)
     # Publish complete per-run evidence first; summaries are derived views.
     for path,value in files: _atomic_text(path,value)

@@ -7,7 +7,10 @@ param(
     [ValidateRange(2, 32)][Nullable[int]]$AuthorityThreshold = $null,
     [ValidateRange(2, 32)][Nullable[int]]$AggregatorThreshold = $null,
     [ValidateSet('local', 'A', 'B', 'C')][string]$Machine = '',
-    [switch]$Offline
+    [switch]$Offline,
+    [switch]$SetupOnly,
+    [string]$MnistSource = '',
+    [string]$CifarSource = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,9 +25,16 @@ function Invoke-DgflPython {
 }
 
 function Get-DgflHash {
-    param([string]$Path)
+    param([string]$Path, [string]$Text)
     $Algorithm = [System.Security.Cryptography.SHA256]::Create()
-    try { return [BitConverter]::ToString($Algorithm.ComputeHash([System.IO.File]::ReadAllBytes($Path))).Replace('-', '') }
+    try {
+        [byte[]]$Bytes = if ($PSBoundParameters.ContainsKey('Text')) {
+            [System.Text.Encoding]::UTF8.GetBytes($Text)
+        } else {
+            [System.IO.File]::ReadAllBytes($Path)
+        }
+        return [BitConverter]::ToString($Algorithm.ComputeHash($Bytes)).Replace('-', '')
+    }
     finally { $Algorithm.Dispose() }
 }
 
@@ -46,18 +56,21 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Virtual environment creation failed.' }
         }
     }
-    Invoke-DgflPython -Arguments @('-c', 'import sys; assert sys.version_info >= (3,11), "Python 3.11 or newer is required"')
+    Invoke-DgflPython -Arguments @('-c', 'import sys; assert sys.version_info >= (3,11), ''Python 3.11 or newer is required''')
     $ProjectFile = Join-Path $ProjectRoot 'pyproject.toml'
     $LockFile = Join-Path $ProjectRoot 'requirements-lock.txt'
     $Fingerprint = Get-DgflHash -Path $ProjectFile
     if (Test-Path -LiteralPath $LockFile) { $Fingerprint += Get-DgflHash -Path $LockFile }
+    # A project stamp must not stand in for installing another selected environment.
+    # Hash UTF-8 identity bytes so the stamp remains ASCII even with a Chinese path.
+    $Fingerprint += Get-DgflHash -Text $script:DgflPython
     $StampFile = Join-Path $EnvironmentRoot 'dgflow-install.sha256'
     $InstalledFingerprint = if (Test-Path -LiteralPath $StampFile) { (Get-Content -LiteralPath $StampFile -Raw).Trim() } else { '' }
     if (-not $Offline -and $InstalledFingerprint -ne $Fingerprint) {
         Write-Host 'First setup or changed dependencies: pip may access the network.'
         if (Test-Path -LiteralPath $LockFile) {
             Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '-r', $LockFile)
-            Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '--no-deps', '-e', $ProjectRoot)
+            Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '--no-build-isolation', '--no-deps', '-e', $ProjectRoot)
         } else {
             Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '-e', $ProjectRoot)
         }
@@ -69,7 +82,9 @@ try {
         Set-Content -LiteralPath $StampFile -Value $Fingerprint -Encoding Ascii
     }
 
-    $DataDirectory = Join-Path $ProjectRoot 'data/mnist'
+    # Match the helper and roles, including relative paths and linked runtime parents.
+    # JSON keeps the probe's stdout ASCII when the resulting path contains Chinese.
+    $DataDirectory = Invoke-DgflPython -Arguments @('-c', 'import json,pathlib,sys; print(json.dumps(str(pathlib.Path(sys.argv[1]).resolve().parent / ''data'' / ''mnist'')))', $Runtime) | ConvertFrom-Json
     $Archives = @('train-images-idx3-ubyte.gz', 'train-labels-idx1-ubyte.gz', 't10k-images-idx3-ubyte.gz', 't10k-labels-idx1-ubyte.gz')
     $MissingData = @($Archives | Where-Object { -not (Test-Path -LiteralPath (Join-Path $DataDirectory "raw/$_")) })
     if ($MissingData.Count -gt 0) {
@@ -78,9 +93,16 @@ try {
     } else {
         Write-Host 'Verifying the existing local MNIST cache; no dataset download is needed.'
     }
-    $PrepareArguments = @('-m', 'dgfl.cli', 'prepare-data', '--data-dir', $DataDirectory)
-    if ($Offline) { $PrepareArguments += '--offline' }
-    Invoke-DgflPython -Arguments $PrepareArguments
+    $SetupArguments = @('-B', (Join-Path $PSScriptRoot 'setup_environment.py'), '--runtime', $Runtime)
+    if ($Offline) { $SetupArguments += '--offline' }
+    if ($MnistSource) { $SetupArguments += @('--mnist-source', $MnistSource) }
+    if ($CifarSource) { $SetupArguments += @('--cifar-source', $CifarSource) }
+    Write-Host 'Preparing all runtime dependencies, both datasets and the frontend before opening the application.'
+    Invoke-DgflPython -Arguments $SetupArguments
+    if ($SetupOnly) {
+        Write-Host 'Deployment completed. Run this script with -Offline to start without further downloads.'
+        exit 0
+    }
     $DemoArguments = @('-m', 'dgfl.cli', 'demo', '--runtime', $Runtime)
     if ($null -ne $ClientCount) { $DemoArguments += @('--client-count', [string]$ClientCount) }
     if ($null -ne $AuthorityCount) { $DemoArguments += @('--authority-count', [string]$AuthorityCount) }

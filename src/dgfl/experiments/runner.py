@@ -362,6 +362,9 @@ class RunManager:
 
     def start(self,config):
         config=dict(config)
+        config.setdefault('proof_suite','lego_norm_v1')
+        if config['proof_suite']!='lego_norm_v1':
+            raise ValueError('新实验仅支持 LegoGroth16（lego_norm_v1）证明方案')
         config.setdefault('grid',8)
         config.setdefault('dataset','mnist')
         config['cloud_strategy']=cloud_strategy_settings(config)
@@ -422,10 +425,9 @@ class RunManager:
                         raise ValueError('以下授权节点未通过 GPU 自检，任务未创建：'+', '.join(unsupported))
                 finally:
                     rpc.close()
-            suite=config.get('proof_suite','legacy')
+            suite=config['proof_suite']
             crs_evidence=None
-            if suite=='lego_norm_v1':
-                if config['mode']=='plain': raise ValueError('Lego 证明需要加密实验模式')
+            if config['mode']!='plain':
                 from dgfl.crypto.lego_registry import Registry, available
                 crs_hash=config.get('proof_crs_hash')
                 if not isinstance(crs_hash,str) or re.fullmatch(r'[0-9a-fA-F]{64}',crs_hash) is None:
@@ -438,7 +440,7 @@ class RunManager:
                 except OSError as exc:
                     raise ValueError('未安装匹配的 Lego 证明参数，任务未创建') from exc
             elif config.pop('proof_crs_hash',None) is not None:
-                raise ValueError('仅 Lego 证明方案可以指定 CRS 摘要')
+                raise ValueError('明文基线不使用证明或 CRS 摘要')
             run_id=uuid.uuid4().hex
             record={'run_id':run_id,'status':'queued','config':dict(config),'created_at':utc(),'current_round':0,
                     'rounds':[],'events':[],'error':None,'summary':{},'evidence':{
@@ -446,7 +448,7 @@ class RunManager:
                         'dataset':config['dataset'],
                         'preprocessing':preprocessing_description(config['dataset'],config['grid']),
                         'crypto_backend':'BLS12-381 / py-arkworks-bls12381 wrapper + optional dgfl-native (locked dependencies)',
-                        'proof':proof_description(config.get('proof_suite','legacy')),
+                        'proof':proof_description(suite) if config['mode']!='plain' else 'none (plain baseline)',
                         'wire_format':'binary-v2: raw curve points, chunked above 24 MiB, hash domain revised',
                         'wire_measurement':'application request + response bytes, excluding TLS/HTTP framing',
                         'training_backend':config.get('backend','numpy'),
@@ -455,7 +457,7 @@ class RunManager:
                         'cloud_strategy':{'requested':config['cloud_strategy'],'resolved':None},
                         'wire_resources':resource_checks,
                         'proof_settings':{name:config.get(name,default) for name,default in
-                                          (('proof_suite','legacy'),('verification','deterministic'),
+                                          (('proof_suite','lego_norm_v1'),('verification','deterministic'),
                                            ('verification_workers',1),('verification_threads',2),('proof_block_size',128))},
                         'implementation':implementation_evidence()}}
             if crs_evidence is not None:
@@ -633,7 +635,7 @@ class RunManager:
                     'compute_device':cfg.get('compute_device','cpu'),
                     'proof_block_size':cfg.get('proof_block_size',128),**screening,**topology}
             record['evidence']['screening']=screening
-            if policy['proof_suite']=='lego_norm_v1':
+            if policy['proof_suite']=='lego_norm_v1' and cfg['mode']!='plain':
                 from dgfl.crypto.lego_registry import Registry, available
                 if not available(): raise ValueError('当前原生扩展缺少 Lego 能力')
                 policy.pop('proof_block_size')
@@ -641,7 +643,7 @@ class RunManager:
                 record['evidence']['proof_parameters']=Registry(self.runtime).describe(cfg['proof_crs_hash'],dimension,bits)
             record['evidence']['proof_settings']={name:policy[name] for name in
                                                  ('proof_suite','verification','verification_workers','proof_block_size','proof_crs_hash') if name in policy}
-            record['evidence']['proof']=proof_description(policy['proof_suite'])
+            record['evidence']['proof']=proof_description(policy['proof_suite']) if cfg['mode']!='plain' else 'none (plain baseline)'
             data_cfg={'task_id':record['run_id'],'train_limit':cfg['train_limit'],'seed':cfg['seed'],
                       'non_iid':cfg['non_iid'],'policy':policy}
             partitions=many([(cid,'prepare_data',data_cfg) for cid in active_clients])
@@ -666,9 +668,9 @@ class RunManager:
                 times={}
                 ctx={'task_id':record['run_id'],'round_id':round_id,'key_epoch':epoch,'model_hash':b.digest(reference),
                      'bits':bits,'scale':scale,'dimension':dimension,'dataset':cfg['dataset'],**topology}
-                if policy['proof_suite']=='lego_norm_v1':
+                if policy['proof_suite']=='lego_norm_v1' and cfg['mode']!='plain':
                     ctx.update(proof_suite=policy['proof_suite'],proof_crs_hash=policy['proof_crs_hash'])
-                elif policy['proof_suite']!='legacy':
+                elif policy['proof_suite']!='legacy' and cfg['mode']!='plain':
                     ctx.update(proof_suite=policy['proof_suite'],proof_block_size=policy['proof_block_size'])
                 key_messages={cid:[] for cid in members}
                 if cfg['mode']!='plain':

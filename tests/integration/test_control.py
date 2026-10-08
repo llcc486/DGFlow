@@ -11,6 +11,7 @@ def test_control_rejects_invalid_workload_before_starting(tmp_path):
         assert state['active_run_id'] is None
         assert state['dataset_ready'] is False
         assert state['capabilities']['cloud_strategies']==['auto','threshold','all']
+        assert state['capabilities']['proof_suites']==['lego_norm_v1']
         assert client.post('/api/runs',json={'rounds':1000}).status_code==422
         assert client.post('/api/runs',json={'malicious_clients':10}).status_code==422
         assert client.post('/api/runs',json={'mode':'pretend-encrypted'}).status_code==422
@@ -23,7 +24,8 @@ def test_control_rejects_invalid_workload_before_starting(tmp_path):
         assert client.post('/api/runs',json={'proof_block_size':1025}).status_code==422
         assert client.post('/api/runs',json={'proof_suite':'lego_norm_v1'}).status_code==422
         assert client.post('/api/runs',json={'proof_suite':'lego_norm_v1','proof_crs_hash':'bad'}).status_code==422
-        assert client.post('/api/runs',json={'proof_crs_hash':'ab'*32}).status_code==422
+        for old_suite in ('legacy','compact_range_v1','compact_norm_v1'):
+            assert client.post('/api/runs',json={'proof_suite':old_suite,'proof_crs_hash':'ab'*32}).status_code==422
         assert client.post('/api/runs',json={'mode':'plain','proof_suite':'lego_norm_v1','proof_crs_hash':'ab'*32}).status_code==422
         assert client.post('/api/runs',json={},headers={'Origin':'https://unrelated.example'}).status_code==403
         assert client.get('/api/runs').json()=={'runs':[]}
@@ -39,25 +41,26 @@ def test_control_accepts_explicit_acceleration_settings(tmp_path,monkeypatch):
     with TestClient(app) as client:
         response=client.post('/api/runs',json={
             'mode':'dgflow','execution':'parallel','rpc_workers':2,
-            'proof_suite':'compact_norm_v1','verification':'randomized',
+            'proof_suite':'lego_norm_v1','proof_crs_hash':'ab'*32,'verification':'randomized',
             'verification_workers':2,'proof_block_size':64})
     assert response.status_code==202
     assert received[0]['mode']=='dgflow'
     assert received[0]['execution']=='parallel'
     assert received[0]['cloud_strategy']=='auto'
-    assert received[0]['proof_suite']=='compact_norm_v1'
+    assert received[0]['proof_suite']=='lego_norm_v1'
     assert received[0]['proof_block_size']==64
-    assert 'proof_crs_hash' not in received[0]
+    assert received[0]['proof_crs_hash']=='ab'*32
 
 
-def test_control_accepts_an_explicit_pinned_lego_crs_without_changing_defaults(tmp_path,monkeypatch):
+def test_control_defaults_to_lego_with_an_explicit_pinned_crs(tmp_path,monkeypatch):
     app=control.create_control_app(tmp_path)
     received=[]
     monkeypatch.setattr(app.state.manager,'start',lambda config:received.append(config) or {'run_id':'lego','status':'queued'})
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'proof_suite':'lego_norm_v1','proof_crs_hash':'AB'*32})
+        response=client.post('/api/runs',json={'proof_crs_hash':'AB'*32})
     assert response.status_code==202
     assert received[0]['proof_crs_hash']=='ab'*32
+    assert received[0]['proof_suite']=='lego_norm_v1'
     assert received[0]['verification']=='deterministic'
     assert received[0]['execution']=='auto'
 
@@ -68,9 +71,20 @@ def test_control_preserves_explicit_cloud_strategy(tmp_path,monkeypatch,strategy
     received=[]
     monkeypatch.setattr(app.state.manager,'start',lambda config:received.append(config) or {'run_id':'all-clouds'})
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'cloud_strategy':strategy})
+        response=client.post('/api/runs',json={'cloud_strategy':strategy,'proof_crs_hash':'ab'*32})
     assert response.status_code==202
     assert received[0]['cloud_strategy']==strategy
+
+
+def test_plain_baseline_does_not_require_proof_parameters(tmp_path,monkeypatch):
+    app=control.create_control_app(tmp_path,auto_prepare_compute=False)
+    received=[]
+    monkeypatch.setattr(app.state.manager,'start',lambda config:received.append(config) or {'run_id':'plain'})
+    with TestClient(app) as client:
+        response=client.post('/api/runs',json={'mode':'plain'})
+    assert response.status_code==202
+    assert received[0]['proof_suite']=='lego_norm_v1'
+    assert 'proof_crs_hash' not in received[0]
 
 
 def test_control_lists_only_public_installed_parameter_metadata(tmp_path,monkeypatch):

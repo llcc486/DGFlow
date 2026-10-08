@@ -1,15 +1,40 @@
 # 部署说明
 
-下列命令从项目根目录执行，路径均为相对路径。此前单机 12 节点配置、650 参数与 7,850 参数的一轮运行均已完成真实验证；2026-10-06 新默认为 13 个角色，旧性能记录只代表其原配置。本文的三机步骤是可执行部署路径，尚不能作为已经完成三台物理机器测试的声明。最终验收结果以设计报告和实测记录为准。
+下列命令从项目根目录执行，路径均为相对路径。此前单机 12 节点配置、650 参数与 7,850 参数的一轮运行均已完成真实验证；2026-10-06 新默认为 13 个角色，旧性能记录只代表其原配置。本文的三机步骤描述物理部署方法，其性能应引用对应机器的实测记录。最终验收结果以设计报告和实测记录为准。
+
+当前新建加密实验统一使用 LegoGroth16（`lego_norm_v1`），须提前准备与模型维度及 8 位量化匹配的 CRS；`plain` 明文实验无需证明和 CRS。旧逐坐标、5A/5B 仅作为历史记录和研究材料保留，旧性能数字不代表当前证明方案的耗时。
 
 ## 1. 环境与安装
 
 - 项目声明 Python 3.11+；当前锁定环境为 CPython 3.12。复验优先使用 3.12，其他版本先核验依赖兼容性。底层依赖为 `py-arkworks-bls12381==0.5.0`，需要匹配平台和解释器的 wheel，或者具备对应源码编译环境。
-- 完整前端源码构建使用 Node.js 22.12+ 或 24 与 npm。提交包已带 `web/dist` 时运行服务不需要 Node.js。
-- 首次安装和所选 MNIST / CIFAR-10 数据下载需要网络。离线运行要求事先准备好 Python 环境、完整数据缓存和前端构建结果；“无 CDN”不等于首次安装无需联网。
-- 本版本默认 CPU 训练。可选 PyTorch 实现使用 CPU/float64；不用购买或分配 GPU 才能运行这一原型。
+- 完整部署自动构建前端，需要 Node.js 22.12+ 或 24 与 npm。已有完整、匹配的 `web/dist` 后，日常运行服务不需要 Node.js。
+- 首次完整部署安装运行依赖并准备 MNIST、CIFAR-10。部署完成后使用离线启动，只校验本地环境、数据及前端，不安装依赖或下载数据。
+- 本版本默认 CPU 训练；完整部署同时安装 CPU 版 PyTorch 与 torchvision，训练实现使用 CPU/float64。密码 CUDA 后端独立使用 NVIDIA NVRTC，不需要安装 CUDA 版 PyTorch。
+- Windows 从源码构建原生扩展需要 MSVC x64 C++ 工具及 Windows SDK；Linux 需要 `cc`、`ar` 等编译链接工具。缺少 Rust 时，部署脚本自动下载官方最小工具链，校验 SHA-256，安装到项目 `tmp/native-toolchain`，不修改系统 PATH。
 
-Windows 按锁定依赖手动安装：
+推荐先完成完整部署，再打开服务。Windows：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly
+powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
+```
+
+Linux：
+
+```bash
+bash scripts/start_demo.sh --setup-only
+bash scripts/start_demo.sh --offline
+```
+
+`SetupOnly` 不启动角色或控制服务。它安装基础锁定依赖、CPU Torch/torchvision 和包含 Lego、聚合验证及批量算术的当前原生扩展；检测到 NVIDIA GPU 时安装 NVRTC 并执行密码算术自检；随后准备两套数据、自动安装并构建前端，最后执行 `pip check`。普通一键脚本也会先完成同样的准备再启动应用。首次下载或本地编译可能耗时较长，后续复用经过检查的环境和缓存。
+
+完整部署记录位于 `.venv/dgflow-deployment.json`。原生扩展另用 `tmp/native-toolchain/install.json` 绑定源码和实际二进制摘要；相同的 0.2.0 版本号不代表同一构建。离线重启时保留该记录，或准备匹配平台的本地 wheel 及其 `.whl.source.json`。Lego 的运行依赖会装齐，具体实验维度的可信参数仍需通过 `scripts/setup_lego_parameters.py` 显式建立。
+
+NVIDIA 驱动由操作系统提供，pip 不安装驱动。无 NVIDIA 显卡时完整部署采用 CPU；有显卡但驱动或密码自检失败时会说明原因，CPU 仍可用，只有通过精确算术自检后才开放 GPU。NVRTC 编译出的 PTX 需要兼容驱动，不能仅以“支持 CUDA 12”判断；参见 [NVIDIA 官方兼容性说明](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html)。
+
+已自行创建环境时，Windows 可通过 `-PythonPath` 指定实际解释器；Linux 使用 `DGFL_PYTHON_PATH`。同一解释器完成部署后再离线启动，不跨操作系统复制整个虚拟环境。
+
+仅需基础 NumPy 演示环境时，也可按锁定依赖手动安装：
 
 ```powershell
 py -3.12 -m venv .venv
@@ -18,9 +43,9 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip check
 ```
 
-基础锁文件对应 NumPy 演示环境，包含运行依赖与构建工具，不包含测试依赖和可选 PyTorch。需要执行测试时另装 `pip install -e ".[test]"`；需要可选 CPU 训练后端时另装 `pip install -r requirements-torch.txt`。这两个命令中的 `pip` 均应使用本项目虚拟环境的 `python -m pip`。
+基础锁文件只覆盖 NumPy 演示环境，不等同于上述完整部署。手动安装 CPU 训练依赖使用 `pip install -r requirements-torch.txt`；执行测试另装 `pip install -e ".[test]"`。这里的 `pip` 均应使用选定环境的 `python -m pip`。只装基础依赖后运行最小演示应直接使用第 2 节的 `cli init/start/serve`，并在页面选择明文基线；新加密实验另需当前原生扩展和匹配 CRS。
 
-完整源码构建前端：
+一键部署自动构建前端；需要单独重建时执行：
 
 ```powershell
 Set-Location web
@@ -39,7 +64,7 @@ Linux 手动环境使用 `python3 -m venv .venv`，将下文的 Python 路径改
 .\.venv\Scripts\python.exe -m dgfl.cli prepare-data --mnist-timeout 120 --mnist-retries 2
 ```
 
-`--mnist-timeout` 支持 1–300 秒，`--mnist-retries` 支持 0–5 个额外轮次。若默认地址均无法访问，可用 `--mnist-source https://storage.googleapis.com/cvdf-datasets/mnist/` 指定一个 HTTPS 基址；指定后只尝试该地址。镜像同样受原始文件摘要校验约束，不能保证它在所有网络中都可访问。这些选项及下述 `--offline` 目前仅用于 MNIST。
+`--mnist-timeout` 支持 1–300 秒，`--mnist-retries` 支持 0–5 个额外轮次。若默认地址均无法访问，可用 `--mnist-source https://storage.googleapis.com/cvdf-datasets/mnist/` 指定一个 HTTPS 基址；指定后只尝试该地址。镜像同样受原始文件摘要校验约束，不能保证它在所有网络中都可访问。Windows 完整部署可用 `-MnistSource`，Linux 用 `DGFL_MNIST_SOURCE` 传入该基址。
 
 最可靠的离线方法是在能联网的机器上准备一次，将 `data/mnist/raw` 下这四个**原始压缩文件**复制到目标项目的相同位置；不用解压，不用复制虚拟环境：
 
@@ -54,7 +79,46 @@ Linux 手动环境使用 `python3 -m venv .venv`，将下文的 Python 路径改
 .\.venv\Scripts\python.exe -m dgfl.cli prepare-data --offline
 ```
 
-此命令不联网，缺少文件会明确列出；损坏的缓存不会自动覆盖。校验通过后正常启动即可复用缓存。环境依赖及前端也已准备好时，可用 `powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline`（Linux 用 `bash scripts/start_demo.sh --offline`）启动。公开数据可单独保存为部署材料，源码无需包含数据集。
+此命令不联网，缺少文件会明确列出；损坏的缓存不会自动覆盖。仅完成 MNIST 校验时可直接运行最小 CLI 演示；完整一键离线启动还要求两套数据、Torch、当前原生扩展、所需 NVRTC 和前端均已准备。公开数据可单独保存为部署材料，源码无需包含数据集。
+
+### CIFAR-10 下载超时与原始包离线复用
+
+默认先尝试 [MindSpore 官方教程发布的镜像](https://www.mindspore.cn/tutorials/zh-CN/master/dataset/sampler.html)，再尝试 [Toronto 原始发布地址](https://cave.cs.toronto.edu/kriz/cifar.html)。两者都必须通过同一原始二进制包摘要校验。默认每次阻塞网络操作超时 60 秒，额外重试两轮；这不是整个下载的总时限。慢网络可提前单独准备：
+
+```powershell
+.\.venv\Scripts\python.exe -m dgfl.cli prepare-data --dataset cifar10 --cifar-timeout 120 --cifar-retries 2
+```
+
+`--cifar-timeout` 支持 1–300 秒，`--cifar-retries` 支持 0–5 个额外轮次。用 `--cifar-source` 指定 HTTPS 基址后只尝试该地址，例如：
+
+```powershell
+.\.venv\Scripts\python.exe -m dgfl.cli prepare-data --dataset cifar10 --cifar-source https://mindspore-website.obs.cn-north-4.myhuaweicloud.com/notebook/datasets/
+```
+
+Windows 完整部署对应 `-CifarSource`，Linux 对应 `DGFL_CIFAR_SOURCE`。下载失败保留既有缓存，不接受降级 HTTP、摘要错误或超出大小上限的内容。
+
+离线复用时，把约 162 MiB 的原始 `cifar-10-binary.tar.gz` 放到 `data/cifar10/raw/`，不需要手工解压，也不要用 Python pickle 版本替代。随后执行：
+
+```powershell
+.\.venv\Scripts\python.exe -m dgfl.cli prepare-data --dataset cifar10 --offline
+```
+
+该命令完全使用本地原始包，校验摘要、解压和检查二进制批次，再生成元数据；缺包或缓存损坏会明确报错。训练与数据加载器不会自行下载。
+
+### 加密实验的 LegoGroth16 参数
+
+完整部署安装 Lego 运行依赖，但不会替实验建立可信设置。当前本机 `runtime` 已装有 MNIST 默认 650 维和 CIFAR-10 默认 1,930 维的 8 位开发参数；新源码包不包含运行目录，新部署需单独建立或安装匹配参数。例如，在目标运行目录完成初始化后执行：
+
+```powershell
+# MNIST：8×8 灰度池化，650 维
+.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --dimension 650 --bits 8 --workers 4
+# CIFAR-10：RGB 8×8 池化，1,930 维
+.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --dimension 1930 --bits 8 --workers 4
+```
+
+按将使用的数据集准备相应参数即可；更改模型网格后需使用新维度的参数。命令只保存公共 PK/VK 和清单，不保存设置陷门；这是单方开发设置，不能替代正式可信设置流程。参数存放在目标运行目录的 `proof-parameters/<crs_hash>/`。仅新增参数无需重启服务，在网页点“刷新已安装参数”后手动选择匹配指纹。明文基线无需执行上述命令。
+
+控制 API 的加密请求使用 `proof_suite=lego_norm_v1` 和匹配的完整 `proof_crs_hash`，安装清单由 `GET /api/proof-parameters` 返回。新任务不接受旧证明方案；历史结果仍按原配置查阅。
 
 ## 2. 单机部署
 
@@ -92,7 +156,7 @@ Linux 手动环境使用 `python3 -m venv .venv`，将下文的 Python 路径改
 .\.venv\Scripts\python.exe -m dgfl.cli serve
 ```
 
-也可用 `python -m dgfl.cli demo` 组合“缺失时初始化、启动节点、运行控制服务”，其中 `python` 应为已安装本项目的解释器。`scripts/start_demo.ps1` 和 `scripts/start_demo.sh` 在此基础上处理依赖与数据准备。启动脚本不会替代前端构建。
+也可用 `python -m dgfl.cli demo` 组合“缺失时初始化、启动节点、运行控制服务”，其中 `python` 应为已安装本项目的解释器。一键脚本还会在服务启动前处理完整环境、双数据集和前端构建；已完成第 1 节的完整部署后使用离线参数启动。
 
 在另一终端检查：
 
@@ -168,7 +232,7 @@ Copy-Item -LiteralPath .\configs\hosts.example.yaml -Destination .\configs\hosts
 Copy-Item -LiteralPath .\machine-bundles\A\runtime -Destination .\runtime -Recurse
 ```
 
-B/C 仅接收各自的包并按同样布局放置。三个项目目录各自安装 Python 依赖。每台机器都提前准备公开 MNIST 缓存：
+B/C 仅接收各自的包并按同样布局放置。三台机器各自先执行第 1 节的 `-SetupOnly`（Linux 为 `--setup-only`）完整部署；此选项不启动控制服务，适用于 B/C。每台机器都提前准备公开 MNIST 缓存，单独校验命令为：
 
 ```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli prepare-data
@@ -183,6 +247,8 @@ B/C 仅接收各自的包并按同样布局放置。三个项目目录各自安�
 ```
 
 缓存位于各项目的 `data/cifar10/raw`。控制台的数据准备只处理主控本机缓存，不会替 B/C 下载；首次准备约下载 162 MB 官方二进制包。现有离线依赖打包工具只自动纳入 MNIST，CIFAR-10 缓存需单独复制并在目标机器显式执行准备命令复核摘要。实验选择 `dataset=cifar10`，默认 RGB 8×8 池化、1,930 参数线性模型；当前入口支持网格 2–25，尚未接通论文完整 CNN 安全训练。
+
+加密实验还需在三台机器的对应运行目录中安装同一组 `proof-parameters/<crs_hash>/` 公共参数，保持 PK、VK 和清单完全一致；只生成一次再复制该参数目录，不要在 A/B/C 分别随机建立三组 CRS。它们是公共证明参数，可单独分发，不需要复制其他主机身份私钥。明文实验无需参数。
 
 分别执行：
 
@@ -232,9 +298,9 @@ B/C 仅接收各自的包并按同样布局放置。三个项目目录各自安�
 
 MNIST 实际训练检查脚本位于 `tests/training/run_mnist_smoke.py`；它的参数应先用 `--help` 核对。公开训练缓存不是测试成功的替代证据。
 
-依赖和数据已经准备完成时，Windows 使用 `start_demo.ps1 -Offline`，Linux 使用 `start_demo.sh --offline`。缓存校验失败会报错，不会静默改写损坏文件。
+第 1 节的完整部署已经完成时，Windows 使用 `start_demo.ps1 -Offline`，Linux 使用 `start_demo.sh --offline`。这会检查 Torch、当前原生扩展、所需 NVRTC、双数据集与前端；只有基础 NumPy/MNIST 环境时应使用下述最小 CLI 路径。缓存校验失败会报错，不会静默改写损坏文件。
 
-### 5.1 准备可重建的离线依赖与公开数据
+### 5.1 准备基础 NumPy/MNIST 离线材料
 
 在与目标环境匹配、能够联网的准备机器上，先完成基础依赖安装和 MNIST 校验，再执行：
 
@@ -244,7 +310,7 @@ MNIST 实际训练检查脚本位于 `tests/training/run_mnist_smoke.py`；它�
 .\.venv\Scripts\python.exe scripts/prepare_offline.py --output offline --verify-only
 ```
 
-准备工具下载基础锁文件中的对应 wheel，复制经过检查的四个 MNIST 原始压缩文件，生成 `offline/manifest.json` 与 `offline/INSTALL.txt`。清单记录文件大小、SHA-256、Python 版本和平台。它不包含节点身份、可选 Torch、CUDA 或 Python 解释器。输出目录已存在时工具会拒绝覆盖；使用 `--verify-only` 复查原目录，或者选择新目录重新准备。已有完整匹配 wheel 缓存时，可追加 `--wheelhouse cached-wheels` 避免再次下载。
+`prepare_offline.py` 保留原来的基础包范围：下载基础锁文件对应 wheel，复制经过检查的四个 MNIST 原始压缩文件，生成 `offline/manifest.json` 与 `offline/INSTALL.txt`，可另纳入兼容的本地原生 wheel。它不包含 Torch/torchvision、NVRTC、CIFAR-10、Node.js、系统驱动或 Python 解释器，因此该包本身不能满足新的完整一键离线启动。清单记录文件大小、SHA-256、Python 版本和平台，且不分发节点身份。输出目录已存在时拒绝覆盖；使用 `--verify-only` 复查原目录，或者选择新目录重新准备。已有完整匹配 wheel 缓存时，可追加 `--wheelhouse cached-wheels` 避免再次下载。
 
 目标机器需事先安装与清单匹配的 Python 解释器与操作系统架构。在新的项目目录中，按包内 `offline/INSTALL.txt` 操作。例如，清单确为 Windows x64 / CPython 3.12 时：
 
@@ -254,25 +320,34 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --no-index --no-build-isolation --no-deps -e .
 .\.venv\Scripts\python.exe -c "import shutil; shutil.copytree('offline/data/mnist', 'data/mnist', dirs_exist_ok=True)"
 .\.venv\Scripts\python.exe scripts/prepare_offline.py --output offline --verify-only
-.\scripts\start_demo.ps1 -Offline
+.\.venv\Scripts\python.exe -m dgfl.cli prepare-data --offline
+.\.venv\Scripts\python.exe -m dgfl.cli init
+.\.venv\Scripts\python.exe -m dgfl.cli start
+.\.venv\Scripts\python.exe -m dgfl.cli serve
 ```
 
-示例以新的数据目录为前提；不要用复制操作覆盖尚需保留的旧实验数据。三机部署时，先分别放好各自的 runtime 包；A 可使用 `start_demo.ps1 -Offline -Machine A`。B/C 完成上述安装和数据复制后，只执行第 3 节的 `cli start --machine B/C` 命令。当前 `demo` 与一键脚本会继续启动控制服务，因此不推荐在 B/C 使用该入口。离线 wheel 包只适用于其记录的平台与解释器，不是通用的跨平台安装包。测试依赖未纳入基础离线锁；要离线执行 pytest，需要另行准备并记录测试依赖。
+此最小示例用于新的本机运行目录，使用已准备的 MNIST、NumPy 和 CPU，启动后选择明文基线，无需密码证明或 CRS；不代表 Torch、Lego、CIFAR-10 或 GPU 全功能部署，提交包还需已有 `web/dist`。新加密实验必须另行安装当前原生扩展与匹配参数。不要复制覆盖需保留的旧数据，已有身份时不要重复 `init`。三机部署先放好各自 runtime 包，再执行第 3 节 `cli start --machine A/B/C`，仅 A 执行 `cli serve`；不在 B/C 使用会打开控制服务的一键入口。离线 wheel 包只适用于记录的平台与解释器。测试依赖不在基础锁内，离线执行 pytest 需要单独准备。
+
+完整功能的离线运行应先在目标机器执行第 1 节完整部署并保留环境、原生来源记录、两套数据和前端，另为加密实验准备匹配 CRS。如果目标机器完全不能联网，需另行准备完整的 CPU Torch/torchvision 依赖闭包、当前平台原生 wheel 及源码凭据、所需 NVRTC，以及两套原始数据；安装后用 `scripts/setup_environment.py --offline` 验证，CRS 按第 1 节单独安装。基础离线包和 `validate_release.py` 的成功结果不能代替完整环境及模型参数检查。
 
 ### 5.2 运行实验矩阵与打包
 
-在节点与控制服务已启动、没有其他活动任务时，将复验记录写入新的本地目录：
+当前 `configs/experiments.yaml` 和 `configs/full-data-experiment.yaml` 的加密 case 使用 LegoGroth16。运行前先安装模型维度、8 位量化对应的 CRS。加密 case 未指定 `proof_crs_hash` 或为 `null` 时，脚本通过 `GET /api/proof-parameters` 查找对应数据集和网格的参数；仅有一个匹配项时自动选择，没有匹配或匹配多组时明确拒绝，需要先安装参数或在配置中显式填写指纹。显式提供的指纹不会被替换，明文 case 无需参数。
+
+选定指纹会写入输出目录的 `config.json` 并纳入矩阵摘要，恢复运行沿用已冻结的指纹，不会因新安装 CRS 自动换用另一组。历史研究 JSON 和旧输出仍按原方案解释；不要直接提交旧 5A/5B 配置，也不要把切换到 Lego 的新矩阵写入旧输出目录。
+
+在节点与控制服务已启动、没有其他活动任务且参数准备完成时，将复验记录写入新的本地目录：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/run_experiments.py --config configs/experiments.yaml --output runtime/reproductions/formal
+.\.venv\Scripts\python.exe scripts/run_experiments.py --config configs/experiments.yaml --output runtime/reproductions/formal-lego
 ```
 
 包内 `docs/submission/evidence` 保存原始交付证据，供查阅与核对，不作为新机器的任务输出目录。矩阵脚本恢复运行时会复用输出目录中的任务标识，因此只有保留原 `runtime` 及其中任务记录、配置也未变化时，才能恢复原输出。更换机器、重新初始化运行目录或修改配置后，都应选择新的输出目录。失败或中止应保留并解释；不能删除失败记录后声称全部成功。具体矩阵配置与性能结论以设计报告为准。
 
-上述矩阵结束后，完整 MNIST 复验使用另一配置和输出目录：
+上述矩阵结束后，完整 MNIST 复验使用另一配置和输出目录，同样解析或显式指定匹配 CRS：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/run_experiments.py --config configs/full-data-experiment.yaml --output runtime/reproductions/full-data
+.\.venv\Scripts\python.exe scripts/run_experiments.py --config configs/full-data-experiment.yaml --output runtime/reproductions/full-data-lego
 ```
 
 真实进程故障检查应在所有训练任务结束、实际单机全部活动节点恢复在线后单独执行。脚本按当前 v/e 停止足够的云，分别验证恰好满足和低于门限，再检查固定分组下的客户端缺席；所有进程先核对归属，随后恢复本次停止的角色。不要与训练矩阵同时运行：
@@ -299,7 +374,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe scripts/package_submission.py --output dist/submission --include-offline
 ```
 
-打包器重新校验离线清单后才纳入 wheel 与公开数据。核对最终 `manifest.json`，确认实际包含需要的源码、构建结果、文档和离线材料；工具可用不等于本次发布已经完成离线重装实测。
+打包器重新校验离线清单后才纳入 wheel 与公开数据。核对最终 `manifest.json`，确认实际包含需要的源码、构建结果、文档和离线材料；发布记录应分别列出基础离线重装与完整部署的验证范围。
 
 对包含 `offline` 的包执行独立重装校验：
 

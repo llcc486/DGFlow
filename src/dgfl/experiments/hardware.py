@@ -232,8 +232,9 @@ class GenericCpu:
 def _nvml_library():
     if sys.platform == 'win32':
         # Absolute system/driver locations avoid loading a DLL from the workspace.
-        candidates = [Path(os.environ.get('SYSTEMROOT', r'C:\Windows')) / 'System32' / 'nvml.dll',
-                      Path(os.environ.get('PROGRAMFILES', r'C:\Program Files')) /
+        system_drive = Path(os.environ.get('SYSTEMDRIVE', 'C:') + '/')
+        candidates = [Path(os.environ.get('SYSTEMROOT', system_drive / 'Windows')) / 'System32' / 'nvml.dll',
+                      Path(os.environ.get('PROGRAMFILES', system_drive / 'Program Files')) /
                       'NVIDIA Corporation' / 'NVSMI' / 'nvml.dll']
         for path in candidates:
             if path.is_file():

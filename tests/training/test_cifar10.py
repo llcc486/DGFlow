@@ -1,8 +1,10 @@
 import gzip
 import hashlib
+import http.client
 import io
 import json
 import tarfile
+import urllib.error
 
 import numpy as np
 import pytest
@@ -179,7 +181,8 @@ def test_prepare_streams_verified_archive_and_returns_portable_metadata(tmp_path
 
     monkeypatch.setattr(cifar10.urllib.request, "urlopen", response)
     metadata = cifar10.prepare_cifar10(tmp_path)
-    assert requests == [cifar10.CIFAR10_URL]
+    assert requests == [cifar10.CIFAR10_MIRROR]
+    assert metadata["download_sources"] == [cifar10.CIFAR10_MIRROR, cifar10.CIFAR10_URL]
     assert cifar10.cache_ready(tmp_path)
     assert metadata["dataset"] == "CIFAR-10"
     assert str(tmp_path) not in json.dumps(metadata)
@@ -318,3 +321,155 @@ def test_loader_never_requests_an_entire_binary_batch(tmp_path, batches, monkeyp
     monkeypatch.setattr(cifar10.Path, "open", bounded_open)
     x, *_ = cifar10.load_cifar10(tmp_path, train_limit=1, test_limit=1)
     assert x.shape == (1, 192)
+
+
+@pytest.mark.parametrize("during_read", [False, True])
+@pytest.mark.parametrize("failure", [urllib.error.URLError("unreachable"), TimeoutError("slow read"),
+                                     OSError("connection reset"), http.client.IncompleteRead(b"partial")])
+def test_network_failures_try_official_fallback_and_discard_partial_downloads(
+        tmp_path, batches, monkeypatch, during_read, failure):
+    blob = archive_bytes(batches)
+    monkeypatch.setattr(cifar10, "CIFAR10_MD5", hashlib.md5(blob).hexdigest())
+    requests = []
+
+    class FailedResponse(io.BytesIO):
+        def read(self, size=-1):
+            if self.tell():
+                raise failure
+            return super().read(min(3, size))
+
+    def response(url, *, timeout):
+        requests.append((url, timeout))
+        if url == cifar10.CIFAR10_MIRROR:
+            if during_read:
+                return FailedResponse(blob)
+            raise failure
+        # A failed transfer must be removed before the next source is opened.
+        assert not any(path.stat().st_size for path in (tmp_path / "raw").glob("*.part"))
+        return io.BytesIO(blob)
+
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", response)
+    metadata = cifar10.prepare_cifar10(tmp_path, timeout=90, retries=0)
+    assert requests == [(cifar10.CIFAR10_MIRROR, 90), (cifar10.CIFAR10_URL, 90)]
+    assert metadata["files"][0]["url"] == cifar10.CIFAR10_URL
+    assert (tmp_path / "raw" / cifar10.ARCHIVE_NAME).read_bytes() == blob
+    assert cifar10.cache_ready(tmp_path)
+    assert not list((tmp_path / "raw").glob("*.part"))
+
+
+@pytest.mark.parametrize("retries", [0, 2, 5])
+@pytest.mark.parametrize("source", [None, "https://dataset.example/cifar"])
+def test_download_attempts_are_bounded_and_custom_source_is_exclusive(tmp_path, batches, monkeypatch, retries, source):
+    folder = cache(tmp_path, batches)
+    before = {path.name: path.read_bytes() for path in folder.iterdir()}
+    requests, sleeps = [], []
+
+    def response(url, *, timeout):
+        requests.append((url, timeout))
+        raise TimeoutError("not accessible")
+
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", response)
+    monkeypatch.setattr(cifar10.time, "sleep", sleeps.append)
+    with pytest.raises(OSError, match="--cifar-source"):
+        cifar10.prepare_cifar10(tmp_path, source=source, timeout=120, retries=retries)
+    urls = ([cifar10.CIFAR10_MIRROR, cifar10.CIFAR10_URL] if source is None
+            else [source + "/" + cifar10.ARCHIVE_NAME])
+    assert requests == [(url, 120) for _ in range(retries + 1) for url in urls]
+    assert len(sleeps) == retries and all(0 < delay <= 4 for delay in sleeps)
+    assert {path.name: path.read_bytes() for path in folder.iterdir()} == before
+    assert not (tmp_path / "raw" / cifar10.ARCHIVE_NAME).exists()
+    assert not list((tmp_path / "raw").glob("*.part"))
+
+
+@pytest.mark.parametrize("timeout", [1, 300])
+def test_custom_https_base_url_and_timeout_boundaries(tmp_path, batches, monkeypatch, timeout):
+    blob = archive_bytes(batches)
+    use_archive(monkeypatch, blob)
+    requests = []
+
+    def response(url, **kwargs):
+        requests.append((url, kwargs))
+        return io.BytesIO(blob)
+
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", response)
+    metadata = cifar10.prepare_cifar10(tmp_path, source="https://dataset.example:8443/public/", timeout=timeout)
+    expected = "https://dataset.example:8443/public/" + cifar10.ARCHIVE_NAME
+    assert requests == [(expected, {"timeout": timeout})]
+    assert metadata["download_sources"] == [expected]
+    assert metadata["files"][0]["url"] == expected
+
+
+@pytest.mark.parametrize("corruption", ["checksum", "size", "https"])
+def test_integrity_failures_do_not_retry_or_try_another_source(tmp_path, monkeypatch, corruption):
+    requests = []
+
+    class Response(io.BytesIO):
+        def geturl(self):
+            return "http://dataset.example/archive" if corruption == "https" else cifar10.CIFAR10_MIRROR
+
+    def response(url, **kwargs):
+        requests.append(url)
+        return Response(b"untrusted bytes")
+
+    if corruption == "size":
+        monkeypatch.setattr(cifar10, "MAX_DOWNLOAD_BYTES", 4)
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", response)
+    monkeypatch.setattr(cifar10.time, "sleep", lambda *_: pytest.fail("integrity failure must not retry"))
+    with pytest.raises(ValueError):
+        cifar10.prepare_cifar10(tmp_path)
+    assert requests == [cifar10.CIFAR10_MIRROR]
+    assert not list((tmp_path / "raw").iterdir())
+
+
+def test_offline_preparation_can_extract_an_archive_then_reuse_the_complete_cache(tmp_path, batches, monkeypatch):
+    blob = archive_bytes(batches)
+    use_archive(monkeypatch, blob)
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / cifar10.ARCHIVE_NAME).write_bytes(blob)
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", lambda *a, **k: pytest.fail("offline preparation"))
+    first = cifar10.prepare_cifar10(tmp_path, offline=True)
+    assert cifar10.cache_ready(tmp_path)
+    assert cifar10.prepare_cifar10(tmp_path, offline=True) == first
+    assert first["files"][0]["md5"] == hashlib.md5(blob).hexdigest()
+    assert sorted(path.name for path in raw.iterdir()) == [cifar10.BINARY_DIRECTORY, cifar10.ARCHIVE_NAME]
+
+
+def test_missing_offline_archive_never_connects_or_creates_directories(tmp_path, monkeypatch):
+    target = tmp_path / "missing-cache"
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", lambda *a, **k: pytest.fail("offline preparation"))
+    with pytest.raises(FileNotFoundError, match=cifar10.ARCHIVE_NAME):
+        cifar10.prepare_cifar10(target, offline=True)
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("corruption", ["archive", "extracted"])
+def test_offline_invalid_cache_is_preserved_and_rejected(tmp_path, batches, monkeypatch, corruption):
+    use_archive(monkeypatch, archive_bytes(batches))
+    cifar10.prepare_cifar10(tmp_path)
+    path = tmp_path / "raw" / (cifar10.ARCHIVE_NAME if corruption == "archive"
+                              else cifar10.BINARY_DIRECTORY + "/" + cifar10.TEST_BATCH)
+    value = bytearray(path.read_bytes())
+    value[1] ^= 1
+    path.write_bytes(value)
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", lambda *a, **k: pytest.fail("offline preparation"))
+    with pytest.raises(ValueError, match="checksum"):
+        cifar10.prepare_cifar10(tmp_path, offline=True)
+    assert path.read_bytes() == value
+
+
+@pytest.mark.parametrize("options", [
+    {"timeout": 0}, {"timeout": 301}, {"timeout": float("nan")}, {"timeout": float("inf")},
+    {"timeout": True}, {"timeout": "60"}, {"retries": -1}, {"retries": 6},
+    {"retries": True}, {"retries": 1.5}, {"source": "http://dataset.example/"},
+    {"source": "//dataset.example/"}, {"source": "https:///missing-host"},
+    {"source": "https://user:secret@dataset.example/"}, {"source": "https://dataset.example/?token=secret"},
+    {"source": "https://dataset.example/#fragment"}, {"source": "https://dataset.example:70000/"},
+    {"source": "https://dataset.example:bad/"}, {"source": 123},
+])
+def test_download_options_are_validated_before_files_or_network(tmp_path, monkeypatch, options):
+    target = tmp_path / "invalid-options"
+    monkeypatch.setattr(cifar10.urllib.request, "urlopen", lambda *a, **k: pytest.fail("invalid options"))
+    with pytest.raises(ValueError):
+        cifar10.prepare_cifar10(target, **options)
+    assert not target.exists()

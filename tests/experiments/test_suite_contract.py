@@ -1,4 +1,5 @@
 """Request/result provenance for resolved and historical experiment suites."""
+import csv
 import importlib.util
 import json
 from copy import deepcopy
@@ -10,7 +11,8 @@ import yaml
 from dgfl.crypto.backend import digest
 from dgfl.experiments.evidence import export_records, validate_record, validate_suite
 from dgfl.experiments.runner import RunManager, _run_members
-from dgfl.services.control import RunConfig
+from dgfl.services.control import ArchivedRunConfig as RunConfig
+from dgfl.services.control import RunConfig as NewRunConfig
 from dgfl.topology import client_authorities
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -59,7 +61,7 @@ def test_real_run_creation_config_matches_its_request_without_starting_training(
     monkeypatch.setattr(runner.threading,'Thread',DormantThread)
     monkeypatch.setattr(runner,'implementation_evidence',lambda:{'source_sha256':'fixture'})
     (tmp_path/'cluster.json').write_text(json.dumps(cluster()),encoding='utf8')
-    requested=RunConfig(rounds=1).model_dump()
+    requested=NewRunConfig(mode='plain',rounds=1).model_dump()
     manager=RunManager(tmp_path)
     run_id=manager.start(requested)['run_id']
     actual=manager.snapshot(run_id)
@@ -72,7 +74,8 @@ def test_real_run_creation_config_matches_its_request_without_starting_training(
 def test_cli_completes_second_resolved_case_and_resumes_without_new_runs(tmp_path,monkeypatch):
     cli=script('run_experiments'); report=script('build_report')
     declaration={'cases':[{'name':'plain','config':{'mode':'plain','rounds':1}},
-                          {'name':'secure','config':{'mode':'optimized','rounds':1,'seed':43}}]}
+                          {'name':'secure','config':{'mode':'optimized','rounds':1,'seed':43,
+                                                    'proof_suite':'lego_norm_v1','proof_crs_hash':'ab'*32}}]}
     config_path=tmp_path/'cases.yaml'; config_path.write_text(yaml.safe_dump(declaration),encoding='utf8')
     output=tmp_path/'evidence'; calls=[]; records={}
 
@@ -93,6 +96,12 @@ def test_cli_completes_second_resolved_case_and_resumes_without_new_runs(tmp_pat
     assert all(case['config']['authority_count'] is None for case in declared['cases'])
     assert all(config['authority_count']==3 for config in state['resolved_configs'].values())
     assert set(report.load_suite(output))=={'plain','secure'}
+    with (output/'summary.csv').open(encoding='utf-8-sig',newline='') as stream:
+        reader=csv.DictReader(stream)
+        rows=list(reader)
+        assert reader.fieldnames.count('proof_crs_hash')==1
+    assert [row['proof_crs_hash'] for row in rows]==['','ab'*32]
+    assert [row['run_id'] for row in rows]==['case-1','case-2']
     calls.clear()
     assert cli.main(args)==0
     assert len(calls)==2 and all(payload is None for _,payload in calls)

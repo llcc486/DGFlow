@@ -71,3 +71,15 @@ test('GPU preparation uses the background control endpoint with an empty JSON bo
     globalThis.fetch = originalFetch
   }
 })
+
+test('automatic GPU discovery shows waiting and missing-dependency reasons without claiming readiness', () => {
+  const pending = { ...capability, gpu: { ...capability.gpu, available: false, verified: false } }
+  const waiting = computeDeviceStatus({ ...pending, preparation: { state: 'waiting', reason: '等待边缘节点自动核验' } }, true)
+  assert.equal(waiting.gpuAvailable, false)
+  assert.equal(waiting.gpuReason, '等待边缘节点自动核验')
+  const missing = computeDeviceStatus({ ...pending, gpu: { ...pending.gpu, compiler_available: false }, preparation: { state: 'unavailable', reason: '缺少部署依赖；CPU 可用' } }, true)
+  assert.equal(missing.gpuName, 'Test GPU')
+  assert.equal(missing.gpuAvailable, false)
+  assert.equal(missing.canPrepareGpu, false)
+  assert.equal(missing.gpuReason, '缺少部署依赖；CPU 可用')
+})

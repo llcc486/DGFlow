@@ -241,7 +241,7 @@ def test_download_keeps_status_responsive_and_rejects_conflicting_actions(tmp_pa
                 ('/api/deployment/init', {}),
                 ('/api/deployment/start', {}),
                 ('/api/compute/prepare', {}),
-                ('/api/runs', {}),
+                ('/api/runs', {'mode': 'plain'}),
             ):
                 rejected = pool.submit(client.post, endpoint, json=body).result(timeout=5)
                 assert rejected.status_code == 409, endpoint

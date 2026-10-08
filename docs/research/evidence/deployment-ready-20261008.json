@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-08T09:41:45.454277+00:00",
+  "scope": "Complete Windows x64 CPython 3.12 deployment and local offline startup; not a performance benchmark",
+  "requirements": {
+    "cifar_mirror_download": true,
+    "automatic_gpu_discovery": true,
+    "dependencies_and_both_datasets_ready_before_server": true
+  },
+  "cifar_download": {
+    "bytes": 170052171,
+    "md5": "c32a1d4ab5d03f1284b67883e8d87530",
+    "path": "raw/cifar-10-binary.tar.gz",
+    "sha256": "c4a38c50a1bc5f3a1c5537f2155ab9d68f9f25eb1ed8d9ddda3db29a59bca1dd",
+    "url": "https://mindspore-website.obs.cn-north-4.myhuaweicloud.com/notebook/datasets/cifar-10-binary.tar.gz"
+  },
+  "fresh_environment": {
+    "initially_absent": [
+      "dgfl",
+      "numpy",
+      "torch",
+      "torchvision",
+      "dgfl_native",
+      "nvidia"
+    ],
+    "command": "start_demo.ps1 -PythonPath <new-venv>/Scripts/python.exe -SetupOnly",
+    "exit_code": 0,
+    "installed": {
+      "torch": "2.14.1+cpu",
+      "torchvision": "0.29.1+cpu",
+      "nvrtc": "12.9.86",
+      "native": "0.2.0"
+    },
+    "reused_verified_public_dataset_cache": true,
+    "reused_current_source_native_wheel": true
+  },
+  "offline_full_setup": {
+    "command": "start_demo.ps1 -Offline -SetupOnly",
+    "exit_code": 0,
+    "http_and_https_proxy": "unreachable loopback",
+    "pip_index_disabled": true
+  },
+  "native": {
+    "artifact_sha256": {
+      "dgfl_native.dgfl_native": "3f84f0d4297a9aabacaa117085bbe7e161055b90c3f7bb123e82bfb226f34f11"
+    },
+    "features": {
+      "AggregatePolynomial": true,
+      "LegoProver": true,
+      "LegoVerifier": true,
+      "NativeGT": true,
+      "PublicAggregateVerifier": true,
+      "PublicG1Table": true,
+      "VerifiedLego": true,
+      "aggregate_first_messages": true,
+      "checked_g1_coordinates_batch": true,
+      "g1_sum_pairing_vector": true,
+      "g2_msm_pairing_vector": true,
+      "g2_mul_batch": true,
+      "g2_t2_polynomial_batch": true,
+      "gt_pow_batch": true,
+      "gt_t2_polynomial_batch": true,
+      "pairing_vector": true,
+      "pedersen_batch": true,
+      "pedersen_verify_batch": true,
+      "sigma_first_messages": true
+    },
+    "installation": "existing",
+    "ready": true,
+    "source_sha256": "6399eadb453dcd68d0d050406596abb72267beeb6d60e381e6f2d764a9914244",
+    "status": "ready",
+    "version": "0.2.0"
+  },
+  "gpu": {
+    "hardware": {
+      "available": true,
+      "detection_source": "cuda_driver",
+      "device_index": 0,
+      "driver_available": true,
+      "driver_version": 13040,
+      "hardware_available": true,
+      "memory_bytes": 8585216000,
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "reason": ""
+    },
+    "nvrtc": "12.9.86",
+    "required": true,
+    "verified": {
+      "accelerated_operations": [
+        "ec_batch",
+        "gt_exp_batch",
+        "gt_subgroup_batch"
+      ],
+      "available": true,
+      "backend": "cuda_nvrtc",
+      "compute_capability": "8.9",
+      "device_index": 0,
+      "device_resources": {
+        "errors": {},
+        "max_threads_per_multiprocessor": 1536,
+        "multiprocessor_count": 24,
+        "registers_per_multiprocessor": 65536
+      },
+      "driver_version": 13040,
+      "kernel_build_sha256": "8a337b86973afef712dc1cef2689b4e60061eac8268833c24fae7a928f75ab31",
+      "kernel_resources": {
+        "dgfl_gt_pow_batch": {
+          "errors": {},
+          "function_name": "dgfl_gt_pow_batch",
+          "local_bytes_per_thread": 16048,
+          "max_threads_per_block": 256,
+          "num_registers": 255,
+          "static_shared_bytes": 0
+        },
+        "dgfl_gt_validate": {
+          "errors": {},
+          "function_name": "dgfl_gt_validate",
+          "local_bytes_per_thread": 15232,
+          "max_threads_per_block": 256,
+          "num_registers": 255,
+          "static_shared_bytes": 0
+        },
+        "dgflow_g1_msm": {
+          "errors": {},
+          "function_name": "dgflow_g1_msm",
+          "local_bytes_per_thread": 6688,
+          "max_threads_per_block": 640,
+          "num_registers": 88,
+          "static_shared_bytes": 0
+        },
+        "dgflow_g1_verify_polynomial": {
+          "errors": {},
+          "function_name": "dgflow_g1_verify_polynomial",
+          "local_bytes_per_thread": 10192,
+          "max_threads_per_block": 512,
+          "num_registers": 128,
+          "static_shared_bytes": 0
+        }
+      },
+      "kernel_source_sha256": "b6cd7b01b34e1c6d80ec9f31f12eed4d4552cf8bf4d7fce88ba4befa60c17b39",
+      "memory_bytes": 8585216000,
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "nvrtc_version": "12.9",
+      "ptx_sha256": "ba86f7fbb503aeecd843357f8079abe16df590267459daae0d7bad92b075ba92",
+      "reason": "",
+      "verified": true
+    }
+  },
+  "frontend": {
+    "ready": true,
+    "source_sha256": "e9b24aa5a97e8f61a5a141e1611b135ee376ccf6c46990df6add4fcc45b91ee6"
+  },
+  "isolated_runtime": {
+    "schema_version": 1,
+    "external_proxy_disabled": true,
+    "runtime": "runtime-deployment-acceptance-20261008",
+    "automatic_startup": {
+      "seconds": 4.219,
+      "nodes": 6,
+      "torch_available": true,
+      "gpu_available": true,
+      "gpu_verified": true,
+      "manual_prepare_requests": 0,
+      "dataset_ready": {
+        "mnist": true,
+        "cifar10": true
+      },
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU"
+    },
+    "runs": [
+      {
+        "run_id": "22b0993d61d24ee8b0a4c0f1ae7dba59",
+        "mode": "plain",
+        "status": "completed",
+        "summary": {
+          "accuracy": 0.06,
+          "elapsed_s": 1.9975696000037715,
+          "controller_cpu_s": 0.890625,
+          "bytes_sent": 18952,
+          "completed_rounds": 1
+        },
+        "result_sha256": "af4ddd2c488c94188cbd2d5446620248e6f065c0473feafc955cd7c8872b3671"
+      },
+      {
+        "run_id": "cae002143230470ca0b44c3188496938",
+        "mode": "encrypted",
+        "status": "completed",
+        "summary": {
+          "accuracy": 0.06,
+          "elapsed_s": 4.2079044000129215,
+          "controller_cpu_s": 0.890625,
+          "bytes_sent": 6872510,
+          "completed_rounds": 1
+        },
+        "result_sha256": "2296ad48da5dc83d951089b20fdea06de5e4cee811d25c08bf6d38086acb839c"
+      }
+    ],
+    "passed": true,
+    "stop": {
+      "returncode": 0,
+      "output": "{\n  \"stopped\": [\n    \"authority1\",\n    \"authority2\",\n    \"aggregator1\",\n    \"aggregator2\",\n    \"client1\",\n    \"client2\"\n  ],\n  \"missing\": [],\n  \"refused\": []\n}\n"
+    }
+  },
+  "model_comparison": {
+    "dataset": "cifar10",
+    "backend": "torch",
+    "grid": 2,
+    "dimension": 130,
+    "train_limit": 120,
+    "test_limit": 100,
+    "rounds": 1,
+    "seed": 42,
+    "plain_cpu_vs_encrypted_gpu": true,
+    "model_hashes": [
+      "7a758d8f6abd2069049429368bc8ed758e8c43ac443d775acea7c810dd0b53ec"
+    ],
+    "equal": true
+  },
+  "restored_main_runtime": {
+    "node_count": 13,
+    "all_online": true,
+    "training_backends": {
+      "numpy": {
+        "installed": true,
+        "available": true,
+        "reason": "",
+        "training_device": "cpu",
+        "unsupported_nodes": []
+      },
+      "torch": {
+        "installed": true,
+        "available": true,
+        "reason": "",
+        "training_device": "cpu",
+        "unsupported_nodes": []
+      }
+    },
+    "gpu": {
+      "available": true,
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "memory_bytes": 8585216000,
+      "device_index": 0,
+      "compute_capability": "8.9",
+      "driver_version": 13040,
+      "backend": "cuda_nvrtc",
+      "accelerated_operations": [
+        "ec_batch",
+        "gt_exp_batch",
+        "gt_subgroup_batch"
+      ],
+      "reason": "",
+      "verified": true,
+      "device_resources": {
+        "multiprocessor_count": 24,
+        "max_threads_per_multiprocessor": 1536,
+        "registers_per_multiprocessor": 65536,
+        "errors": {}
+      },
+      "kernel_resources": {
+        "dgfl_gt_pow_batch": {
+          "function_name": "dgfl_gt_pow_batch",
+          "errors": {},
+          "max_threads_per_block": 256,
+          "static_shared_bytes": 0,
+          "local_bytes_per_thread": 16048,
+          "num_registers": 255
+        },
+        "dgfl_gt_validate": {
+          "function_name": "dgfl_gt_validate",
+          "errors": {},
+          "max_threads_per_block": 256,
+          "static_shared_bytes": 0,
+          "local_bytes_per_thread": 15232,
+          "num_registers": 255
+        },
+        "dgflow_g1_msm": {
+          "function_name": "dgflow_g1_msm",
+          "errors": {},
+          "max_threads_per_block": 640,
+          "static_shared_bytes": 0,
+          "local_bytes_per_thread": 6688,
+          "num_registers": 88
+        },
+        "dgflow_g1_verify_polynomial": {
+          "function_name": "dgflow_g1_verify_polynomial",
+          "errors": {},
+          "max_threads_per_block": 512,
+          "static_shared_bytes": 0,
+          "local_bytes_per_thread": 10192,
+          "num_registers": 128
+        }
+      },
+      "kernel_source_sha256": "b6cd7b01b34e1c6d80ec9f31f12eed4d4552cf8bf4d7fce88ba4befa60c17b39",
+      "kernel_build_sha256": "8a337b86973afef712dc1cef2689b4e60061eac8268833c24fae7a928f75ab31",
+      "nvrtc_version": "12.9",
+      "ptx_sha256": "ba86f7fbb503aeecd843357f8079abe16df590267459daae0d7bad92b075ba92",
+      "hardware_available": true,
+      "driver_available": true,
+      "compiler_available": true
+    },
+    "preparation": {
+      "state": "ready",
+      "reason": "CUDA 密码内核和 3 个边缘节点已通过自检"
+    },
+    "datasets": {
+      "mnist": true,
+      "cifar10": true
+    }
+  },
+  "checks": [
+    {
+      "scope": "deployment, datasets, GPU detection/autostart, client training capability, base offline packaging",
+      "passed": 453,
+      "skipped": 13,
+      "seconds": 49.63
+    },
+    {
+      "scope": "final deployment and packaging after runtime and documentation compatibility fixes",
+      "passed": 326,
+      "skipped": 18,
+      "seconds": 47.19,
+      "skip_reason": "16 Unix Bash cases on Windows; 2 optional pypdf checks unavailable"
+    },
+    {
+      "scope": "frontend",
+      "passed": 103,
+      "skipped": 0
+    },
+    {
+      "scope": "final deployment probes, including wrong arithmetic under Python optimization",
+      "passed": 62,
+      "skipped": 0,
+      "seconds": 1.34
+    },
+    {
+      "scope": "Ruff: src, tests, changed Python deployment/packaging scripts",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "GPU arithmetic support requires NVIDIA hardware and a compatible OS driver.",
+    "System Python, Node/npm and OS native C/C++ tools are deployment prerequisites.",
+    "Model-specific Lego CRS remains an explicit local trusted-parameter setup.",
+    "Legacy prepare_offline.py bundles only the NumPy/MNIST minimum demonstration.",
+    "Explicit user-requested data preparation can download when caches are missing."
+  ],
+  "source_package_check": {
+    "verified": true,
+    "file_count": 412,
+    "missing_optional_paths": [],
+    "deployment_scripts_gpu_requirements_cuda_headers_and_frontend_stamp_present": true,
+    "runtime_and_dependency_cache_excluded": true
+  }
+}

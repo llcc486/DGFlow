@@ -10,7 +10,7 @@ def test_thread_budget_requires_a_small_integer(threads):
     with pytest.raises(ValueError):
         roles._proof_policy({'verification_threads':threads})
     with pytest.raises(ValueError):
-        RunConfig(verification_threads=threads)
+        RunConfig(verification_threads=threads,proof_crs_hash='ab'*32)
 
 
 @pytest.mark.parametrize('threads',[0,5,True,None,1.5])

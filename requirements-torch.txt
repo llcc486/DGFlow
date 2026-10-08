@@ -1,5 +1,6 @@
-# Optional CPU training backend only; the default demonstration uses NumPy.
-# Install separately after requirements-lock.txt. Not part of the base offline bundle.
+# CPU training dependencies installed during complete deployment.
+# The crypto GPU backend has separate NVRTC dependencies in requirements-gpu.txt.
 # Official PyTorch CPU wheel index; CUDA packages are not requested.
 --index-url https://download.pytorch.org/whl/cpu
 torch==2.14.1+cpu
+torchvision>=0.20,<1
