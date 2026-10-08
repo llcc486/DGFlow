@@ -1,6 +1,7 @@
 """Freeze/verify the current source delivery; exclude local identities and builds.
 
 python scripts/freeze_source.py --archive dist/source-release/source.zip
+python scripts/freeze_source.py --source-only --archive dist/source-release/source-only.zip
 python scripts/freeze_source.py --verify
 """
 from __future__ import annotations
@@ -30,7 +31,7 @@ def _link(path):
     return path.is_symlink() or (hasattr(path,'is_junction') and path.is_junction())
 
 
-def collect(root):
+def collect(root,*,source_only=False):
     root=Path(root).resolve()
     files=[]
     def include(path):
@@ -41,9 +42,11 @@ def collect(root):
             raise ValueError(f'Private identity material cannot be delivered: {path.name}')
         if path.is_file(): files.append(path)
     for name in ROOT_FILES:
+        if source_only and name=='source-history.bundle': continue
         path=root/name
         if path.exists(): include(path)
     for tree in TREES:
+        if source_only and tree=='offline': continue
         base=root/tree
         if not base.exists(): continue
         if _link(base): raise ValueError(f'Linked input tree: {tree}')
@@ -52,7 +55,8 @@ def collect(root):
                 if name not in EXCLUDED_DIRS and _link(Path(folder)/name):
                     raise ValueError(f'Linked input directory: {name}')
             dirs[:]=[name for name in dirs if name not in EXCLUDED_DIRS
-                     and not name.endswith('.egg-info') and not name.startswith('runtime-')]
+                     and not name.endswith('.egg-info') and not name.startswith('runtime-')
+                     and not (source_only and Path(folder)==root/'web' and name=='dist')]
             for name in names:
                 if not name.endswith(('.pyc','.pyo')): include(Path(folder)/name)
     for name in NATIVE_FILES:
@@ -85,7 +89,7 @@ def verify(root):
     root=Path(root).resolve()
     manifest=json.loads((root/MANIFEST).read_text(encoding='utf-8'))
     if manifest.get('schema_version')!=2: raise ValueError('Expected current snapshot manifest schema 2')
-    actual=[_entry(root,path) for path in collect(root)]
+    actual=[_entry(root,path) for path in collect(root,source_only=manifest.get('scope',{}).get('source_only',False))]
     if manifest.get('files')!=actual:
         expected={entry['path']:entry for entry in manifest.get('files',[])}
         current={entry['path']:entry for entry in actual}
@@ -97,19 +101,25 @@ def verify(root):
     return manifest
 
 
-def freeze(root,release_id=None,archive=None):
+def freeze(root,release_id=None,archive=None,*,source_only=False):
     root=Path(root).resolve()
     if release_id is None: release_id=f'dgflow-{datetime.now(UTC):%Y%m%d}-source'
-    paths=collect(root); entries=[_entry(root,path) for path in paths]
+    paths=collect(root,source_only=source_only); entries=[_entry(root,path) for path in paths]
     manifest={'schema_version':2,'kind':'complete-current-project-source','release_id':release_id,
               'base_commit':BASE_COMMIT,'commit':None,
-              'provenance':'Modified extracted source; source-history.bundle contains the original history only.',
+              'provenance':'Current project snapshot identified by file hashes; base_commit is historical provenance only.',
               'created_utc':datetime.now(UTC).isoformat(),'snapshot_sha256':_snapshot(entries),
               'file_count':len(entries),'payload_bytes':sum(entry['size'] for entry in entries),
               'scope':{'root_files':list(ROOT_FILES),'trees':list(TREES),'native_files':list(NATIVE_FILES),
                        'excluded_directories':sorted(EXCLUDED_DIRS),
                        'excluded_files':sorted(EXCLUDED_FILES),
-                       'built_frontend_included':True,'manifest_excludes_itself':True},'files':entries}
+                       'source_only':source_only,
+                       'built_frontend_included':not source_only,'manifest_excludes_itself':True},'files':entries}
+    if source_only:
+        manifest['scope']['root_files']=[name for name in ROOT_FILES if name!='source-history.bundle']
+        manifest['scope']['trees']=[name for name in TREES if name!='offline']
+        manifest['scope']['excluded_directories']+=['web/dist','offline']
+        manifest['scope']['excluded_files']=sorted(EXCLUDED_FILES|{'source-history.bundle'})
     raw=(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
     descriptor,name=tempfile.mkstemp(prefix='.source-manifest-',dir=root)
     with os.fdopen(descriptor,'wb') as stream: stream.write(raw)
@@ -157,8 +167,10 @@ def main(argv=None):
     parser.add_argument('--verify',action='store_true')
     parser.add_argument('--release-id',help='Explicit delivery label; defaults to the current UTC date plus source')
     parser.add_argument('--archive',type=Path)
+    parser.add_argument('--source-only',action='store_true',
+                        help='Exclude built frontend, offline bundles and historical Git bundle')
     args=parser.parse_args(argv)
-    result=verify(args.root) if args.verify else freeze(args.root,args.release_id,args.archive)
+    result=verify(args.root) if args.verify else freeze(args.root,args.release_id,args.archive,source_only=args.source_only)
     print(json.dumps({name:result[name] for name in ('release_id','file_count','payload_bytes','snapshot_sha256')}))
     return 0
 

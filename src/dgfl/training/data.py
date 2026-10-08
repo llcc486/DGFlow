@@ -8,15 +8,24 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import http.client
+import logging
+import math
 import struct
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import zlib
-from numbers import Integral
+from numbers import Integral, Real
 from pathlib import Path
 
 import numpy as np
 
 MNIST_SOURCE = "https://ossci-datasets.s3.amazonaws.com/mnist/"
+# CVDF's published mirror, also used by TensorFlow Datasets:
+# https://github.com/cvdfoundation/mnist
+MNIST_MIRROR = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 MNIST_FILES = {
     "train-images-idx3-ubyte.gz": "f68b3c2dcbeaaa9fbdd348bbdeb94873",
     "train-labels-idx1-ubyte.gz": "d53e105ee54ea40749a09fcbcd1e9432",
@@ -26,6 +35,7 @@ MNIST_FILES = {
 MAX_DOWNLOAD_BYTES = 16 * 1024 * 1024
 MAX_IDX_BYTES = 48 * 1024 * 1024
 IDX_READ_BYTES = 128 * 1024
+logger = logging.getLogger(__name__)
 
 
 def preprocessing_description(grid=8):
@@ -46,17 +56,88 @@ def _checked_archive(path: Path, expected: str) -> bytes:
     return blob
 
 
-def prepare_mnist(data_dir: str | Path) -> dict:
+def _mnist_sources(source: str | None) -> tuple[str, ...]:
+    if source is None:
+        return (MNIST_SOURCE, MNIST_MIRROR)
+    if not isinstance(source, str):
+        raise ValueError("MNIST source must be an absolute HTTPS base URL")
+    parsed = urllib.parse.urlsplit(source)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
+            or parsed.password is not None or parsed.query or parsed.fragment):
+        raise ValueError("MNIST source must be an absolute HTTPS base URL without credentials, query or fragment")
+    # Accessing port also rejects malformed values before any network request.
+    if parsed.port is not None and not 1 <= parsed.port <= 65535:
+        raise ValueError("MNIST source port must be in [1, 65535]")
+    return (source.rstrip("/") + "/",)
+
+
+def _download_mnist(name: str, expected: str, sources: tuple[str, ...],
+                    timeout: float, retries: int) -> tuple[bytes, str]:
+    last_error = None
+    for attempt in range(retries + 1):
+        if attempt:
+            time.sleep(min(2 ** (attempt - 1), 4))
+        for source in sources:
+            url = source + name
+            try:
+                with urllib.request.urlopen(url, timeout=timeout) as response:
+                    if hasattr(response, "geturl") and not response.geturl().startswith("https://"):
+                        raise ValueError("MNIST download redirected to non-HTTPS transport")
+                    chunks, size = [], 0
+                    while True:
+                        chunk = response.read(min(65536, MAX_DOWNLOAD_BYTES + 1 - size))
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > MAX_DOWNLOAD_BYTES:
+                            raise ValueError("MNIST response exceeds allowed size")
+                        chunks.append(chunk)
+                    blob = b"".join(chunks)
+            except (OSError, urllib.error.URLError, http.client.HTTPException) as exc:
+                last_error = exc
+                logger.warning("MNIST download failed: %s (round %s/%s): %s",
+                               url, attempt + 1, retries + 1, exc)
+                continue
+            if hashlib.md5(blob).hexdigest() != expected:
+                raise ValueError(f"MNIST checksum mismatch: {name}")
+            return blob, url
+    raise OSError(
+        f"MNIST download failed for {name} after {len(sources) * (retries + 1)} attempts: {last_error}. "
+        "Verified cached files were preserved. Retry with --mnist-timeout 120, "
+        "use --mnist-source with an accessible HTTPS mirror, or copy the four original "
+        ".gz archives into data-dir/raw and run prepare-data --offline."
+    ) from last_error
+
+
+def prepare_mnist(data_dir: str | Path, *, timeout: float = 30, retries: int = 2,
+                  source: str | None = None, offline: bool = False) -> dict:
     """Download verified original MNIST archives, or reuse verified cached files.
 
 This is the sole network-enabled function. An invalid cache is rejected, never
 silently overwritten. Returned metadata contains relative paths only.
+Network failures try each HTTPS mirror before retrying, with bounded backoff.
+``retries`` counts additional rounds; ``timeout`` bounds each blocking socket
+operation, not the total preparation time. A custom source replaces the mirrors.
+Offline preparation verifies local archives and never attempts a download.
 """
+    if (isinstance(timeout, bool) or not isinstance(timeout, Real)
+            or not math.isfinite(timeout) or not 1 <= timeout <= 300):
+        raise ValueError("MNIST timeout must be a finite number in [1, 300] seconds")
+    if isinstance(retries, bool) or not isinstance(retries, Integral) or not 0 <= retries <= 5:
+        raise ValueError("MNIST retries must be an integer in [0, 5]")
+    sources = _mnist_sources(source)
     raw = Path(data_dir) / "raw"
+    cached = {name: _checked_archive(raw / name, expected)
+              for name, expected in MNIST_FILES.items() if (raw / name).exists()}
+    missing = [name for name in MNIST_FILES if name not in cached]
+    if offline and missing:
+        raise FileNotFoundError("Offline MNIST cache is missing: " + ", ".join(missing)
+                                + ". Copy the original .gz archives into " + str(raw))
     raw.mkdir(parents=True, exist_ok=True)
     metadata = {
         "dataset": "MNIST",
         "source": MNIST_SOURCE,
+        "download_sources": list(sources),
         "homepage": "http://yann.lecun.com/exdb/mnist/",
         "license": "CC-BY-SA-3.0",
         "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
@@ -67,31 +148,20 @@ silently overwritten. Returned metadata contains relative paths only.
     }
     for name, expected in MNIST_FILES.items():
         destination = raw / name
-        if destination.exists():
-            blob = _checked_archive(destination, expected)
+        url = sources[0] + name
+        if name in cached:
+            blob = cached[name]
         else:
-            with urllib.request.urlopen(MNIST_SOURCE + name, timeout=30) as response:
-                if hasattr(response, "geturl") and not response.geturl().startswith("https://"):
-                    raise ValueError("MNIST download redirected to non-HTTPS transport")
-                chunks, size = [], 0
-                while True:
-                    chunk = response.read(min(65536, MAX_DOWNLOAD_BYTES + 1 - size))
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    if size > MAX_DOWNLOAD_BYTES:
-                        raise ValueError("MNIST response exceeds allowed size")
-                    chunks.append(chunk)
-                blob = b"".join(chunks)
-            if hashlib.md5(blob).hexdigest() != expected:
-                raise ValueError(f"MNIST checksum mismatch: {name}")
+            blob, url = _download_mnist(name, expected, sources, timeout, retries)
             temporary = destination.with_suffix(".gz.part")
             try:
                 temporary.write_bytes(blob)
                 temporary.replace(destination)
             finally:
                 temporary.unlink(missing_ok=True)
-        metadata["files"].append({"path": f"raw/{name}", "url": MNIST_SOURCE + name,
+        # Cached bytes have no recoverable transport history: url is a download
+        # location for this archive, while hashes identify its exact contents.
+        metadata["files"].append({"path": f"raw/{name}", "url": url,
                                   "bytes": len(blob), "md5": expected,
                                   "sha256": hashlib.sha256(blob).hexdigest()})
     return metadata

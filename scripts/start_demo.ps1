@@ -78,7 +78,9 @@ try {
     } else {
         Write-Host 'Verifying the existing local MNIST cache; no dataset download is needed.'
     }
-    Invoke-DgflPython -Arguments @('-m', 'dgfl.cli', 'prepare-data', '--data-dir', $DataDirectory)
+    $PrepareArguments = @('-m', 'dgfl.cli', 'prepare-data', '--data-dir', $DataDirectory)
+    if ($Offline) { $PrepareArguments += '--offline' }
+    Invoke-DgflPython -Arguments $PrepareArguments
     $DemoArguments = @('-m', 'dgfl.cli', 'demo', '--runtime', $Runtime)
     if ($null -ne $ClientCount) { $DemoArguments += @('--client-count', [string]$ClientCount) }
     if ($null -ne $AuthorityCount) { $DemoArguments += @('--authority-count', [string]$AuthorityCount) }

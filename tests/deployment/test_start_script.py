@@ -59,6 +59,57 @@ def test_offline_mode_does_not_install_or_download_missing_data(tmp_path):
     assert not any('install' in call or 'prepare-data' in call or 'demo' in call for call in calls)
 
 
+def complete_startup_cache(tmp_path):
+    raw = tmp_path / 'data' / 'mnist' / 'raw'
+    raw.mkdir(parents=True)
+    for name in ('train-images-idx3-ubyte.gz', 'train-labels-idx1-ubyte.gz',
+                 't10k-images-idx3-ubyte.gz', 't10k-labels-idx1-ubyte.gz'):
+        # The stub Python process records invocation; real cache validation is
+        # covered by training tests, so no real dataset is needed here.
+        (raw / name).write_bytes(b'cache fixture')
+
+
+@pytest.mark.skipif(not POWERSHELL, reason='PowerShell is unavailable on this platform')
+def test_offline_mode_with_existing_cache_forwards_offline_to_preparation(tmp_path):
+    complete_startup_cache(tmp_path)
+    result, calls = run_script(tmp_path, offline=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not any('install' in call for call in calls)
+    preparation = next(call for call in calls if 'prepare-data' in call)
+    assert '--offline' in preparation
+    assert calls.index(preparation) < next(index for index, call in enumerate(calls) if 'demo' in call)
+
+
+@pytest.mark.skipif(os.name == 'nt' or not shutil.which('bash'), reason='A native Unix Bash is required')
+def test_bash_offline_mode_with_cache_forwards_offline_without_installing(tmp_path):
+    complete_startup_cache(tmp_path)
+    (tmp_path / 'scripts').mkdir()
+    script = tmp_path / 'scripts' / 'start_demo.sh'
+    shutil.copyfile(PROJECT / 'scripts' / 'start_demo.sh', script)
+    (tmp_path / 'pyproject.toml').write_text('[project]\nname="fixture"\n', encoding='utf8')
+    (tmp_path / 'requirements-lock.txt').write_text('example==1.0\n', encoding='utf8')
+    fake = tmp_path / 'fake-python.sh'
+    fake.write_text('#!/usr/bin/env bash\n'
+                    'printf "%s\\0" "$@" >> "$DGFL_PROBE_LOG"\n'
+                    'printf "\\n" >> "$DGFL_PROBE_LOG"\n'
+                    'if [[ "${1:-}" == -c && "${2:-}" == *hashlib* ]]; then printf "fixturehash\\n"; fi\n'
+                    'exit 0\n', encoding='utf8')
+    fake.chmod(0o700)
+    log = tmp_path / 'calls.log'
+    env = {**os.environ, 'DGFL_PYTHON_PATH': str(fake), 'DGFL_PROBE_LOG': str(log),
+           'DGFL_RUNTIME': str(tmp_path / 'runtime'), 'DGFL_CLIENT_COUNT': '', 'DGFL_AUTHORITY_COUNT': '',
+           'DGFL_AGGREGATOR_COUNT': '', 'DGFL_AUTHORITY_THRESHOLD': '', 'DGFL_AGGREGATOR_THRESHOLD': '',
+           'DGFL_MACHINE': ''}
+    result = subprocess.run(['bash', str(script), '--offline'], capture_output=True, text=True,
+                            env=env, cwd=tmp_path, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = [line.decode().split('\0')[:-1] for line in log.read_bytes().splitlines()]
+    assert not any('install' in call for call in calls)
+    preparation = next(call for call in calls if 'prepare-data' in call)
+    assert '--offline' in preparation
+    assert calls.index(preparation) < next(index for index, call in enumerate(calls) if 'demo' in call)
+
+
 @pytest.mark.skipif(not POWERSHELL, reason='PowerShell is unavailable on this platform')
 @pytest.mark.parametrize('client_count', [3, 20, 100])
 def test_client_count_reaches_demo_without_changing_setup(tmp_path, client_count):

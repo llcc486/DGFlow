@@ -78,7 +78,9 @@ if $missing_data; then
 else
     echo 'Verifying the existing local MNIST cache; no dataset download is needed.'
 fi
-"$dgfl_python" -m dgfl.cli prepare-data --data-dir "$data_directory"
+prepare_arguments=(-m dgfl.cli prepare-data --data-dir "$data_directory")
+if $offline; then prepare_arguments+=(--offline); fi
+"$dgfl_python" "${prepare_arguments[@]}"
 demo_arguments=(-m dgfl.cli demo --runtime "$runtime")
 if [[ -n "$client_count" ]]; then demo_arguments+=(--client-count "$client_count"); fi
 if [[ -n "$authority_count" ]]; then demo_arguments+=(--authority-count "$authority_count"); fi

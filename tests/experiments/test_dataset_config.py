@@ -109,3 +109,48 @@ def test_prepare_cli_routes_selected_dataset_and_persists_metadata(tmp_path, mon
     expected = {'dataset': dataset, 'files': []}
     assert json.loads((target/'metadata.json').read_text('utf8')) == expected
     assert json.loads(capsys.readouterr().out) == expected
+
+
+@pytest.mark.parametrize('options, expected', [
+    (['--mnist-timeout', '75'], {'timeout': 75.0}),
+    (['--mnist-retries', '0'], {'retries': 0}),
+    (['--mnist-source', 'https://dataset.example/mnist'], {'source': 'https://dataset.example/mnist'}),
+    (['--offline'], {'offline': True}),
+    (['--mnist-timeout', '120', '--mnist-retries', '3', '--mnist-source', 'https://dataset.example/', '--offline'],
+     {'timeout': 120.0, 'retries': 3, 'source': 'https://dataset.example/', 'offline': True}),
+])
+def test_prepare_cli_only_passes_explicit_mnist_options(tmp_path, monkeypatch, capsys, options, expected):
+    calls = []
+    def prepare(path, **kwargs):
+        calls.append((path, kwargs))
+        return {'dataset': 'MNIST', 'files': []}
+    monkeypatch.setattr(data, 'prepare_mnist', prepare)
+    assert cli.main(['prepare-data', '--data-dir', str(tmp_path), *options]) == 0
+    assert calls == [(tmp_path, expected)]
+    assert json.loads((tmp_path / 'metadata.json').read_text('utf8')) == {'dataset': 'MNIST', 'files': []}
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize('options', [
+    ['--mnist-timeout', '30'], ['--mnist-retries', '0'],
+    ['--mnist-source', 'https://dataset.example/'], ['--offline'],
+])
+def test_prepare_cli_rejects_mnist_options_for_cifar10_before_downloading(tmp_path, monkeypatch, capsys, options):
+    monkeypatch.setattr(data, 'prepare_mnist', lambda *a, **k: pytest.fail('wrong dataset reached MNIST'))
+    monkeypatch.setattr(cifar10, 'prepare_cifar10', lambda *a, **k: pytest.fail('unsupported options reached CIFAR'))
+    assert cli.main(['prepare-data', '--dataset', 'cifar10', '--data-dir', str(tmp_path), *options]) == 1
+    assert 'mnist' in capsys.readouterr().err.lower()
+    assert not (tmp_path / 'metadata.json').exists()
+
+
+def test_prepare_cli_does_not_read_implicit_download_options_from_environment(tmp_path, monkeypatch, capsys):
+    for key in ('DGFL_MNIST_TIMEOUT', 'DGFL_MNIST_RETRIES', 'DGFL_MNIST_SOURCE'):
+        monkeypatch.setenv(key, 'not-a-download-option')
+    seen = []
+    def prepare(path):
+        seen.append(path)
+        return {'dataset': 'MNIST', 'files': []}
+    monkeypatch.setattr(data, 'prepare_mnist', prepare)
+    assert cli.main(['prepare-data', '--data-dir', str(tmp_path)]) == 0
+    assert seen == [tmp_path]
+    capsys.readouterr()

@@ -31,6 +31,31 @@ Set-Location ..
 
 Linux 手动环境使用 `python3 -m venv .venv`，将下文的 Python 路径改为 `.venv/bin/python`；前端用 `npm`。不同操作系统不得直接复制整个虚拟环境，应重新安装匹配平台的依赖。
 
+### MNIST 下载超时与离线复用
+
+`prepare-data` 默认从 PyTorch 使用的 S3 地址下载；传输失败后尝试 [CVDF 发布的 HTTPS 镜像](https://github.com/cvdfoundation/mnist)，每轮尝试两个地址，最多三轮，轮间短暂退避。有效缓存会复用，只补缺失文件；摘要错误、超出大小上限或降级到 HTTP 会立即拒绝。默认 30 秒为每次阻塞网络操作的超时，不是整个数据准备的总时限。网络较慢时可单独先准备数据：
+
+```powershell
+.\.venv\Scripts\python.exe -m dgfl.cli prepare-data --mnist-timeout 120 --mnist-retries 2
+```
+
+`--mnist-timeout` 支持 1–300 秒，`--mnist-retries` 支持 0–5 个额外轮次。若默认地址均无法访问，可用 `--mnist-source https://storage.googleapis.com/cvdf-datasets/mnist/` 指定一个 HTTPS 基址；指定后只尝试该地址。镜像同样受原始文件摘要校验约束，不能保证它在所有网络中都可访问。这些选项及下述 `--offline` 目前仅用于 MNIST。
+
+最可靠的离线方法是在能联网的机器上准备一次，将 `data/mnist/raw` 下这四个**原始压缩文件**复制到目标项目的相同位置；不用解压，不用复制虚拟环境：
+
+- `train-images-idx3-ubyte.gz`
+- `train-labels-idx1-ubyte.gz`
+- `t10k-images-idx3-ubyte.gz`
+- `t10k-labels-idx1-ubyte.gz`
+
+在目标项目根目录执行校验并生成元数据：
+
+```powershell
+.\.venv\Scripts\python.exe -m dgfl.cli prepare-data --offline
+```
+
+此命令不联网，缺少文件会明确列出；损坏的缓存不会自动覆盖。校验通过后正常启动即可复用缓存。环境依赖及前端也已准备好时，可用 `powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline`（Linux 用 `bash scripts/start_demo.sh --offline`）启动。公开数据可单独保存为部署材料，源码无需包含数据集。
+
 ## 2. 单机部署
 
 一次性准备并初始化：
