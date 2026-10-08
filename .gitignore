@@ -21,6 +21,7 @@ data/
 *.pdf
 !docs/submission/*.pdf
 offline/
+full-offline/
 *.whl
 source-history.bundle
 SOURCE-MANIFEST.json

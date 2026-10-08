@@ -80,7 +80,8 @@ def test_download_invokes_current_python_and_pinned_binary_requirements(offline,
     monkeypatch.setattr(offline.subprocess, 'run', download)
     offline.prepare_offline(root, root/'offline')
     assert len(calls) == 1
-    assert calls[0][:4] == [sys.executable, '-m', 'pip', 'download']
+    assert calls[0][:5] == [sys.executable, '-B', '-m', 'pip', 'download']
+    assert calls[0][calls[0].index('--index-url')+1].startswith('https://pypi.tuna.tsinghua.edu.cn/')
     assert '--only-binary=:all:' in calls[0] and '--no-deps' in calls[0]
     assert Path(calls[0][calls[0].index('--requirement')+1]).name == 'requirements-lock.txt'
 

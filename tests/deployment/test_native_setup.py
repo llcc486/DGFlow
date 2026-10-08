@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import types
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,8 @@ PROJECT=Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
-def helper():
+def helper(monkeypatch):
+    monkeypatch.syspath_prepend(str(PROJECT/'scripts'))
     spec=importlib.util.spec_from_file_location('deployment_native_tests',PROJECT/'scripts/deployment_native.py')
     module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     return module
@@ -150,10 +152,10 @@ def test_source_build_bootstraps_private_rust_and_preserves_subprocess_proxy_env
         bootstraps.append(dict(environment))
         assert Path(environment['CARGO_HOME']).is_relative_to(project/'tmp')
         assert Path(environment['RUSTUP_HOME']).is_relative_to(project/'tmp')
-        assert environment['RUSTUP_DIST_SERVER']=='https://static.rust-lang.org'
+        assert environment['RUSTUP_DIST_SERVER']=='https://rsproxy.cn'
 
-    def run(command,root,environment,**kwargs):
-        commands.append((list(map(str,command)),dict(environment)))
+    def run(command,root,env,**kwargs):
+        commands.append((list(map(str,command)),dict(env)))
         if list(map(str,command))[1:]==['-m','maturin','--version']:
             raise subprocess.CalledProcessError(1,command)
         if 'build' in command and 'maturin' in command:
@@ -169,15 +171,18 @@ def test_source_build_bootstraps_private_rust_and_preserves_subprocess_proxy_env
     assert environment==original and len(bootstraps)==1
     assert all(env['HTTPS_PROXY']==environment['HTTPS_PROXY'] for _,env in commands)
     build,build_env=next((command,env) for command,env in commands if 'build' in command)
-    assert '--locked' in build and '--release' in build
+    assert '--locked' in build and '--offline' in build and '--release' in build
+    fetch=next(command for command,_ in commands if 'fetch' in command)
+    assert '--locked' in fetch
+    assert next(i for i,(command,_) in enumerate(commands) if 'fetch' in command)<next(i for i,(command,_) in enumerate(commands) if 'build' in command)
     assert Path(build_env['CARGO_TARGET_DIR']).is_relative_to(project/'tmp')
     assert Path(build_env['TEMP']).is_relative_to(project/'tmp')
-    assert all(command[command.index('install')+1:]==['maturin>=1.8,<2'] for command,_ in commands if 'pip' in command)
+    assert all('maturin>=1.8,<2' in command and '--index-url' in command for command,_ in commands if 'pip' in command)
     assert local.with_name(local.name+'.source.json').is_file()
 
 
 @pytest.mark.parametrize('valid',[True,False])
-def test_rust_bootstrap_is_official_checksum_verified_and_does_not_modify_path(helper,project,monkeypatch,valid):
+def test_rust_bootstrap_is_checksum_verified_and_does_not_modify_path(helper,project,monkeypatch,valid):
     import hashlib
 
     binary=b'official-bootstrap-fixture'; checksum=hashlib.sha256(binary).hexdigest() if valid else '0'*64
@@ -195,9 +200,200 @@ def test_rust_bootstrap_is_official_checksum_verified_and_does_not_modify_path(h
         assert not commands
         return
     helper._bootstrap(project,{})
-    assert all(url.startswith('https://static.rust-lang.org/rustup/dist/') for url in downloads)
+    assert all(url.startswith('https://rsproxy.cn/rustup/dist/') for url in downloads)
     assert '--no-modify-path' in commands[0] and commands[0][commands[0].index('--profile')+1]=='minimal'
     assert Path(commands[0][0]).is_relative_to(project/'tmp')
+
+
+@pytest.mark.parametrize('stage',['bootstrap_download','toolchain_install'])
+def test_rust_mirror_network_failure_falls_back_to_official_without_changing_private_scope(helper,project,monkeypatch,stage):
+    import hashlib
+
+    binary=b'verified rustup'; checksum=hashlib.sha256(binary).hexdigest().encode()
+    downloads=[]; installations=[]
+    environment={'CARGO_HOME':str(project/'tmp/cargo'),'RUSTUP_HOME':str(project/'tmp/rustup'),
+                 'HTTPS_PROXY':'http://user:secret@proxy.invalid:7890'}
+
+    def download(url,env,*,limit):
+        downloads.append(url)
+        assert env['CARGO_HOME']==environment['CARGO_HOME'] and env['RUSTUP_HOME']==environment['RUSTUP_HOME']
+        if stage=='bootstrap_download' and url.startswith('https://rsproxy.cn/'):
+            raise urllib.error.URLError('mirror offline')
+        return checksum if url.endswith('.sha256') else binary
+
+    def run(command,root,env,**kwargs):
+        installations.append(dict(env))
+        if stage=='toolchain_install' and env['RUSTUP_DIST_SERVER']=='https://rsproxy.cn':
+            raise subprocess.CalledProcessError(1,command)
+
+    monkeypatch.setattr(helper,'_download',download)
+    monkeypatch.setattr(helper,'_run',run)
+    helper._bootstrap(project,environment)
+    assert downloads[0].startswith('https://rsproxy.cn/') and downloads[-1].startswith('https://static.rust-lang.org/')
+    assert environment['RUSTUP_DIST_SERVER']=='https://static.rust-lang.org'
+    assert installations[-1]['HTTPS_PROXY']=='http://user:secret@proxy.invalid:7890'
+    marker=json.loads((project/'tmp/native-toolchain/bootstrap.json').read_text('utf8'))
+    assert marker['url'].startswith('https://static.rust-lang.org/') and 'secret' not in json.dumps(marker)
+
+
+def test_explicit_rustup_mirror_is_used_before_defaults(helper,project,monkeypatch):
+    import hashlib
+
+    binary=b'custom rustup'; downloads=[]; installations=[]
+    environment={'RUSTUP_DIST_SERVER':'https://rust.example.invalid/dist-root',
+                 'RUSTUP_UPDATE_ROOT':'https://rust.example.invalid/update-root'}
+    original=dict(environment)
+    def download(url,env,*,limit):
+        downloads.append(url)
+        return hashlib.sha256(binary).hexdigest().encode() if url.endswith('.sha256') else binary
+    monkeypatch.setattr(helper,'_download',download)
+    monkeypatch.setattr(helper,'_run',lambda command,root,env,**kwargs:installations.append(dict(env)))
+    helper._bootstrap(project,environment)
+    assert all(url.startswith(original['RUSTUP_UPDATE_ROOT']+'/dist/') for url in downloads)
+    assert installations==[original] and environment==original
+
+
+def test_exhausted_bootstrap_sources_are_bounded_and_do_not_publish_success_or_proxy_secrets(helper,project,monkeypatch,capsys):
+    downloads=[]
+    def download(url,env,*,limit):
+        downloads.append(url)
+        raise urllib.error.URLError('secret in a network-library error')
+    monkeypatch.setattr(helper,'_download',download)
+    monkeypatch.setattr(helper,'_run',lambda *a,**k:pytest.fail('Failed download must not execute an installer'))
+    with pytest.raises(RuntimeError,match='configured mirrors or the official source'):
+        helper._bootstrap(project,{'HTTPS_PROXY':'http://user:secret@proxy.invalid:7890'})
+    assert len(downloads)==2
+    assert not (project/'tmp/native-toolchain/bootstrap.json').exists()
+    assert 'secret' not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('source',['http://mirror.invalid','https://user:secret@mirror.invalid','https://mirror.invalid?token=secret'])
+def test_invalid_rust_mirror_is_refused_before_network(helper,project,monkeypatch,source):
+    monkeypatch.setattr(helper,'_download',lambda *a,**k:pytest.fail('Invalid mirror must not be contacted'))
+    with pytest.raises(RuntimeError,match='HTTPS URL'):
+        helper._bootstrap(project,{'RUSTUP_DIST_SERVER':source})
+
+
+@pytest.mark.parametrize('final_url,payload,error',[
+    ('https://rsproxy.cn/rustup/bootstrap',b'1234',None),
+    ('https://lf6-static.rsproxy.cn/bootstrap',b'1234',None),
+    ('http://rsproxy.cn/bootstrap',b'1234','remain on HTTPS'),
+    ('https://rsproxy.cn/rustup/bootstrap',b'12345','size limit'),
+])
+def test_rust_bootstrap_transport_preserves_proxy_and_checks_https_redirect_and_size(helper,monkeypatch,final_url,payload,error):
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def geturl(self): return final_url
+        def read(self,size):
+            assert size==5
+            return payload
+    class Opener:
+        def open(self,url,timeout):
+            assert timeout==120
+            return Response()
+    proxies=[]
+    monkeypatch.setattr(helper.urllib.request,'ProxyHandler',lambda values:proxies.append(values))
+    monkeypatch.setattr(helper.urllib.request,'build_opener',lambda *a:Opener())
+    environment={'HTTPS_PROXY':'http://user:secret@proxy.invalid:7890'}
+    if error is None: assert helper._download('https://rsproxy.cn/bootstrap',environment,limit=4)==b'1234'
+    else:
+        with pytest.raises(RuntimeError,match=error):
+            helper._download('https://rsproxy.cn/bootstrap',environment,limit=4)
+    assert proxies==[{'https':environment['HTTPS_PROXY']}]
+
+
+def test_cargo_mirror_fetch_falls_back_before_an_offline_build_and_restores_temporary_configuration(helper,project,monkeypatch):
+    environment={'CARGO_HOME':str(project/'tmp/native-toolchain/cargo'),'HTTPS_PROXY':'http://user:secret@proxy.invalid'}
+    original=dict(environment); attempts=[]
+    lock=(project/'native/dgfl-native/Cargo.lock').read_bytes()
+    config=Path(environment['CARGO_HOME'])/'config.toml'
+    def run(command,root,env,**kwargs):
+        assert '--locked' in command and 'fetch' in command and kwargs['capture']
+        assert env['HTTPS_PROXY']==environment['HTTPS_PROXY']
+        selected=helper.tomllib.loads(config.read_text('utf8'))['source']['dgflow-mirror']['registry'] if config.exists() else None
+        attempts.append(selected)
+        if selected is not None: raise subprocess.CalledProcessError(1,command)
+    monkeypatch.setattr(helper,'_run',run)
+    with helper._cargo_dependencies(project,'fixture-cargo',environment) as build_env:
+        assert attempts==['sparse+https://rsproxy.cn/index/',None]
+        assert build_env['CARGO_HTTP_TIMEOUT']=='120' and build_env['CARGO_NET_RETRY']=='2'
+        assert not config.exists()
+    assert environment==original and not config.exists()
+    assert (project/'native/dgfl-native/Cargo.lock').read_bytes()==lock
+
+
+def test_explicit_cargo_index_is_first_and_successful_registry_mapping_survives_until_build_finishes(helper,project,monkeypatch):
+    environment={'CARGO_HOME':str(project/'tmp/native-toolchain/cargo'),
+                 'CARGO_REGISTRIES_CRATES_IO_INDEX':'sparse+https://cargo.example.invalid/index/',
+                 'CARGO_HTTP_TIMEOUT':'17','CARGO_NET_RETRY':'4'}
+    original=dict(environment); commands=[]
+    config=Path(environment['CARGO_HOME'])/'config.toml'
+    def run(command,root,env,**kwargs):
+        commands.append(command)
+        assert env['CARGO_HTTP_TIMEOUT']=='17' and env['CARGO_NET_RETRY']=='4'
+    monkeypatch.setattr(helper,'_run',run)
+    with helper._cargo_dependencies(project,'fixture-cargo',environment) as build_env:
+        registry=helper.tomllib.loads(config.read_text('utf8'))['source']['dgflow-mirror']['registry']
+        assert registry==environment['CARGO_REGISTRIES_CRATES_IO_INDEX']
+        assert build_env['CARGO_REGISTRIES_CRATES_IO_INDEX']==registry
+    assert len(commands)==1 and not config.exists() and environment==original
+
+
+def test_failed_explicit_cargo_index_retries_domestic_then_official_without_reusing_the_explicit_index(helper,project,monkeypatch):
+    environment={'CARGO_HOME':str(project/'tmp/native-toolchain/cargo'),
+                 'CARGO_REGISTRIES_CRATES_IO_INDEX':'sparse+https://cargo.example.invalid/index/'}
+    config=Path(environment['CARGO_HOME'])/'config.toml'; attempts=[]
+    def run(command,root,env,**kwargs):
+        registry=helper.tomllib.loads(config.read_text('utf8'))['source']['dgflow-mirror']['registry'] if config.exists() else None
+        attempts.append(registry)
+        if registry is not None: raise subprocess.TimeoutExpired(command,1)
+        assert 'CARGO_REGISTRIES_CRATES_IO_INDEX' not in env
+    monkeypatch.setattr(helper,'_run',run)
+    with helper._cargo_dependencies(project,'fixture-cargo',environment) as build_env:
+        assert 'CARGO_REGISTRIES_CRATES_IO_INDEX' not in build_env
+    assert attempts==['sparse+https://cargo.example.invalid/index/','sparse+https://rsproxy.cn/index/',None]
+    assert environment['CARGO_REGISTRIES_CRATES_IO_INDEX']=='sparse+https://cargo.example.invalid/index/'
+    assert not config.exists()
+
+
+@pytest.mark.parametrize('location',['private','project'])
+@pytest.mark.parametrize('fails',[False,True])
+def test_existing_cargo_source_configuration_is_never_rewritten(helper,project,monkeypatch,location,fails):
+    home=project/'tmp/native-toolchain/cargo'
+    config=home/'config.toml' if location=='private' else project/'.cargo/config.toml'
+    config.parent.mkdir(parents=True,exist_ok=True)
+    original=b'[source.crates-io]\nreplace-with="custom"\n[source.custom]\nregistry="sparse+https://existing.invalid/index/"\n'
+    config.write_bytes(original); commands=[]
+    def run(command,root,env,**kwargs):
+        commands.append(command)
+        assert config.read_bytes()==original
+        if fails: raise subprocess.CalledProcessError(1,command)
+    monkeypatch.setattr(helper,'_run',run)
+    if fails:
+        with (pytest.raises(RuntimeError,match='Unable to fetch'),
+              helper._cargo_dependencies(project,'fixture-cargo',{'CARGO_HOME':str(home)})):
+            pytest.fail('User-configured source fetch failed; compilation must not begin')
+    else:
+        with helper._cargo_dependencies(project,'fixture-cargo',{'CARGO_HOME':str(home)}):
+            assert config.read_bytes()==original
+    assert len(commands)==1 and config.read_bytes()==original
+
+
+@pytest.mark.parametrize('failure',['fetch','build'])
+def test_failed_dependency_download_or_compilation_cleans_managed_cargo_config_without_retrying_compilation(helper,project,monkeypatch,failure):
+    home=project/'tmp/native-toolchain/cargo'; commands=[]; reached_build=False
+    def run(command,root,env,**kwargs):
+        commands.append(command)
+        if failure=='fetch': raise subprocess.CalledProcessError(1,command)
+    monkeypatch.setattr(helper,'_run',run)
+    with (pytest.raises(RuntimeError,match='Unable to fetch|compilation failed'),
+          helper._cargo_dependencies(project,'fixture-cargo',{'CARGO_HOME':str(home)})):
+        reached_build=True
+        assert (home/'config.toml').exists()
+        raise RuntimeError('compilation failed')
+    assert len(commands)==(2 if failure=='fetch' else 1)
+    assert reached_build==(failure=='build') and not (home/'config.toml').exists()
 
 
 def test_source_fingerprint_changes_with_rust_and_lockfile(helper,project):

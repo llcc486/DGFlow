@@ -6,15 +6,15 @@
 
 版本标识：`dgflow-20261008-complete-deployment-source`。
 
-MNIST 与 CIFAR-10 均支持 HTTPS 镜像、有限重试、自定义下载源及 `prepare-data --offline`。CIFAR-10 优先使用 MindSpore 官方镜像，回退原始站点，固定校验原始 MD5。部署助手在打开服务之前完成训练依赖、完整原生密码扩展、GPU 编译依赖、两种数据集和前端准备。
+MNIST 与 CIFAR-10 均支持 HTTPS 镜像、有限重试、自定义下载源及 `prepare-data --offline`。MNIST 默认优先使用飞桨官方的北京 BOS 镜像，再回退 OSSCI、CVDF；CIFAR-10 优先使用 MindSpore 官方国内镜像，回退原始站点。所有源固定校验原始 MD5，两种国内源均已实测完整下载及结构校验。部署助手在打开服务之前完成训练依赖、完整原生密码扩展、GPU 编译依赖、两种数据集和前端准备。
 
 GPU 硬件识别不依赖 NVIDIA Python 包；部署时自动安装所需 NVRTC，控制服务启动后自动对主控与边缘节点执行精确密码运算自检。默认计算设备仍为 CPU，自检通过后可在页面选择 GPU。
 
 当前新建加密实验只使用 LegoGroth16（`lego_norm_v1`），必须安装并选择当前模型维度、8 位量化对应的 CRS。`plain` 明文基线不生成密码证明，无需 CRS。旧逐坐标、5A/5B 方案及原性能证据保留用于历史记录与研究核对，不再是当前新实验的选项。
 
-本机已完成全新环境部署、禁网离线检查和 CIFAR-10 / Torch / GPU 真实流程验证，详见[部署验收记录](docs/research/evidence/deployment-ready-20261008.json)。
+2026-10-08 曾完成本机全新环境部署、禁网离线检查和 CIFAR-10 / Torch / GPU 真实流程验证，详见[部署验收记录](docs/research/evidence/deployment-ready-20261008.json)。历史验收材料保留，运行部署和交付产物另行归档，不属于当前纯源码目录。
 
-纯源码包包含前端源码和依赖清单，不包含已安装的环境、完整数据缓存、前端构建产物或运行密钥。需要发布时，按本文末尾命令冻结当前源码。
+纯源码包包含前端源码和依赖清单，不包含已安装的环境、完整数据缓存、前端构建产物、运行目录、CRS 或运行密钥。新部署须自行准备环境和数据，并为加密实验建立或安装匹配参数。需要发布时，按本文末尾命令冻结当前源码。
 
 ## 保留内容
 
@@ -43,7 +43,7 @@ GPU 硬件识别不依赖 NVIDIA Python 包；部署时自动安装所需 NVRTC�
 
 ## 从源码启动
 
-安装 Python 3.12、Node.js 22.12+ 与 npm，并具备系统 C/C++ 构建工具。Windows 原生构建需要 Visual Studio C++ 工具和 Windows SDK，Linux 需要 C/C++ 编译器。NVIDIA GPU 需要系统驱动；其余项目依赖由脚本准备。在项目根目录执行：
+锁定部署要求 Python 3.12+，推荐 Python 3.12。安装 Node.js 22.12+ 与 npm，并具备系统 C/C++ 构建工具。Windows 原生构建需要 Visual Studio C++ 工具和 Windows SDK，Linux 需要 C/C++ 编译器。NVIDIA GPU 需要系统驱动；其余项目依赖由脚本准备。在项目根目录执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly
@@ -60,9 +60,29 @@ powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
 powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly -CifarSource https://mindspore-website.obs.cn-north-4.myhuaweicloud.com/notebook/datasets/
 ```
 
-Linux 使用 `DGFL_MNIST_SOURCE` / `DGFL_CIFAR_SOURCE` 环境变量。镜像和离线缓存校验详见[部署说明](docs/submission/deployment.md)。运行中的训练不会下载数据或安装依赖，GPU 内核只在本地编译。Lego 的模型专用 CRS 需单独建立；默认 MNIST 为 650 维、CIFAR-10 为 1,930 维，均为 8 位量化，命令见 [README](README.md)。当前本机 `runtime` 已安装这两组开发参数，但它们不随源码包分发，新机器或新运行目录需另行准备。仅增加参数后，在网页刷新已安装参数并选择匹配指纹即可，无需重启服务。
+Linux 使用 `DGFL_MNIST_SOURCE` / `DGFL_CIFAR_SOURCE` 环境变量。镜像和离线缓存校验详见[部署说明](docs/submission/deployment.md)。运行中的训练不会下载数据或安装依赖，GPU 内核只在本地编译。Lego 的模型专用 CRS 需单独建立；默认 MNIST 为 650 维、CIFAR-10 为 1,930 维，均为 8 位量化，命令见 [README](README.md)。纯源码目录不携带 `runtime` 或这两组开发参数，新部署及新运行目录需自行建立或安装匹配参数。仅增加参数后，在网页刷新已安装参数并选择匹配指纹即可，无需重启服务。
 
-`scripts/prepare_offline.py` 仍是基础 NumPy + MNIST 材料工具，不包含完整启动所需的 Torch、GPU、当前原生扩展和 CIFAR-10，也不包含模型专用 CRS。只安装这个旧式基础包可用于明文最小演示，不足以通过完整部署检查或运行新加密实验；完整离线启动应先在目标平台完成上述部署，并为加密实验单独准备参数。
+Python、CPU Torch 与 npm 下载策略位于 `scripts/deployment_downloads.py`：默认优先国内镜像，失败后逐个回退。`DGFL_PIP_INDEX_URL`、`DGFL_TORCH_INDEX_URL`、`DGFL_NPM_REGISTRY` 可覆盖对应源，不改写用户或系统配置。数据集显式下载源仍只尝试所选地址。
+
+## 完整离线部署材料
+
+在与目标相同 Python 实现、次版本、操作系统和架构的已部署机器上执行。下例携带公共 CRS，须先在该机器的 `runtime` 中准备所需的 650/1,930 维、8 位参数；不携带参数时省略 `--parameters-runtime runtime`：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --parameters-runtime runtime
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --verify-only
+.\.venv\Scripts\python.exe scripts/package_submission.py --output dist/submission-full --full-offline-path full-offline
+```
+
+`prepare_full_offline.py` 冻结当前环境的完整依赖闭包，准备 CPU Torch/torchvision、受支持平台的 NVRTC、当前原生 wheel 及源码凭据、两套经过校验的数据和匹配的 `web/dist`。`--wheelhouse` 可指定完整、精确的本地 wheel 集合以免再次下载；可用 `--native-wheelhouse` 选择一个带当前源码凭据的原生 wheel。输出目录必须尚不存在，已有目录使用 `--verify-only` 复查。
+
+公开 Lego 参数默认不随包分发。上例使用 `--parameters-runtime runtime` 纳入现有 650/1,930 维、8 位参数的 PK/VK 与清单；保留开发用单方设置来源，不包含设置秘密或节点身份。目标完全离线时，可直接使用这些公共参数完成新加密实验；不选择分发参数时，需在目标另行建立或安装匹配 CRS。明文基线始终无需 CRS。
+
+目标先用系统 Python 运行包内 `full-offline/VERIFY.py` 核对文件大小、SHA-256 和目标平台，再按 `full-offline/INSTALL.txt` 创建环境、从本地 wheel 安装并执行深度核验和 `--restore-assets`，最后离线启动。恢复只补公共数据、前端、原生材料及所选公共参数，遇到冲突会拒绝，不覆盖既有身份。系统 Python 及系统运行库由目标机器提供；GPU 另需兼容的 NVIDIA 驱动。使用预构建材料不要求目标安装 Node.js、Rust 或 C++ 构建工具。
+
+源码包和完整材料分开保存：`freeze_source.py --source-only` 不纳入完整离线包、大数据、环境或构建结果。`package_submission.py --full-offline-path` 才会重新检查完整材料的依赖闭包、数据、源码绑定及精确清单，并统一放入 ZIP 的 `full-offline/`。原 `--include-offline` 保持基础包语义。
+
+`scripts/prepare_offline.py` 仍是基础 NumPy + MNIST 材料工具，不包含完整启动所需的 Torch、GPU、当前原生扩展和 CIFAR-10，也不包含模型专用 CRS。只安装这个旧式基础包可用于明文最小演示，不足以通过完整部署检查或运行新加密实验。
 
 ## 验证与发布
 

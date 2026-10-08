@@ -171,7 +171,8 @@ def test_pip_inherits_system_proxy_without_overriding_explicit_configuration_or_
     if explicit_case != 'none':
         environ['HTTPS_PROXY' if explicit_case == 'upper' else 'https_proxy'] = explicit_proxy
     monkeypatch.setattr(setup.os, 'environ', environ)
-    monkeypatch.setattr(setup.urllib.request, 'getproxies', lambda: {'https': system_proxy, 'ftp': 'ftp://unused.test'})
+    import deployment_downloads
+    monkeypatch.setattr(deployment_downloads.urllib.request, 'getproxies', lambda: {'https': system_proxy, 'ftp': 'ftp://unused.test'})
     environment = setup.deployment_environment()
     if explicit_case == 'none':
         assert environment['HTTPS_PROXY'] == system_proxy
@@ -184,7 +185,8 @@ def test_pip_inherits_system_proxy_without_overriding_explicit_configuration_or_
     monkeypatch.setattr(setup, 'run', lambda command, **kwargs: commands.append((command, kwargs)))
     setup.pip_install(['--requirement', str(project / 'requirements-torch.txt')],
                       root=project, env=environment, offline=False)
-    assert commands[0][1]['env'] is environment
+    assert commands[0][1]['env']['HTTPS_PROXY' if explicit_case != 'lower' else 'https_proxy'] == (
+        system_proxy if explicit_case == 'none' else explicit_proxy)
     assert commands[0][0][:5] == [sys.executable, '-B', '-m', 'pip', 'install']
     output = capsys.readouterr()
     assert 'system-secret' not in output.out + output.err + json.dumps(commands[0][0])

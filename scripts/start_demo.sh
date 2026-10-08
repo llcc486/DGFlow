@@ -44,7 +44,7 @@ else
         python3 -m venv "$environment_root"
     fi
 fi
-"$dgfl_python" -c 'import sys; assert sys.version_info >= (3,11), "Python 3.11 or newer is required"'
+"$dgfl_python" -c 'import sys; sys.exit("Locked deployment requires Python 3.12 or newer; Python 3.12 is recommended") if sys.version_info < (3,12) else None'
 lock_file="$project_root/requirements-lock.txt"
 # Bind the project stamp to this interpreter and venv; all stored fields are ASCII hashes.
 fingerprint="$("$dgfl_python" -c 'import hashlib,pathlib,sys; identity="\0".join(str(pathlib.Path(p).resolve()) for p in (sys.executable,sys.prefix)); print(hashlib.sha256(identity.encode("utf-8")).hexdigest()+"".join(hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sys.argv[1:] if pathlib.Path(p).exists()))' "$project_root/pyproject.toml" "$lock_file")"
@@ -54,10 +54,10 @@ if [[ -f "$stamp_file" ]]; then installed_fingerprint="$(cat "$stamp_file")"; fi
 if ! $offline && [[ "$installed_fingerprint" != "$fingerprint" ]]; then
     echo 'First setup or changed dependencies: pip may access the network.'
     if [[ -f "$lock_file" ]]; then
-        "$dgfl_python" -m pip install -r "$lock_file"
-        "$dgfl_python" -m pip install --no-build-isolation --no-deps -e "$project_root"
+        "$dgfl_python" -B "$project_root/scripts/deployment_downloads.py" --root "$project_root" pip-install -- --only-binary=:all: -r "$lock_file"
+        "$dgfl_python" -m pip install --no-index --no-build-isolation --no-deps -e "$project_root"
     else
-        "$dgfl_python" -m pip install -e "$project_root"
+        "$dgfl_python" -B "$project_root/scripts/deployment_downloads.py" --root "$project_root" pip-install -- -e "$project_root"
     fi
 fi
 "$dgfl_python" -m pip check

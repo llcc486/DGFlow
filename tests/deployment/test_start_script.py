@@ -26,7 +26,7 @@ def run_script(tmp_path, fail_install=False, offline=False, client_count=None, t
                     "$pwd.Path | Add-Content -LiteralPath $env:DGFL_CWD_LOG -Encoding UTF8\n"
                     "if ($args[0] -eq '-c' -and ($args[1] -like '*pathlib*' -or $args[1] -like '*sys.version_info*')) "
                     "{ & $env:DGFL_STDLIB_PYTHON @args; exit $LASTEXITCODE }\n"
-                    "if ($env:DGFL_FAIL_INSTALL -eq '1' -and $args[1] -eq 'pip' -and $args[2] -eq 'install') { exit 9 }\n"
+                    "if ($env:DGFL_FAIL_INSTALL -eq '1' -and 'pip-install' -in $args) { exit 9 }\n"
                     "$isSetup = @($args | Where-Object { $_ -like '*setup_environment.py' }).Count -gt 0\n"
                     "if ($env:DGFL_FAIL_SETUP -eq '1' -and $isSetup) { exit 17 }\n"
                     "exit 0\n", encoding='utf8')
@@ -62,11 +62,16 @@ def setup_call(calls):
     return helpers[0]
 
 
+def base_install(call):
+    return ('pip-install' in call and '-r' in call
+            and any(Path(value).name == 'deployment_downloads.py' for value in call))
+
+
 @pytest.mark.skipif(not POWERSHELL, reason='PowerShell is unavailable on this platform')
 def test_install_failure_stops_before_data_preparation_or_demo(tmp_path):
     result, calls = run_script(tmp_path, fail_install=True)
     assert result.returncode != 0
-    assert any(call[:4] == ['-m', 'pip', 'install', '-r'] for call in calls)
+    assert any(base_install(call) for call in calls)
     assert not any('prepare-data' in call or 'demo' in call
                    or any('setup_environment.py' in argument for argument in call) for call in calls)
 
@@ -75,10 +80,12 @@ def test_install_failure_stops_before_data_preparation_or_demo(tmp_path):
 def test_successful_first_run_uses_lock_then_prepares_and_starts(tmp_path):
     result, calls = run_script(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
-    install = next(call for call in calls if call[:4] == ['-m', 'pip', 'install', '-r'])
-    assert Path(install[4]).name == 'requirements-lock.txt'
+    install = next(call for call in calls if base_install(call))
+    assert Path(install[install.index('-r')+1]).name == 'requirements-lock.txt'
     editable = next(call for call in calls if '-e' in call)
     assert '--no-build-isolation' in editable
+    assert '--no-index' in editable and '--no-deps' in editable
+    assert '--only-binary=:all:' in install
     preparation = setup_call(calls)
     demo_index = next(i for i, call in enumerate(calls) if 'demo' in call)
     assert calls.index(install) < calls.index(editable) < calls.index(preparation) < demo_index
@@ -184,7 +191,7 @@ def test_switching_selected_python_reinstalls_base_dependencies_with_an_ascii_st
     (tmp_path / 'calls.jsonl').unlink()
     result, changed = run_script(tmp_path, python_name='新 Python 环境.ps1')
     assert result.returncode == 0, result.stdout + result.stderr
-    assert any(call[:4] == ['-m', 'pip', 'install', '-r'] for call in changed)
+    assert any(base_install(call) for call in changed)
     assert any('-e' in call for call in changed)
     assert changed.index(setup_call(changed)) < next(i for i, call in enumerate(changed) if 'demo' in call)
     replacement = stamp.read_bytes()
@@ -246,7 +253,7 @@ def run_bash_script(tmp_path, *, offline=False, setup_only=False, fail_setup=Fal
                     'sys.argv=sys.argv[2:]; exec(sys.argv[0])\' "$0" "${@:2}"\n'
                     '  exit $?\n'
                     'fi\n'
-                    'if [[ "$DGFL_FAIL_INSTALL" == 1 && "${1:-}" == -m && "${2:-}" == pip && "${3:-}" == install ]]; then exit 9; fi\n'
+                    'if [[ "$DGFL_FAIL_INSTALL" == 1 && "$*" == *pip-install* ]]; then exit 9; fi\n'
                     'for argument in "$@"; do\n'
                     '  if [[ "$DGFL_FAIL_SETUP" == 1 && "$argument" == *setup_environment.py ]]; then exit 17; fi\n'
                     'done\n'
@@ -329,7 +336,7 @@ def test_bash_missing_offline_data_never_invokes_helper_or_installs(tmp_path):
 def test_bash_install_failure_stops_before_helper_or_demo(tmp_path):
     result, calls = run_bash_script(tmp_path, fail_install=True)
     assert result.returncode != 0
-    assert any(call[:4] == ['-m', 'pip', 'install', '-r'] for call in calls)
+    assert any(base_install(call) for call in calls)
     assert not any('demo' in call or any('setup_environment.py' in argument for argument in call) for call in calls)
 
 
@@ -359,7 +366,7 @@ def test_bash_switching_selected_python_reinstalls_base_dependencies(tmp_path):
     (tmp_path / 'calls.log').unlink()
     result, changed = run_bash_script(tmp_path, python_name='新 Python 环境.sh')
     assert result.returncode == 0, result.stdout + result.stderr
-    assert any(call[:4] == ['-m', 'pip', 'install', '-r'] for call in changed)
+    assert any(base_install(call) for call in changed)
     assert any('-e' in call for call in changed)
     assert changed.index(setup_call(changed)) < next(i for i, call in enumerate(changed) if 'demo' in call)
     assert stamp.read_bytes() != original and stamp.read_bytes().isascii()

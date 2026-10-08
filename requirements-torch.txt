@@ -1,6 +1,6 @@
 # CPU training dependencies installed during complete deployment.
 # The crypto GPU backend has separate NVRTC dependencies in requirements-gpu.txt.
-# Official PyTorch CPU wheel index; CUDA packages are not requested.
---index-url https://download.pytorch.org/whl/cpu
+# CPU-local pins prevent accidental CUDA wheel selection. Deployment chooses
+# the domestic CPU wheel mirror with the official index as a fallback.
 torch==2.14.1+cpu
-torchvision>=0.20,<1
+torchvision==0.29.1+cpu

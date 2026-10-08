@@ -126,7 +126,9 @@ def test_prepare_verifies_downloads_and_returns_portable_metadata(tmp_path, monk
     raw, _ = fixture_files(source)
     payloads = {file.name: file.read_bytes() for file in raw.iterdir()}
     monkeypatch.setattr(data, "MNIST_FILES", {name: hashlib.md5(blob).hexdigest() for name, blob in payloads.items()})
+    requests = []
     def response(url, **kwargs):
+        requests.append(url)
         assert url.startswith("https://")
         return io.BytesIO(payloads[url.rsplit("/", 1)[-1]])
     monkeypatch.setattr(data.urllib.request, "urlopen", response)
@@ -135,6 +137,9 @@ def test_prepare_verifies_downloads_and_returns_portable_metadata(tmp_path, monk
     assert metadata["dataset"] == "MNIST"
     assert str(tmp_path) not in json.dumps(metadata)
     assert len(metadata["files"]) == 4
+    assert requests == ["https://dataset.bj.bcebos.com/mnist/" + name for name in data.MNIST_FILES]
+    assert metadata["download_sources"] == [data.MNIST_DOMESTIC_MIRROR, data.MNIST_SOURCE, data.MNIST_MIRROR]
+    assert [row["url"] for row in metadata["files"]] == requests
     for name, blob in payloads.items():
         assert (target / "raw" / name).read_bytes() == blob
     monkeypatch.setattr(data.urllib.request, "urlopen", lambda *a, **k: pytest.fail("valid cache should be reused"))
@@ -186,7 +191,9 @@ def download_fixtures(tmp_path, monkeypatch):
                                       lambda: IncompleteRead(b'partial')],
                          ids=['url-error', 'timeout', 'connection-reset', 'incomplete-read'])
 @pytest.mark.parametrize('phase', ['connect', 'read'])
-def test_prepare_switches_source_on_transport_failure_and_keeps_cached_files(tmp_path, monkeypatch, failure, phase):
+@pytest.mark.parametrize('failed_sources', [1, 2])
+def test_prepare_switches_source_on_transport_failure_and_keeps_cached_files(
+        tmp_path, monkeypatch, failure, phase, failed_sources):
     data, payloads = download_fixtures(tmp_path, monkeypatch)
     target = tmp_path / 'target'
     raw = target / 'raw'
@@ -196,6 +203,7 @@ def test_prepare_switches_source_on_transport_failure_and_keeps_cached_files(tmp
         if name != missing:
             (raw / name).write_bytes(blob)
     calls = []
+    sources = [data.MNIST_DOMESTIC_MIRROR, data.MNIST_SOURCE, data.MNIST_MIRROR]
 
     class BrokenRead(io.BytesIO):
         def __init__(self):
@@ -208,7 +216,7 @@ def test_prepare_switches_source_on_transport_failure_and_keeps_cached_files(tmp
 
     def response(url, **kwargs):
         calls.append((url, kwargs['timeout']))
-        if url == data.MNIST_SOURCE + missing:
+        if url in [source + missing for source in sources[:failed_sources]]:
             if phase == 'connect':
                 raise failure()
             return BrokenRead()
@@ -216,8 +224,9 @@ def test_prepare_switches_source_on_transport_failure_and_keeps_cached_files(tmp
 
     monkeypatch.setattr(data.urllib.request, 'urlopen', response)
     metadata = data.prepare_mnist(target, timeout=75, retries=0)
-    assert calls == [(data.MNIST_SOURCE + missing, 75), (data.MNIST_MIRROR + missing, 75)]
+    assert calls == [(source + missing, 75) for source in sources[:failed_sources + 1]]
     assert len(metadata['files']) == 4
+    assert metadata['files'][-1]['url'] == sources[failed_sources] + missing
     assert all((raw / name).read_bytes() == blob for name, blob in payloads.items())
     assert not list(raw.glob('*.part'))
 
@@ -234,7 +243,8 @@ def test_prepare_has_bounded_retry_rounds_and_honors_an_explicit_source(tmp_path
     with pytest.raises(OSError):
         data.prepare_mnist(tmp_path / 'target', retries=retries, source=custom_source)
     first = next(iter(data.MNIST_FILES))
-    sources = [data.MNIST_SOURCE, data.MNIST_MIRROR] if custom_source is None else [custom_source + '/']
+    sources = ([data.MNIST_DOMESTIC_MIRROR, data.MNIST_SOURCE, data.MNIST_MIRROR]
+               if custom_source is None else [custom_source + '/'])
     assert calls == [source + first for _ in range(retries + 1) for source in sources]
     assert not list((tmp_path / 'target' / 'raw').glob('*.gz'))
 
@@ -258,7 +268,7 @@ def test_prepare_retry_after_partial_success_only_downloads_the_missing_archive(
         return io.BytesIO(payloads[url.rsplit('/', 1)[-1]])
     monkeypatch.setattr(data.urllib.request, 'urlopen', retry)
     data.prepare_mnist(target)
-    assert calls == [data.MNIST_SOURCE + missing]
+    assert calls == [data.MNIST_DOMESTIC_MIRROR + missing]
     assert all((target / 'raw' / name).read_bytes() == blob for name, blob in payloads.items())
 
 

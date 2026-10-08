@@ -11,27 +11,22 @@ import os
 import shutil
 import subprocess
 import sys
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT/'scripts') not in sys.path:
+    sys.path.insert(0, str(ROOT/'scripts'))
+from deployment_downloads import download_environment, npm_ci_with_fallback, pip_install_with_fallback
 
 
 def deployment_environment():
     """Let pip/npm/cargo use the same system HTTPS proxy as urllib, without logging it."""
-    env = dict(os.environ)
-    for scheme, value in urllib.request.getproxies().items():
-        if scheme in ('http', 'https') and not (env.get(scheme.upper() + '_PROXY') or env.get(scheme + '_proxy')):
-            env[scheme.upper() + '_PROXY'] = value
-    env['PYTHONDONTWRITEBYTECODE'] = '1'
-    env.setdefault('PIP_DEFAULT_TIMEOUT', '120')
-    env.setdefault('PIP_RETRIES', '3')
-    return env
+    return download_environment()
 
 
 def run(command, *, root, env, capture=False):
     result = subprocess.run(command, cwd=root, env=env, check=True, text=True,
-                            encoding='utf8', errors='replace', capture_output=capture)
+                            encoding='utf8', errors='replace', capture_output=capture, timeout=1800)
     return result.stdout.strip() if capture else None
 
 
@@ -45,7 +40,7 @@ def probe(code, *, root, env):
 def pip_install(arguments, *, root, env, offline):
     if offline:
         raise RuntimeError('Offline deployment is incomplete; install all dependencies during online setup first')
-    run([sys.executable, '-B', '-m', 'pip', 'install', '--disable-pip-version-check', *arguments], root=root, env=env)
+    pip_install_with_fallback(arguments, root=root, env=env, run_command=run)
 
 
 def training_dependency(*, root, env, offline):
@@ -137,7 +132,7 @@ def frontend(*, root, env, offline):
         if npm is None:
             raise RuntimeError('npm is missing; install Node.js with npm before deploying')
         print('Preparing and building the frontend before startup...', flush=True)
-        run([npm, 'ci', '--no-audit', '--no-fund'], root=root/'web', env=env)
+        npm_ci_with_fallback(npm, root=root/'web', env=env, run_command=run)
     elif not vite.is_file():
         raise RuntimeError('Offline frontend build requires web/dist or an already installed node_modules')
     run([node, str(vite), 'build'], root=root/'web', env=env)

@@ -3,7 +3,8 @@
 Only a locally built wheel or a wheel bound to the current Rust sources is
 accepted. Same-version wheels are not evidence of the same implementation.
 Rust bootstrap follows https://rust-lang.github.io/rustup/installation/other.html
-and keeps its toolchain/cache in the project's tmp directory.
+and keeps its toolchain/cache in the project's tmp directory. Default domestic
+mirrors follow https://rsproxy.cn/; all builds retain Cargo.lock checksums.
 """
 from __future__ import annotations
 
@@ -17,10 +18,19 @@ import subprocess
 import sys
 import tomllib
 import urllib.request
+from contextlib import contextmanager
+from http.client import HTTPException
 from pathlib import Path
+from urllib.parse import urlsplit
 
+from deployment_downloads import pip_install_with_fallback
 from packaging.tags import sys_tags
 from packaging.utils import canonicalize_name, parse_wheel_filename
+
+RUST_MIRROR='https://rsproxy.cn'
+RUST_OFFICIAL='https://static.rust-lang.org'
+CARGO_MIRROR='sparse+https://rsproxy.cn/index/'
+_CARGO_CONFIG_HEADER='# Temporarily managed by DGFlow native deployment.\n'
 
 FEATURES=(
     'NativeGT','PublicG1Table','LegoProver','LegoVerifier','VerifiedLego',
@@ -175,27 +185,115 @@ def _download(url,env,*,limit):
     proxies={scheme:env.get(scheme.upper()+'_PROXY',env.get(scheme+'_proxy','')) for scheme in ('http','https')}
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({key:value for key,value in proxies.items() if value}))
     with opener.open(url,timeout=120) as response:
-        if not response.geturl().startswith('https://static.rust-lang.org/'):
-            raise RuntimeError('Rust bootstrap redirected outside the official HTTPS distribution origin')
+        destination=urlsplit(response.geturl())
+        if destination.scheme!='https' or not destination.hostname or destination.username or destination.password:
+            raise RuntimeError('Rust bootstrap download must remain on HTTPS without URL credentials')
         data=response.read(limit+1)
     if len(data)>limit: raise RuntimeError('Rust bootstrap download exceeds its size limit')
     return data
+
+
+def _https_root(value):
+    if not isinstance(value,str): raise RuntimeError('Rust mirror must be an absolute HTTPS URL')
+    parts=urlsplit(value)
+    if (parts.scheme!='https' or not parts.hostname or parts.username or parts.password
+            or parts.query or parts.fragment):
+        raise RuntimeError('Rust mirror must be an absolute HTTPS URL without URL credentials, query or fragment')
+    return value.rstrip('/')
+
+
+def _rustup_sources(env):
+    primary={key:_https_root(env.get(key,default)) for key,default in (
+        ('RUSTUP_DIST_SERVER',RUST_MIRROR),('RUSTUP_UPDATE_ROOT',RUST_MIRROR+'/rustup'))}
+    candidates=[primary]
+    for server in (RUST_MIRROR,RUST_OFFICIAL):
+        candidate={'RUSTUP_DIST_SERVER':server,'RUSTUP_UPDATE_ROOT':server+'/rustup'}
+        if candidate not in candidates: candidates.append(candidate)
+    return candidates
 
 
 def _bootstrap(root,env):
     target=_tool_target(); directory=root/'tmp/native-toolchain'
     directory.mkdir(parents=True,exist_ok=True)
     filename='rustup-init.exe' if os.name=='nt' else 'rustup-init'
-    url=f'https://static.rust-lang.org/rustup/dist/{target}/{filename}'
-    checksum=_download(url+'.sha256',env,limit=4096).decode('ascii').split()[0]
-    if re.fullmatch('[0-9a-f]{64}',checksum) is None: raise RuntimeError('Invalid official Rust bootstrap checksum')
-    binary=_download(url,env,limit=64*1024*1024)
-    if hashlib.sha256(binary).hexdigest()!=checksum: raise RuntimeError('Official Rust bootstrap checksum mismatch')
-    path=directory/filename
-    path.write_bytes(binary)
-    if os.name!='nt': path.chmod(0o700)
-    _run([path,'-y','--profile','minimal','--default-host',target,'--default-toolchain','stable','--no-modify-path'],root,env)
-    _write_json(directory/'bootstrap.json',{'url':url,'sha256':checksum,'target':target,'profile':'minimal'})
+    for source in _rustup_sources(env):
+        environment={**env,**source}
+        url=f'{source["RUSTUP_UPDATE_ROOT"]}/dist/{target}/{filename}'
+        try:
+            raw=_download(url+'.sha256',environment,limit=4096)
+            try: checksum=raw.decode('ascii').split()[0]
+            except (UnicodeError,IndexError): raise RuntimeError('Invalid Rust bootstrap checksum') from None
+            if re.fullmatch('[0-9a-f]{64}',checksum) is None: raise RuntimeError('Invalid Rust bootstrap checksum')
+            binary=_download(url,environment,limit=64*1024*1024)
+            if hashlib.sha256(binary).hexdigest()!=checksum: raise RuntimeError('Rust bootstrap checksum mismatch')
+            path=directory/filename
+            path.write_bytes(binary)
+            if os.name!='nt': path.chmod(0o700)
+            _run([path,'-y','--profile','minimal','--default-host',target,'--default-toolchain','stable','--no-modify-path'],root,environment)
+        except (OSError,HTTPException,subprocess.SubprocessError):
+            print('Rust toolchain download failed; trying the next distribution source.',flush=True)
+            continue
+        env.update(source)
+        _write_json(directory/'bootstrap.json',{'url':url,'sha256':checksum,'target':target,'profile':'minimal'})
+        return
+    raise RuntimeError('Unable to install the private Rust toolchain from configured mirrors or the official source') from None
+
+
+def _cargo_sources(env):
+    candidates=[]
+    explicit=env.get('CARGO_REGISTRIES_CRATES_IO_INDEX')
+    if explicit:
+        sparse=explicit.startswith('sparse+')
+        url=_https_root(explicit.removeprefix('sparse+'))
+        if url in ('https://index.crates.io','https://github.com/rust-lang/crates.io-index'):
+            candidates.append(None)
+        else:
+            candidates.append('sparse+'+url+'/' if sparse else url)
+    for source in (CARGO_MIRROR,None):
+        if source not in candidates: candidates.append(source)
+    return candidates
+
+
+@contextmanager
+def _cargo_dependencies(root,cargo,env):
+    """Fetch with the lockfile, then retain its registry mapping for offline build.
+
+    The private cache configuration is removed in finally, including a failed
+    build. Existing user configuration is read by Cargo and never rewritten.
+    """
+    home=Path(env['CARGO_HOME']); home.mkdir(parents=True,exist_ok=True)
+    config=home/'config.toml'
+    existing=[home/'config']
+    existing.extend(folder/'.cargo'/name for folder in (root,*root.parents) for name in ('config','config.toml'))
+    original=config.read_bytes() if config.exists() else None
+    managed=original is not None and original.startswith(_CARGO_CONFIG_HEADER.encode())
+    preserve=(original is not None and not managed) or any(path.exists() for path in existing)
+    environment=dict(env)
+    environment.setdefault('CARGO_HTTP_TIMEOUT','120')
+    environment.setdefault('CARGO_NET_RETRY','2')
+    environment.setdefault('CARGO_REGISTRIES_CRATES_IO_PROTOCOL','sparse')
+    sources=[None] if preserve else _cargo_sources(env)
+    try:
+        for source in sources:
+            attempt=dict(environment)
+            if not preserve:
+                if source is None:
+                    config.unlink(missing_ok=True)
+                    attempt.pop('CARGO_REGISTRIES_CRATES_IO_INDEX',None)
+                else:
+                    config.write_text(_CARGO_CONFIG_HEADER+'[source.crates-io]\nreplace-with = "dgflow-mirror"\n'
+                                      +'[source.dgflow-mirror]\nregistry = '+json.dumps(source)+'\n',encoding='utf8')
+            try:
+                _run([cargo,'fetch','--locked','--manifest-path',root/'native/dgfl-native/Cargo.toml'],
+                     root,attempt,capture=True)
+            except (OSError,subprocess.SubprocessError):
+                print('Locked Rust dependency download failed; trying the next registry source.',flush=True)
+                continue
+            yield attempt
+            return
+        raise RuntimeError('Unable to fetch locked native Rust dependencies from configured mirrors or the official source') from None
+    finally:
+        if not preserve: config.unlink(missing_ok=True)
 
 
 def _build(root,python,env):
@@ -214,8 +312,8 @@ def _build(root,python,env):
     if private.is_file() or cargo is None:
         environment['RUSTUP_HOME']=str(directory/'rustup')
         environment['PATH']=str(private.parent)+os.pathsep+environment.get('PATH','')
-        environment['RUSTUP_DIST_SERVER']='https://static.rust-lang.org'
-        environment['RUSTUP_UPDATE_ROOT']='https://static.rust-lang.org/rustup'
+        environment.setdefault('RUSTUP_DIST_SERVER',RUST_MIRROR)
+        environment.setdefault('RUSTUP_UPDATE_ROOT',RUST_MIRROR+'/rustup')
         if not private.is_file(): _bootstrap(root,environment)
         cargo=str(private)
     try: _run([cargo,'--version'],root,environment,capture=True,timeout=30)
@@ -227,13 +325,14 @@ def _build(root,python,env):
         _run([cargo,'--version'],root,environment,capture=True,timeout=30)
     try: _run([python,'-m','maturin','--version'],root,environment,capture=True,timeout=30)
     except (OSError,subprocess.SubprocessError):
-        _run([python,'-m','pip','install','maturin>=1.8,<2'],root,environment)
+        pip_install_with_fallback(['maturin>=1.8,<2'],root=root,env=environment,python=python,run_command=_run)
     output=directory/'wheels'; output.mkdir(exist_ok=True)
     environment['CARGO_TARGET_DIR']=str(directory/'target')
     temp=directory/'temp'; temp.mkdir(exist_ok=True)
     environment.update(TMP=str(temp),TEMP=str(temp),TMPDIR=str(temp))
-    _run([python,'-m','maturin','build','--locked','--release','--manifest-path',
-          root/'native/dgfl-native/Cargo.toml','--interpreter',python,'--out',output],root,environment)
+    with _cargo_dependencies(root,cargo,environment) as build_environment:
+        _run([python,'-m','maturin','build','--locked','--offline','--release','--manifest-path',
+              root/'native/dgfl-native/Cargo.toml','--interpreter',python,'--out',output],root,build_environment)
     # Only the active interpreter's ABI/platform wheel can satisfy deployment.
     source=source_fingerprint(root); supported=set(sys_tags()); wheels=[]
     for path in output.glob('dgfl_native-*.whl'):

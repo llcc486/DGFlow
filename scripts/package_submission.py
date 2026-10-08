@@ -32,6 +32,7 @@ ALLOWED_TREES = ("src/dgfl", "tests", "configs", "web", "docs/submission", "docs
 ALLOWED_FILES = ("pyproject.toml", "requirements-lock.txt", "requirements-torch.txt", "requirements-gpu.txt", "README.md", "SOURCE-PACKAGE.md", "THIRD_PARTY_NOTICES.md",
                  "scripts/package_submission.py", "scripts/start_demo.ps1", "scripts/start_demo.sh",
                  "scripts/setup_environment.py", "scripts/deployment_native.py",
+                 "scripts/deployment_downloads.py", "scripts/prepare_full_offline.py",
                  "scripts/prepare_offline.py", "scripts/run_experiments.py", "scripts/validate_release.py",
                  "scripts/build_report.py", "scripts/build_figures.py", "scripts/run_fault_checks.py",
                  "scripts/build_native.ps1", "native/dgfl-native/Cargo.toml", "native/dgfl-native/Cargo.lock",
@@ -297,8 +298,10 @@ def _pdf_metadata(path: Path):
         raise ValueError(f'Cannot inspect PDF metadata: {exc}') from exc
 
 
-def _write_member(archive: zipfile.ZipFile, relative: str, path: Path, root: Path, *, scan_text=True) -> dict:
-    _check_location(root, path)
+def _write_member(archive: zipfile.ZipFile, relative: str, path: Path, root: Path, *, scan_text=True,
+                  input_root: Path | None = None) -> dict:
+    boundary = root if input_root is None else input_root
+    _check_location(boundary, path)
     before = path.stat()
     if not stat.S_ISREG(before.st_mode):
         raise ValueError(f"Not a regular file: {relative}")
@@ -338,7 +341,7 @@ def _write_member(archive: zipfile.ZipFile, relative: str, path: Path, root: Pat
         if decoder is not None:
             _scan_text(tail + decoder.decode(b'', final=True), relative, root_spellings)
     after = path.stat()
-    _check_location(root, path)
+    _check_location(boundary, path)
     if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino) or size != before.st_size:
         raise ValueError(f"Source changed during packaging; retry from a stable tree: {relative}")
     return {"path": relative, "size": size, "sha256": digest.hexdigest()}
@@ -403,7 +406,33 @@ def _collect_offline(root: Path):
     return files, expected
 
 
-def build_package(root: Path, output: Path, *, include_offline=False) -> dict:
+def _collect_full_offline(root: Path, bundle: Path):
+    """Bind a complete bundle to this source and keep its exact verified set."""
+    manifest_path = bundle/'manifest.json'
+    _check_location(bundle, manifest_path)
+    manifest_digest = _hash_file(manifest_path)
+    script = Path(__file__).with_name('prepare_full_offline.py')
+    spec = importlib.util.spec_from_file_location('submission_full_offline_verifier', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        manifest = module.verify_full_offline(bundle, root=root)
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise ValueError('Invalid complete offline manifest or contents') from exc
+    if _hash_file(manifest_path) != manifest_digest:
+        raise ValueError('Complete offline manifest changed during verification')
+    expected = {'full-offline/'+item['path']: {**item, 'path': 'full-offline/'+item['path']}
+                for item in manifest['files']}
+    expected['full-offline/manifest.json'] = {
+        'path': 'full-offline/manifest.json', 'size': manifest_path.stat().st_size,
+        'sha256': manifest_digest}
+    files = [(relative, bundle/relative.removeprefix('full-offline/')) for relative in sorted(expected)]
+    for _, path in files:
+        _check_location(bundle, path)
+    return files, expected
+
+
+def build_package(root: Path, output: Path, *, include_offline=False, full_offline_path=None) -> dict:
     """Build source.zip and manifest.json from an explicit allowlist.
 
 Validation failures leave any previously completed output files untouched.
@@ -422,11 +451,25 @@ No content is rewritten or redacted; sensitive content causes a visible error.
     input_trees = (*ALLOWED_TREES, 'offline') if include_offline else ALLOWED_TREES
     if output == root or any(output.is_relative_to(root / tree) for tree in input_trees):
         raise ValueError("Output must be outside every whitelisted input tree")
+    bundle = None
+    if full_offline_path is not None:
+        bundle = Path(full_offline_path)
+        bundle = bundle if bundle.is_absolute() else root/bundle
+        for ancestor in (bundle, *bundle.parents):
+            if _is_link(ancestor):
+                raise ValueError('Complete offline input must not contain a symbolic link/junction')
+        bundle = bundle.resolve()
+        if bundle == root or output.is_relative_to(bundle):
+            raise ValueError('Output must be outside the complete offline input bundle')
     files, missing = _collect(root)
     offline_expected = {}
     if include_offline:
         offline_files, offline_expected = _collect_offline(root)
         files = sorted(files + offline_files)
+    full_expected = {}
+    if bundle is not None:
+        full_files, full_expected = _collect_full_offline(root, bundle)
+        files = sorted(files + full_files)
     output.mkdir(parents=True, exist_ok=True)
     for name in ("source.zip", "manifest.json"):
         destination = output / name
@@ -439,9 +482,13 @@ No content is rewritten or redacted; sensitive content causes a visible error.
         with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
             for relative, file_path in files:
                 verified_binary = relative in offline_expected and file_path.suffix in ('.whl', '.gz')
-                entry = _write_member(archive, relative, file_path, root, scan_text=not verified_binary)
+                verified_binary |= relative in full_expected and file_path.suffix in ('.whl', '.gz', '.bin')
+                entry = _write_member(archive, relative, file_path, root, scan_text=not verified_binary,
+                                      input_root=bundle if relative in full_expected else None)
                 if relative in offline_expected and entry != offline_expected[relative]:
                     raise ValueError(f'Offline input changed after verification: {relative}')
+                if relative in full_expected and entry != full_expected[relative]:
+                    raise ValueError(f'Complete offline input changed after verification: {relative}')
                 entries.append(entry)
         manifest = {"schema_version": 1,
                     "archive": {"path": "source.zip", "size": archive_path.stat().st_size, "sha256": _hash_file(archive_path)},
@@ -459,9 +506,12 @@ def main(argv=None) -> int:
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--output", type=Path, default=Path("dist/submission"))
     parser.add_argument("--include-offline", action='store_true', help='Include only a verified offline/ wheel and public-data bundle')
+    parser.add_argument('--full-offline-path', type=Path,
+                        help='Verify and include a complete bundle as full-offline/, bound to the current source')
     options = parser.parse_args(argv)
     try:
-        manifest = build_package(options.root, options.output, include_offline=options.include_offline)
+        manifest = build_package(options.root, options.output, include_offline=options.include_offline,
+                                 full_offline_path=options.full_offline_path)
     except (OSError, ValueError, UnicodeError, zipfile.BadZipFile) as exc:
         print(f"Submission packaging failed: {exc}", file=sys.stderr)
         return 1

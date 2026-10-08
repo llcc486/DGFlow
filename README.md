@@ -2,7 +2,7 @@
 
 **基于去中心化函数加密的隐私保护鲁棒联邦学习系统**
 
-此源码版本包含 MNIST / CIFAR-10 镜像下载、完整部署准备、GPU 自动检测及此前 P1/P2 修复。首次启动脚本会先安装依赖、构建原生后端和前端、准备两种数据集，全部完成后才打开服务；也可先单独部署，再离线启动。源码包不包含环境、数据或运行密钥，详见[源码项目说明](SOURCE-PACKAGE.md)。下文带日期的验收和性能数字属于其原始版本。
+此源码版本包含 MNIST / CIFAR-10 镜像下载、完整部署准备、GPU 自动检测及此前 P1/P2 修复。首次启动脚本会先安装依赖、构建原生后端和前端、准备两种数据集，全部完成后才打开服务；也可先单独部署，再离线启动。纯源码目录不包含依赖环境、数据、运行目录或 CRS，新部署须自行准备，详见[源码项目说明](SOURCE-PACKAGE.md)。下文带日期的验收和性能数字属于其原始版本。
 
 当前新建加密实验统一使用 **LegoGroth16**（`lego_norm_v1`），须预先安装并选择与模型维度和 8 位量化匹配的 CRS。`plain` 明文基线不生成密码证明，也不需要 CRS。旧证明方案及其性能记录保留用于历史核对，不再作为新实验选项。
 
@@ -14,7 +14,7 @@ DGFlow Lab 是一个可运行的研究原型，用于观察联邦训练、真实
 
 ## 从哪里开始
 
-2026-10-08 完整部署验收：全新虚拟环境自动装齐 Torch、torchvision、当前原生扩展与 NVRTC；禁用外网及 pip 索引后完整离线检查通过。隔离六角色自动完成 GPU 自检，CIFAR-10 / Torch 的一轮明文与 GPU 加密模型摘要一致。原部署 13 个节点已恢复在线，两个数据集、全部训练客户端的 Torch 与主控/边缘 GPU 均就绪；见[部署验收记录](docs/research/evidence/deployment-ready-20261008.json)。
+2026-10-08 完整部署验收：全新虚拟环境自动装齐 Torch、torchvision、当前原生扩展与 NVRTC；禁用外网及 pip 索引后完整离线检查通过。隔离六角色自动完成 GPU 自检，CIFAR-10 / Torch 的一轮明文与 GPU 加密模型摘要一致。当次验收结束时，原部署 13 个节点恢复在线，两个数据集、全部训练客户端的 Torch 与主控/边缘 GPU 均就绪；见[部署验收记录](docs/research/evidence/deployment-ready-20261008.json)。该历史状态不表示纯源码目录中仍保留部署。
 
 2026-10-08 已修复审查中的 P1/P2：批量实验与报告严格校验请求和实际部署配置、历史聚合子阶段不重复计时、运行目录生命周期锁防止并发覆盖 PID、大回复在完整接收确认后可有界回收。当前协议及交付说明已同步；Python 2,185 项通过、12 项跳过，前端 102 项通过，6 个隔离真实 HTTPS 角色的明密模型摘要一致，验证见[修复验收记录](docs/research/evidence/p1p2-fixes-20261008.json)。本次保留回退后的聚合算法、身份、CRS 和历史结果。大回复完成确认使用 v2 清单，启用修复须同步更新并重启主控与全部角色；新版客户端兼容旧 v1 清单。
 
@@ -40,7 +40,7 @@ DGFlow Lab 是一个可运行的研究原型，用于观察联邦训练、真实
 
 ## 快速启动：Windows
 
-在项目根目录执行。推荐 Python 3.12，前端源码构建需要 Node.js 22.12+ 与 npm。构建原生密码后端需要 Windows Visual Studio C++ 构建工具与 Windows SDK，Linux 需要 C/C++ 编译器；缺少 Rust 时部署助手会下载到项目自己的临时目录，不修改系统 PATH。GPU 密码计算需要已安装兼容驱动的 NVIDIA 显卡。
+在项目根目录执行。锁定部署要求 Python 3.12+，推荐 Python 3.12；前端源码构建需要 Node.js 22.12+ 与 npm。构建原生密码后端需要 Windows Visual Studio C++ 构建工具与 Windows SDK，Linux 需要 C/C++ 编译器；缺少 Rust 时部署助手会下载到项目自己的临时目录，不修改系统 PATH。GPU 密码计算需要已安装兼容驱动的 NVIDIA 显卡。
 
 先完成一次联网部署：
 
@@ -48,7 +48,9 @@ DGFlow Lab 是一个可运行的研究原型，用于观察联邦训练、真实
 powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly
 ```
 
-部署包含基础 Python 依赖、CPU 版 PyTorch/torchvision、完整原生密码扩展、检测到 NVIDIA GPU 时所需的 NVRTC、MNIST 与 CIFAR-10、前端依赖和构建结果。CIFAR-10 优先使用 MindSpore 官方镜像，失败后回退原始站点，并校验原始摘要。某一步失败会停止部署，不会提前启动服务。
+部署包含基础 Python 依赖、CPU 版 PyTorch/torchvision、完整原生密码扩展、检测到 NVIDIA GPU 时所需的 NVRTC、MNIST 与 CIFAR-10、前端依赖和构建结果。MNIST 优先使用[飞桨官方实现指定的北京 BOS 镜像](https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/vision/datasets/mnist.py)，网络失败后依次回退 OSSCI、CVDF；CIFAR-10 优先使用 [MindSpore 官方镜像](https://www.mindspore.cn/docs/programming_guide/en/r1.6/dataset_loading.html)，回退原始站点。所有源均须通过原始文件摘要校验。某一步失败会停止部署，不会提前启动服务。
+
+Python 包、CPU Torch 和前端依赖也优先使用国内 HTTPS 镜像，逐个回退；自定义源使用 `DGFL_PIP_INDEX_URL`、`DGFL_TORCH_INDEX_URL`、`DGFL_NPM_REGISTRY`。这些设置只影响本次部署，不修改系统或用户的 pip/npm 配置。
 
 完成后离线启动：
 
@@ -80,6 +82,16 @@ Windows 启动脚本支持 `-ClientCount 20 -AuthorityCount 3 -AggregatorCount 4
 
 Linux 环境可先执行 `bash scripts/start_demo.sh --setup-only`，再执行 `bash scripts/start_demo.sh --offline`；直接 `bash scripts/start_demo.sh` 可合并部署和启动。非当前验证平台需先核验底层密码 wheel 与依赖兼容性，不将脚本存在等同于跨平台实测通过。
 
+目标机器完全离线时，在相同 Python 版本和平台的已部署机器上准备完整材料。若使用下例携带公共 CRS，先在准备机器的 `runtime` 中生成或安装所需的 650/1,930 维、8 位参数：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --parameters-runtime runtime
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --verify-only
+.\.venv\Scripts\python.exe scripts/package_submission.py --output dist/submission-full --full-offline-path full-offline
+```
+
+完整包包含 CPU Torch/torchvision 的依赖闭包、受支持平台的 NVRTC、当前原生 wheel 及来源凭据、MNIST、CIFAR-10 和匹配的前端构建结果；目标仍需系统 Python，使用 GPU 另需兼容的 NVIDIA 驱动。公开 CRS 默认不包含，上例显式纳入准备机器 `runtime` 中预先安装的 650/1,930 维开发参数，保留其单方设置说明，不携带身份私钥或设置秘密。按包内 `full-offline/INSTALL.txt` 离线重装，详细步骤见[部署说明](docs/submission/deployment.md)。纯源码包仍排除大数据和依赖包；旧 `prepare_offline.py` 只准备 NumPy/MNIST 基础演示材料。
+
 退出控制服务使用终端的 `Ctrl+C`。节点是独立进程，随后运行以下命令停止本运行目录管理的节点：
 
 ```powershell
@@ -92,11 +104,11 @@ Linux 环境可先执行 `bash scripts/start_demo.sh --setup-only`，再执行 `
 
 当前 `encrypted`、`dgflow` 和 `optimized` 新实验均使用 `lego_norm_v1`：LegoGroth16 约束范围和平方范数，共享响应的 Sigma 证明连接实际密文和注册密钥。它需要当前源码对应的 `dgfl-native`，以及提前安装并固定指纹的电路专用可信参数；旧原生模块和 Python 回退不能执行此套件。完整 650 维证明的历史微基准、实测口径及设置假设见[加速报告](docs/research/optimization-results.md)和[证明规格第 15 节](docs/protocol/proof-construction.md)。
 
-2026-10-04 新增完整原生 Lego 核验、受检密文点复用和批量授权接口，默认每个授权节点一个验证进程、两条原生计算线程，核验仍为确定性。650 维单份完整核验短测约 282 ms；完整六客户端授权批次与聚合仍有秒级开销。实现和可复验记录见[验证与授权优化报告](docs/research/validation-authorization-optimization-20261004.md)。本机匹配 wheel 位于 `dist/native/`；加载新实现须安装匹配构建并重启全部角色和控制服务。
+2026-10-04 新增完整原生 Lego 核验、受检密文点复用和批量授权接口，默认每个授权节点一个验证进程、两条原生计算线程，核验仍为确定性。650 维单份完整核验短测约 282 ms；完整六客户端授权批次与聚合仍有秒级开销。实现和可复验记录见[验证与授权优化报告](docs/research/validation-authorization-optimization-20261004.md)。当次匹配 wheel 曾保存在 `dist/native/`，不随纯源码保留；新部署须安装当前源码的匹配构建。
 
 2026-10-05 增加真实 RPC 承诺内容缓存、原生完整部分解密证明核验、公开 GT 固定底数表及精确子群检查后的快速公开指数运算。保留主控与三个授权节点的四次独立合并；计时包含各自的云 E 重算。优化模式在能力协商通过后减少重复证书传输。相同模型、相同 seed 的隔离进程实测及局限见[合并优化验收](docs/research/combine-optimization-20261005.md)。随机 DKG 批验仍需显式指定 `verification=randomized`。
 
-2026-10-05 最新全流程优化已接入本地原生批量点运算、GT 指数和固定 G2 配对，三云复用多项式系数图像，Authority 复用自身已完整检查的 DKG 转录；主控仍独立完整检查。GPU 将九份证明合并批处理，使用公开底数表和精确 GT 子群判据，每份证明保留独立挑战和逐坐标核验。传输层复用规范编码并协商紧凑材料。相同配置的隔离两轮 CPU 实测 182.06→101.70 秒，GPU 146.05→84.49 秒，模型和决策完全一致，传输减少约 36%。主服务十轮 GPU 验收完成于 424.90 秒，十轮模型与此前记录逐轮一致。详细口径、测试和瓶颈见[完整分析](docs/research/evidence/full-optimization-20261005/analysis.json)及[十轮验收](docs/research/evidence/full-optimization-20261005/live-validation.json)。匹配 wheel 位于 `dist/native/`，扩展版本号仍为 0.2.0，使用构建指纹区分新旧实现。
+2026-10-05 最新全流程优化已接入本地原生批量点运算、GT 指数和固定 G2 配对，三云复用多项式系数图像，Authority 复用自身已完整检查的 DKG 转录；主控仍独立完整检查。GPU 将九份证明合并批处理，使用公开底数表和精确 GT 子群判据，每份证明保留独立挑战和逐坐标核验。传输层复用规范编码并协商紧凑材料。相同配置的隔离两轮 CPU 实测 182.06→101.70 秒，GPU 146.05→84.49 秒，模型和决策完全一致，传输减少约 36%。主服务十轮 GPU 验收完成于 424.90 秒，十轮模型与此前记录逐轮一致。详细口径、测试和瓶颈见[完整分析](docs/research/evidence/full-optimization-20261005/analysis.json)及[十轮验收](docs/research/evidence/full-optimization-20261005/live-validation.json)。当次匹配 wheel 曾保存在 `dist/native/`，不随纯源码保留；扩展版本号为 0.2.0，使用构建指纹区分新旧实现。
 
 完整部署会安装当前源码对应的完整原生密码扩展。修改 Rust 源码后，再运行部署助手即可核对指纹并按需重建：
 
@@ -115,7 +127,7 @@ Lego 的本地实验参数需要明确执行一次离线设置，再在网页选
 .\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --dimension 1930 --bits 8 --workers 4
 ```
 
-按数据集运行对应命令即可。当前本机 `runtime` 已安装上述两组 8 位开发参数；源码包不携带运行目录，新机器或新运行目录需要自行建立或安装匹配参数。仅新增 CRS 无需重启服务，在部署页点击“刷新已安装参数”，再选择匹配的参数。更改池化网格后，模型维度也会改变，需要安装该维度对应的 CRS；原有参数可以保留。明文基线无需执行这一步。
+按数据集运行对应命令即可。纯源码目录不携带 `runtime` 或上述开发参数；新部署和新运行目录需要自行建立或安装维度匹配的 8 位参数。仅新增 CRS 无需重启服务，在部署页点击“刷新已安装参数”，再选择匹配的参数。更改池化网格后，模型维度也会改变，需要安装该维度对应的 CRS；原有参数可以保留。明文基线无需执行这一步。
 
 通过控制 API 创建加密实验时，使用 `"proof_suite":"lego_norm_v1"` 和已安装参数的完整 `proof_crs_hash`；可从 `GET /api/proof-parameters` 获取清单。新任务不接受旧 `legacy`、`compact_range_v1` 或 `compact_norm_v1` 方案。历史 [5B 示例配置](configs/acceleration-5b.json) 仅保留为研究材料，不能直接用于当前新建实验。
 

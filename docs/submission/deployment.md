@@ -6,7 +6,7 @@
 
 ## 1. 环境与安装
 
-- 项目声明 Python 3.11+；当前锁定环境为 CPython 3.12。复验优先使用 3.12，其他版本先核验依赖兼容性。底层依赖为 `py-arkworks-bls12381==0.5.0`，需要匹配平台和解释器的 wheel，或者具备对应源码编译环境。
+- 当前锁定部署要求 Python 3.12+，推荐 CPython 3.12；其他受支持版本先核验全部依赖的 wheel 兼容性。底层依赖为 `py-arkworks-bls12381==0.5.0`，需要匹配平台和解释器的 wheel，或者具备对应源码编译环境。
 - 完整部署自动构建前端，需要 Node.js 22.12+ 或 24 与 npm。已有完整、匹配的 `web/dist` 后，日常运行服务不需要 Node.js。
 - 首次完整部署安装运行依赖并准备 MNIST、CIFAR-10。部署完成后使用离线启动，只校验本地环境、数据及前端，不安装依赖或下载数据。
 - 本版本默认 CPU 训练；完整部署同时安装 CPU 版 PyTorch 与 torchvision，训练实现使用 CPU/float64。密码 CUDA 后端独立使用 NVIDIA NVRTC，不需要安装 CUDA 版 PyTorch。
@@ -27,6 +27,8 @@ bash scripts/start_demo.sh --offline
 ```
 
 `SetupOnly` 不启动角色或控制服务。它安装基础锁定依赖、CPU Torch/torchvision 和包含 Lego、聚合验证及批量算术的当前原生扩展；检测到 NVIDIA GPU 时安装 NVRTC 并执行密码算术自检；随后准备两套数据、自动安装并构建前端，最后执行 `pip check`。普通一键脚本也会先完成同样的准备再启动应用。首次下载或本地编译可能耗时较长，后续复用经过检查的环境和缓存。
+
+依赖下载由 `scripts/deployment_downloads.py` 统一处理：普通 Python 包默认依次使用清华、华为云、PyPI，CPU Torch 使用上海交大镜像与 PyTorch 官方源，npm 使用 npmmirror、华为云与 npm 官方源。各次尝试保留超时和有限重试，不修改用户或系统配置。`DGFL_PIP_INDEX_URL`、`DGFL_TORCH_INDEX_URL`、`DGFL_NPM_REGISTRY` 可固定对应源；已有显式 pip/npm 配置也会保留。
 
 完整部署记录位于 `.venv/dgflow-deployment.json`。原生扩展另用 `tmp/native-toolchain/install.json` 绑定源码和实际二进制摘要；相同的 0.2.0 版本号不代表同一构建。离线重启时保留该记录，或准备匹配平台的本地 wheel 及其 `.whl.source.json`。Lego 的运行依赖会装齐，具体实验维度的可信参数仍需通过 `scripts/setup_lego_parameters.py` 显式建立。
 
@@ -58,13 +60,13 @@ Linux 手动环境使用 `python3 -m venv .venv`，将下文的 Python 路径改
 
 ### MNIST 下载超时与离线复用
 
-`prepare-data` 默认从 PyTorch 使用的 S3 地址下载；传输失败后尝试 [CVDF 发布的 HTTPS 镜像](https://github.com/cvdfoundation/mnist)，每轮尝试两个地址，最多三轮，轮间短暂退避。有效缓存会复用，只补缺失文件；摘要错误、超出大小上限或降级到 HTTP 会立即拒绝。默认 30 秒为每次阻塞网络操作的超时，不是整个数据准备的总时限。网络较慢时可单独先准备数据：
+`prepare-data` 默认优先从[飞桨官方实现指定的北京 BOS 镜像](https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/vision/datasets/mnist.py)下载四个原始 gzip 文件；传输失败后依次尝试 PyTorch 使用的 OSSCI S3 地址与 [CVDF 发布的 HTTPS 镜像](https://github.com/cvdfoundation/mnist)。每轮最多尝试三个地址，默认最多三轮，轮间短暂退避。有效缓存会复用，只补缺失文件；摘要错误、超出大小上限或降级到 HTTP 会立即拒绝。国内源四个文件的完整下载、原始 MD5 与 IDX/CRC 已通过本机核验。默认 30 秒为每次阻塞网络操作的超时，不是整个数据准备的总时限。网络较慢时可单独先准备数据：
 
 ```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli prepare-data --mnist-timeout 120 --mnist-retries 2
 ```
 
-`--mnist-timeout` 支持 1–300 秒，`--mnist-retries` 支持 0–5 个额外轮次。若默认地址均无法访问，可用 `--mnist-source https://storage.googleapis.com/cvdf-datasets/mnist/` 指定一个 HTTPS 基址；指定后只尝试该地址。镜像同样受原始文件摘要校验约束，不能保证它在所有网络中都可访问。Windows 完整部署可用 `-MnistSource`，Linux 用 `DGFL_MNIST_SOURCE` 传入该基址。
+`--mnist-timeout` 支持 1–300 秒，`--mnist-retries` 支持 0–5 个额外轮次。可用 `--mnist-source https://dataset.bj.bcebos.com/mnist/` 显式固定国内 HTTPS 基址；指定后只尝试该地址。镜像同样受原始文件摘要校验约束，不能保证它在所有网络中都可访问。Windows 完整部署可用 `-MnistSource`，Linux 用 `DGFL_MNIST_SOURCE` 传入该基址。
 
 最可靠的离线方法是在能联网的机器上准备一次，将 `data/mnist/raw` 下这四个**原始压缩文件**复制到目标项目的相同位置；不用解压，不用复制虚拟环境：
 
@@ -107,7 +109,7 @@ Windows 完整部署对应 `-CifarSource`，Linux 对应 `DGFL_CIFAR_SOURCE`。�
 
 ### 加密实验的 LegoGroth16 参数
 
-完整部署安装 Lego 运行依赖，但不会替实验建立可信设置。当前本机 `runtime` 已装有 MNIST 默认 650 维和 CIFAR-10 默认 1,930 维的 8 位开发参数；新源码包不包含运行目录，新部署需单独建立或安装匹配参数。例如，在目标运行目录完成初始化后执行：
+完整部署安装 Lego 运行依赖，但不会替实验建立可信设置。纯源码目录不包含运行目录或 CRS；新部署须单独建立或安装 MNIST 默认 650 维、CIFAR-10 默认 1,930 维等模型对应的 8 位参数。例如，在目标运行目录完成初始化后执行：
 
 ```powershell
 # MNIST：8×8 灰度池化，650 维
@@ -246,7 +248,7 @@ B/C 仅接收各自的包并按同样布局放置。三台机器各自先执行�
 .\.venv\Scripts\python.exe -m dgfl.cli prepare-data --dataset cifar10
 ```
 
-缓存位于各项目的 `data/cifar10/raw`。控制台的数据准备只处理主控本机缓存，不会替 B/C 下载；首次准备约下载 162 MB 官方二进制包。现有离线依赖打包工具只自动纳入 MNIST，CIFAR-10 缓存需单独复制并在目标机器显式执行准备命令复核摘要。实验选择 `dataset=cifar10`，默认 RGB 8×8 池化、1,930 参数线性模型；当前入口支持网格 2–25，尚未接通论文完整 CNN 安全训练。
+缓存位于各项目的 `data/cifar10/raw`。控制台的数据准备只处理主控本机缓存，不会替 B/C 下载；首次准备约下载 162 MB 官方二进制包。基础 `prepare_offline.py` 只自动纳入 MNIST；第 5.1 节的完整离线材料包含两种数据，也可单独复制 CIFAR-10 缓存并在目标机器显式执行准备命令复核摘要。实验选择 `dataset=cifar10`，默认 RGB 8×8 池化、1,930 参数线性模型；当前入口支持网格 2–25，尚未接通论文完整 CNN 安全训练。
 
 加密实验还需在三台机器的对应运行目录中安装同一组 `proof-parameters/<crs_hash>/` 公共参数，保持 PK、VK 和清单完全一致；只生成一次再复制该参数目录，不要在 A/B/C 分别随机建立三组 CRS。它们是公共证明参数，可单独分发，不需要复制其他主机身份私钥。明文实验无需参数。
 
@@ -300,7 +302,45 @@ MNIST 实际训练检查脚本位于 `tests/training/run_mnist_smoke.py`；它�
 
 第 1 节的完整部署已经完成时，Windows 使用 `start_demo.ps1 -Offline`，Linux 使用 `start_demo.sh --offline`。这会检查 Torch、当前原生扩展、所需 NVRTC、双数据集与前端；只有基础 NumPy/MNIST 环境时应使用下述最小 CLI 路径。缓存校验失败会报错，不会静默改写损坏文件。
 
-### 5.1 准备基础 NumPy/MNIST 离线材料
+### 5.1 准备完整离线部署材料
+
+在与目标相同 Python 实现、次版本、操作系统和架构的准备机器上，先完成第 1 节完整部署。若要携带可直接运行加密实验的公共参数，再提前生成或安装 650/1,930 维、8 位 Lego CRS。随后执行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --parameters-runtime runtime
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --verify-only
+.\.venv\Scripts\python.exe scripts/package_submission.py --output dist/submission-full --full-offline-path full-offline
+```
+
+完整材料包含 CPU Torch/torchvision 及当前环境所需的完整 wheel 闭包、受支持平台的 NVRTC、当前原生密码 wheel 与源码凭据、MNIST 四个原始 gzip、CIFAR-10 原始二进制归档和已检查的批次，以及带源码指纹的 `web/dist`。清单逐项记录大小与 SHA-256，另检查 wheel 的依赖闭包、平台标签、原生和前端源码绑定、官方数据摘要与结构。输出目录须尚不存在；已有目录用 `--verify-only` 复查。`--wheelhouse` 可复用精确的完整本地 wheel 集合，`--native-wheelhouse` 可选带源码凭据的本地原生 wheel。
+
+`--parameters-runtime` 可选，默认不包含 CRS。上例只携带 `runtime` 已安装的公共 PK/VK 与参数清单，原 `setup_kind` 保留；本项目这两组为单方开发设置，不代表多方可信设置。身份私钥、设置秘密、实验历史均不进入完整材料。`plain` 不使用证明或 CRS。
+
+在目标机器解压 `source.zip`，系统需已有清单所对应的 Python；GPU 计算还需兼容的 NVIDIA 驱动。预构建完整包不要求目标安装 Node.js、Rust 或 C++ 编译器。先用系统 Python 执行仅依赖标准库的文件及平台校验：
+
+```powershell
+py -3.12 full-offline/VERIFY.py
+```
+
+通过后按 `full-offline/INSTALL.txt` 从本地 wheel 安装。Windows x64 / CPython 3.12 的典型流程如下；其他目标按清单调整解释器，不跨平台复制 `.venv`：
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --no-index --find-links full-offline/wheelhouse -r full-offline/requirements-full-lock.txt
+$nativeWheel = (Get-ChildItem -LiteralPath .\full-offline\native-wheels -Filter *.whl).FullName
+.\.venv\Scripts\python.exe -m pip install --no-index --no-deps $nativeWheel
+.\.venv\Scripts\python.exe -m pip install --no-index --no-build-isolation --no-deps -e .
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --verify-only
+.\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --restore-assets
+.\.venv\Scripts\python.exe scripts/setup_environment.py --offline
+powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
+```
+
+`--restore-assets` 只补公共数据、前端、原生 wheel/来源凭据和可选公共 CRS；参数默认放到 `runtime/proof-parameters`，可用 `--runtime PATH` 指定运行目录。已有文件与包内摘要冲突时拒绝，身份不会初始化或覆盖。Linux 将解释器换成 `.venv/bin/python`，按 `INSTALL.txt` 安装相同平台的 wheel，再执行 `bash scripts/start_demo.sh --offline`。整个目标安装均使用 `--no-index`，完成深度部署校验后，启动和训练不再下载依赖或数据。
+
+纯源码包不携带这些大体积材料；完整材料可单独保管，或用上例 `--full-offline-path` 在核验后随提交 ZIP 分发。`validate_release.py` 仍针对下节的基础包，不是此完整部署的验收工具。
+
+### 5.2 准备基础 NumPy/MNIST 离线材料
 
 在与目标环境匹配、能够联网的准备机器上，先完成基础依赖安装和 MNIST 校验，再执行：
 
@@ -328,9 +368,9 @@ py -3.12 -m venv .venv
 
 此最小示例用于新的本机运行目录，使用已准备的 MNIST、NumPy 和 CPU，启动后选择明文基线，无需密码证明或 CRS；不代表 Torch、Lego、CIFAR-10 或 GPU 全功能部署，提交包还需已有 `web/dist`。新加密实验必须另行安装当前原生扩展与匹配参数。不要复制覆盖需保留的旧数据，已有身份时不要重复 `init`。三机部署先放好各自 runtime 包，再执行第 3 节 `cli start --machine A/B/C`，仅 A 执行 `cli serve`；不在 B/C 使用会打开控制服务的一键入口。离线 wheel 包只适用于记录的平台与解释器。测试依赖不在基础锁内，离线执行 pytest 需要单独准备。
 
-完整功能的离线运行应先在目标机器执行第 1 节完整部署并保留环境、原生来源记录、两套数据和前端，另为加密实验准备匹配 CRS。如果目标机器完全不能联网，需另行准备完整的 CPU Torch/torchvision 依赖闭包、当前平台原生 wheel 及源码凭据、所需 NVRTC，以及两套原始数据；安装后用 `scripts/setup_environment.py --offline` 验证，CRS 按第 1 节单独安装。基础离线包和 `validate_release.py` 的成功结果不能代替完整环境及模型参数检查。
+完整功能的离线运行使用第 5.1 节完整材料，或在目标机器提前完成第 1 节完整部署并保留环境、原生来源记录、两套数据和前端，另为加密实验准备匹配 CRS。基础离线包和 `validate_release.py` 的成功结果不能代替完整环境及模型参数检查。
 
-### 5.2 运行实验矩阵与打包
+### 5.3 运行实验矩阵与打包
 
 当前 `configs/experiments.yaml` 和 `configs/full-data-experiment.yaml` 的加密 case 使用 LegoGroth16。运行前先安装模型维度、8 位量化对应的 CRS。加密 case 未指定 `proof_crs_hash` 或为 `null` 时，脚本通过 `GET /api/proof-parameters` 查找对应数据集和网格的参数；仅有一个匹配项时自动选择，没有匹配或匹配多组时明确拒绝，需要先安装参数或在配置中显式填写指纹。显式提供的指纹不会被替换，明文 case 无需参数。
 
@@ -375,6 +415,8 @@ py -3.12 -m venv .venv
 ```
 
 打包器重新校验离线清单后才纳入 wheel 与公开数据。核对最终 `manifest.json`，确认实际包含需要的源码、构建结果、文档和离线材料；发布记录应分别列出基础离线重装与完整部署的验证范围。
+
+上述 `--include-offline` 保持 NumPy/MNIST 基础包范围。完整功能材料使用第 5.1 节的 `--full-offline-path PATH`，打包时按完整校验器核对当前源码，再以 `full-offline/` 路径收录，二者不可混称。
 
 对包含 `offline` 的包执行独立重装校验：
 

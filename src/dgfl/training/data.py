@@ -23,6 +23,10 @@ from pathlib import Path
 import numpy as np
 
 MNIST_SOURCE = "https://ossci-datasets.s3.amazonaws.com/mnist/"
+# PaddlePaddle's official loader publishes the identical original gzip archives
+# on Baidu Cloud in Beijing; prefer it for deployments within mainland China:
+# https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/vision/datasets/mnist.py
+MNIST_DOMESTIC_MIRROR = "https://dataset.bj.bcebos.com/mnist/"
 # CVDF's published mirror, also used by TensorFlow Datasets:
 # https://github.com/cvdfoundation/mnist
 MNIST_MIRROR = "https://storage.googleapis.com/cvdf-datasets/mnist/"
@@ -58,7 +62,7 @@ def _checked_archive(path: Path, expected: str) -> bytes:
 
 def _mnist_sources(source: str | None) -> tuple[str, ...]:
     if source is None:
-        return (MNIST_SOURCE, MNIST_MIRROR)
+        return (MNIST_DOMESTIC_MIRROR, MNIST_SOURCE, MNIST_MIRROR)
     if not isinstance(source, str):
         raise ValueError("MNIST source must be an absolute HTTPS base URL")
     parsed = urllib.parse.urlsplit(source)
@@ -115,7 +119,8 @@ def prepare_mnist(data_dir: str | Path, *, timeout: float = 30, retries: int = 2
 
 This is the sole network-enabled function. An invalid cache is rejected, never
 silently overwritten. Returned metadata contains relative paths only.
-Network failures try each HTTPS mirror before retrying, with bounded backoff.
+Network failures try PaddlePaddle's domestic HTTPS mirror, OSSCI and CVDF in
+order before retrying, with bounded backoff.
 ``retries`` counts additional rounds; ``timeout`` bounds each blocking socket
 operation, not the total preparation time. A custom source replaces the mirrors.
 Offline preparation verifies local archives and never attempts a download.

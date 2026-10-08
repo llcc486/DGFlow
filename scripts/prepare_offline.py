@@ -32,6 +32,10 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT/'src') not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT/'src'))
+if str(PROJECT_ROOT/'scripts') not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT/'scripts'))
+from deployment_downloads import pip_download_with_fallback
+
 from dgfl.training.data import MAX_DOWNLOAD_BYTES, MNIST_FILES, MNIST_SOURCE, PREPROCESSING, load_mnist
 
 MAX_PACKAGE_BYTES = 4 * 1024**3
@@ -307,8 +311,8 @@ def prepare_offline(root=PROJECT_ROOT, output=None, *, data_dir=None, wheelhouse
         wheels = staging/'wheelhouse'; wheels.mkdir(parents=True)
         shutil.copyfile(lock, staging/'requirements-lock.txt')
         if wheelhouse is None:
-            subprocess.run([sys.executable, '-m', 'pip', 'download', '--only-binary=:all:', '--no-deps',
-                            '--requirement', str(staging/'requirements-lock.txt'), '--dest', str(wheels)], check=True)
+            pip_download_with_fallback(['--only-binary=:all:', '--no-deps',
+                                        '--requirement', str(staging/'requirements-lock.txt'), '--dest', str(wheels)], root=root)
         else:
             for path in wheelhouse.iterdir():
                 shutil.copyfile(path, wheels/path.name)
@@ -359,7 +363,7 @@ def main(argv=None):
         else:
             manifest = prepare_offline(root, output, data_dir=options.data_dir, wheelhouse=options.wheelhouse,
                                        native_wheelhouse=options.native_wheelhouse)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f'Offline preparation failed: {exc}', file=sys.stderr)
         return 1
     print(json.dumps({'files': len(manifest['files']), 'payload_bytes': manifest['payload_bytes'],

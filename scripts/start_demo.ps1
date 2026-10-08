@@ -56,7 +56,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Virtual environment creation failed.' }
         }
     }
-    Invoke-DgflPython -Arguments @('-c', 'import sys; assert sys.version_info >= (3,11), ''Python 3.11 or newer is required''')
+    Invoke-DgflPython -Arguments @('-c', 'import sys; sys.exit(''Locked deployment requires Python 3.12 or newer; Python 3.12 is recommended'') if sys.version_info < (3,12) else None')
     $ProjectFile = Join-Path $ProjectRoot 'pyproject.toml'
     $LockFile = Join-Path $ProjectRoot 'requirements-lock.txt'
     $Fingerprint = Get-DgflHash -Path $ProjectFile
@@ -69,10 +69,10 @@ try {
     if (-not $Offline -and $InstalledFingerprint -ne $Fingerprint) {
         Write-Host 'First setup or changed dependencies: pip may access the network.'
         if (Test-Path -LiteralPath $LockFile) {
-            Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '-r', $LockFile)
-            Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '--no-build-isolation', '--no-deps', '-e', $ProjectRoot)
+            Invoke-DgflPython -Arguments @('-B', (Join-Path $PSScriptRoot 'deployment_downloads.py'), '--root', $ProjectRoot, 'pip-install', '--', '--only-binary=:all:', '-r', $LockFile)
+            Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '--no-index', '--no-build-isolation', '--no-deps', '-e', $ProjectRoot)
         } else {
-            Invoke-DgflPython -Arguments @('-m', 'pip', 'install', '-e', $ProjectRoot)
+            Invoke-DgflPython -Arguments @('-B', (Join-Path $PSScriptRoot 'deployment_downloads.py'), '--root', $ProjectRoot, 'pip-install', '--', '-e', $ProjectRoot)
         }
     }
     Invoke-DgflPython -Arguments @('-m', 'pip', 'check')

@@ -96,6 +96,7 @@ def test_whitelist_and_manifest_match_actual_zip_bytes(packager, project):
 def test_complete_deployment_inputs_are_packaged_with_their_actual_content(packager, project):
     source_root = SCRIPT.parents[1]
     required = ("requirements-gpu.txt", "scripts/setup_environment.py", "scripts/deployment_native.py",
+                "scripts/deployment_downloads.py", "scripts/prepare_full_offline.py",
                 "src/dgfl/crypto/gpu.py", "tests/crypto/test_gpu_detection.py",
                 "src/dgfl/experiments/hardware.py", "tests/integration/test_training_backends.py")
     required += tuple(path.relative_to(source_root).as_posix()
@@ -262,7 +263,7 @@ def test_cli_uses_explicit_root_and_reports_failures(project):
     assert "README.md" in failure.stderr
 
 
-@pytest.mark.parametrize("name", ["start_demo.ps1", "start_demo.sh", "prepare_offline.py", "run_experiments.py", "validate_release.py", "run_fault_checks.py", "benchmark_lego_proof.py", "setup_lego_parameters.py", "benchmark_lego_roles.py"])
+@pytest.mark.parametrize("name", ["start_demo.ps1", "start_demo.sh", "prepare_offline.py", "prepare_full_offline.py", "deployment_downloads.py", "run_experiments.py", "validate_release.py", "run_fault_checks.py", "benchmark_lego_proof.py", "setup_lego_parameters.py", "benchmark_lego_roles.py"])
 def test_exact_optional_scripts_are_included_without_whitelisting_directory(packager, project, name):
     (project / "scripts" / name).write_text("# released helper\n", encoding="utf-8")
     (project / "scripts/unknown.py").write_text("not allowlisted\n", encoding="utf-8")
@@ -270,6 +271,130 @@ def test_exact_optional_scripts_are_included_without_whitelisting_directory(pack
     names = {item["path"] for item in result["files"]}
     assert f"scripts/{name}" in names
     assert "scripts/unknown.py" not in names
+
+
+def test_complete_offline_bundle_is_opt_in_and_requires_its_own_valid_manifest(packager, project):
+    bundle = project/'full-offline'
+    bundle.mkdir()
+    (bundle/'fixture.whl').write_bytes(b'unverified binary must not be packaged')
+    output = project/'dist/submission'
+    manifest = packager.build_package(project, output)
+    assert not any(item['path'].startswith('full-offline/') for item in manifest['files'])
+    previous_zip = (output/'source.zip').read_bytes()
+    previous_manifest = (output/'manifest.json').read_bytes()
+    with pytest.raises(FileNotFoundError):
+        packager.build_package(project, output, full_offline_path=bundle)
+    assert (output/'source.zip').read_bytes() == previous_zip
+    assert (output/'manifest.json').read_bytes() == previous_manifest
+
+    (bundle/'manifest.json').write_text('{"schema_version":1,"kind":"base-offline"}', encoding='utf8')
+    with pytest.raises(ValueError, match='complete offline manifest'):
+        packager.build_package(project, output, full_offline_path=bundle)
+    (bundle/'manifest.json').write_text('{"schema_version":1,"kind":"dgflow-complete-offline"}', encoding='utf8')
+    with pytest.raises(ValueError, match='complete offline manifest'):
+        packager.build_package(project, output, full_offline_path=bundle)
+
+
+def test_complete_offline_output_cannot_modify_its_input_bundle(packager, project):
+    bundle = project/'full-offline'
+    with pytest.raises(ValueError, match='outside the complete offline'):
+        packager.build_package(project, bundle/'submission', full_offline_path=bundle)
+    assert not bundle.exists()
+
+
+@pytest.fixture
+def complete_materials(tmp_path, monkeypatch):
+    fixture_path = Path(__file__).with_name('test_prepare_full_offline.py')
+    spec = importlib.util.spec_from_file_location('complete_bundle_fixture_helpers', fixture_path)
+    helpers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helpers)
+    spec = importlib.util.spec_from_file_location('complete_bundle_for_packaging',
+                                                 SCRIPT.with_name('prepare_full_offline.py'))
+    full = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(full)
+    inputs = helpers.build_inputs(full, tmp_path, monkeypatch)
+    root = inputs['root']
+    for name in ('README.md', 'SOURCE-PACKAGE.md', 'docs/submission/design-report.md', 'src/dgfl/__init__.py'):
+        path = root/name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('# Portable complete deployment source\n', encoding='utf8')
+    bundle = tmp_path/'external-complete-bundle'
+    manifest = full.prepare_full_offline(root, bundle, wheelhouse=inputs['wheelhouse'])
+    return root, bundle, manifest
+
+
+def test_complete_bundle_uses_real_verifier_and_exact_archive_bytes(packager, complete_materials):
+    root, bundle, bundle_manifest = complete_materials
+    output = root/'dist/full-submission'
+    result = packager.build_package(root, output, full_offline_path=bundle)
+    expected = {'full-offline/'+item['path'] for item in bundle_manifest['files']} | {'full-offline/manifest.json'}
+    actual = {item['path'] for item in result['files'] if item['path'].startswith('full-offline/')}
+    assert actual == expected
+    assert any(name.endswith('.bin') for name in actual), 'verified CIFAR batch binaries must be included'
+    with zipfile.ZipFile(output/'source.zip') as archive:
+        for name in expected:
+            assert archive.read(name) == (bundle/name.removeprefix('full-offline/')).read_bytes()
+    assert packager.verify_package(output) == result
+
+
+@pytest.mark.parametrize('damage', ['source', 'tamper', 'unlisted'])
+def test_invalid_complete_bundle_cannot_enter_submission(packager, complete_materials, damage):
+    root, bundle, _ = complete_materials
+    if damage == 'source':
+        (root/'web/src/app.js').write_text('console.log("changed source");\n', encoding='utf8')
+    elif damage == 'tamper':
+        (bundle/'web/dist/assets/app.js').write_text('console.log("changed build");\n', encoding='utf8')
+    else:
+        (bundle/'identity.json').write_text('{"secret":"forbidden"}', encoding='utf8')
+    output = root/'dist/rejected-full'
+    with pytest.raises(ValueError):
+        packager.build_package(root, output, full_offline_path=bundle)
+    assert not (output/'source.zip').exists()
+
+
+def test_complete_bundle_change_after_verification_preserves_previous_package(
+        packager, complete_materials, monkeypatch):
+    root, bundle, _ = complete_materials
+    output = root/'dist/full-submission'
+    packager.build_package(root, output, full_offline_path=bundle)
+    previous = {name: (output/name).read_bytes() for name in ('source.zip', 'manifest.json')}
+    original = packager._write_member
+    changed = []
+
+    def mutate_then_write(archive, relative, path, project_root, **kwargs):
+        if relative.startswith('full-offline/data/cifar10/') and path.suffix == '.bin' and not changed:
+            blob = bytearray(path.read_bytes())
+            blob[1] ^= 1
+            path.write_bytes(blob)
+            changed.append(relative)
+        return original(archive, relative, path, project_root, **kwargs)
+
+    monkeypatch.setattr(packager, '_write_member', mutate_then_write)
+    with pytest.raises(ValueError, match='Complete offline input changed after verification'):
+        packager.build_package(root, output, full_offline_path=bundle)
+    assert changed
+    assert all((output/name).read_bytes() == content for name, content in previous.items())
+
+
+def test_complete_manifest_cannot_be_replaced_around_semantic_verification(
+        packager, complete_materials, monkeypatch):
+    root, bundle, _ = complete_materials
+    original = packager._hash_file
+    reads = []
+
+    def replace_manifest_on_second_read(path):
+        if path == bundle/'manifest.json':
+            reads.append(path)
+            if len(reads) == 2:
+                path.write_text(path.read_text('utf8')+'\n', encoding='utf8')
+        return original(path)
+
+    monkeypatch.setattr(packager, '_hash_file', replace_manifest_on_second_read)
+    output = root/'dist/rejected-race'
+    with pytest.raises(ValueError, match='manifest changed during verification'):
+        packager.build_package(root, output, full_offline_path=bundle)
+    assert len(reads) == 2
+    assert not (output/'source.zip').exists()
 
 
 def test_native_source_is_explicitly_allowlisted_without_compiled_or_private_trees(packager, project):
