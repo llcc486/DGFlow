@@ -161,6 +161,35 @@ def prepare_datasets(*, root, env, offline, mnist_source=None, cifar_source=None
     return result
 
 
+def prepare_proof_parameters(*, root, env, runtime=None):
+    """Provision the two default development circuits during deployment only.
+
+    This is local setup, including for offline deployment; roles and experiment
+    startup still require installed, explicitly pinned public parameters.
+    A child process loads the native extension installed by ensure_native.
+    """
+    runtime_path = Path(runtime) if runtime is not None else root/'runtime'
+    if not runtime_path.is_absolute():
+        runtime_path = root/runtime_path
+    print('Preparing LegoGroth16 CRS for MNIST (650) and CIFAR-10 (1930), bits=8. '
+          'Missing parameters use local single-party DEVELOPMENT setup; existing parameters are retained.', flush=True)
+    command = [sys.executable, '-B', str(root/'scripts'/'setup_lego_parameters.py'),
+               '--runtime', str(runtime_path.resolve()), '--defaults', '--workers', '4']
+    try:
+        result = json.loads(run(command, root=root, env=env, capture=True))
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or '').strip()
+        raise RuntimeError('LegoGroth16 CRS deployment failed: ' + (detail or str(exc))) from exc
+    if (not isinstance(result, dict) or result.get('ready') is not True
+            or result.get('setup_kind') != 'single_party_development'
+            or not isinstance(result.get('parameters'), list)
+            or not {(650, 8), (1930, 8)}.issubset(
+                (entry.get('dimension'), entry.get('bits'))
+                for entry in result['parameters'] if isinstance(entry, dict))):
+        raise RuntimeError('Default LegoGroth16 parameters failed the deployment completeness check')
+    return result
+
+
 def prepare_environment(root=ROOT, *, offline=False, mnist_source=None, cifar_source=None, runtime=None):
     from deployment_native import ensure_native
 
@@ -171,13 +200,15 @@ def prepare_environment(root=ROOT, *, offline=False, mnist_source=None, cifar_so
     stamp.unlink(missing_ok=True)
     training = training_dependency(root=root, env=env, offline=offline)
     native = ensure_native(root, offline=offline, env=env)
+    proof_parameters = prepare_proof_parameters(root=root, env=env, runtime=runtime)
     gpu = gpu_dependency(root=root, env=env, offline=offline)
     datasets = prepare_datasets(root=root, env=env, offline=offline,
                                 mnist_source=mnist_source, cifar_source=cifar_source, runtime=runtime)
     built_frontend = frontend(root=root, env=env, offline=offline)
     run([sys.executable, '-B', '-m', 'pip', 'check'], root=root, env=env)
     result = {'schema_version': 1, 'ready': True, 'python': sys.version, 'executable': sys.executable,
-              'training': training, 'native': native, 'gpu': gpu, 'datasets': datasets, 'frontend': built_frontend}
+              'training': training, 'native': native, 'proof_parameters': proof_parameters,
+              'gpu': gpu, 'datasets': datasets, 'frontend': built_frontend}
     from dgfl.transport.security import atomic_json
     atomic_json(stamp, result)
     print('Deployment is complete. Application startup needs no additional package or dataset downloads.', flush=True)
@@ -187,8 +218,9 @@ def prepare_environment(root=ROOT, *, offline=False, mnist_source=None, cifar_so
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=ROOT)
-    parser.add_argument('--runtime', type=Path, help='Prepare datasets alongside this runtime, matching role data paths')
-    parser.add_argument('--offline', action='store_true', help='Verify/use only installed dependencies and local caches')
+    parser.add_argument('--runtime', type=Path, help='Install CRS in this runtime and prepare datasets alongside it')
+    parser.add_argument('--offline', action='store_true',
+                        help='Never download; verify local assets and prepare missing default development CRS locally')
     parser.add_argument('--mnist-source', help='HTTPS base URL used only during deployment')
     parser.add_argument('--cifar-source', help='HTTPS base URL used only during deployment')
     args = parser.parse_args(argv)

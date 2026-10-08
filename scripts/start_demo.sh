@@ -84,7 +84,7 @@ setup_arguments=(-B "$project_root/scripts/setup_environment.py" --runtime "$run
 if $offline; then setup_arguments+=(--offline); fi
 if [[ -n "${DGFL_MNIST_SOURCE:-}" ]]; then setup_arguments+=(--mnist-source "$DGFL_MNIST_SOURCE"); fi
 if [[ -n "${DGFL_CIFAR_SOURCE:-}" ]]; then setup_arguments+=(--cifar-source "$DGFL_CIFAR_SOURCE"); fi
-echo 'Preparing all runtime dependencies, both datasets and the frontend before opening the application.'
+echo 'Preparing runtime dependencies, default development CRS, both datasets and the frontend before opening the application.'
 "$dgfl_python" "${setup_arguments[@]}"
 if $setup_only; then
     echo 'Deployment completed. Run this script with --offline to start without further downloads.'

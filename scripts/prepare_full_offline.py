@@ -455,8 +455,11 @@ copies only public datasets, compiled frontend/native materials and a source-bou
 native receipt, and never initializes or overwrites node identities.
 --restore-assets places included public parameters in runtime/proof-parameters;
 use its --runtime argument for another target runtime. If matching 8-bit Lego CRS
-are not included, establish/install them with scripts/setup_lego_parameters.py
-before creating encrypted experiments. Plain experiments do not need a CRS.
+are not included, setup_environment.py locally generates missing MNIST 650 and
+CIFAR-10 1930 development parameters even with --offline, without downloading.
+Other model dimensions require explicit setup_lego_parameters.py --dimension.
+For multiple machines, distribute the same public CRS instead of generating
+independent sets on each host. Plain experiments do not need a CRS.
 '''.replace('py -3.12', f'py -{sys.version_info.major}.{sys.version_info.minor}')
 
 

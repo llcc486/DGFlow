@@ -2,7 +2,7 @@
 
 **基于去中心化函数加密的隐私保护鲁棒联邦学习系统**
 
-此源码版本包含 MNIST / CIFAR-10 镜像下载、完整部署准备、GPU 自动检测及此前 P1/P2 修复。首次启动脚本会先安装依赖、构建原生后端和前端、准备两种数据集，全部完成后才打开服务；也可先单独部署，再离线启动。纯源码目录不包含依赖环境、数据、运行目录或 CRS，新部署须自行准备，详见[源码项目说明](SOURCE-PACKAGE.md)。下文带日期的验收和性能数字属于其原始版本。
+此源码版本包含 MNIST / CIFAR-10 镜像下载、完整部署准备、GPU 自动检测及此前 P1/P2 修复。首次启动脚本会先安装依赖、构建原生后端和前端、准备两种数据集，并在目标运行目录补齐默认 Lego CRS，全部完成后才打开服务；也可先单独部署，再离线启动。纯源码目录不包含依赖环境、数据、运行目录、生成的 CRS 或身份，运行材料由部署阶段本地准备，详见[源码项目说明](SOURCE-PACKAGE.md)。下文带日期的验收和性能数字属于其原始版本。
 
 当前新建加密实验统一使用 **LegoGroth16**（`lego_norm_v1`），须预先安装并选择与模型维度和 8 位量化匹配的 CRS。`plain` 明文基线不生成密码证明，也不需要 CRS。旧证明方案及其性能记录保留用于历史核对，不再作为新实验选项。
 
@@ -58,7 +58,7 @@ Python 包、CPU Torch 和前端依赖也优先使用国内 HTTPS 镜像，逐�
 powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
 ```
 
-也可直接运行 `scripts/start_demo.ps1`，将上述部署与启动一次完成。GPU 会自动检测，并在节点上线后自动执行精确密码运算自检；通过后页面显示可用，无须再安装 NVIDIA Python 包或手动准备 GPU。默认计算设备仍为 CPU，可在页面选择 GPU。启动后的内核编译仅使用本地文件，不下载依赖。Lego 的模型专用 CRS 仍须按后文单独生成。
+也可直接运行 `scripts/start_demo.ps1`，将上述部署与启动一次完成。GPU 会自动检测，并在节点上线后自动执行精确密码运算自检；通过后页面显示可用，无须再安装 NVIDIA Python 包或手动准备 GPU。默认计算设备仍为 CPU，可在页面选择 GPU。启动后的内核编译仅使用本地文件，不下载依赖。完整部署自动补齐 MNIST 650 维、CIFAR-10 1,930 维的 8 位开发 CRS；已有完整参数复用并保留指纹，缺少时在本地生成，离线也不下载参数。角色或实验启动本身不生成 CRS。
 
 打开 [本机实验台](http://127.0.0.1:8765)。先确认数据就绪和节点状态，再创建任务。脚本受本机执行策略限制时，使用部署说明中的手动命令；不必降低系统策略。
 
@@ -68,6 +68,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
 
 ```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli init --runtime runtime-paper --client-count 20 --authority-count 3 --aggregator-count 4 --authority-threshold 2 --aggregator-threshold 3
+.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime-paper --defaults
 .\.venv\Scripts\python.exe -m dgfl.cli start --runtime runtime-paper
 .\.venv\Scripts\python.exe -m dgfl.cli serve --runtime runtime-paper
 ```
@@ -82,7 +83,7 @@ Windows 启动脚本支持 `-ClientCount 20 -AuthorityCount 3 -AggregatorCount 4
 
 Linux 环境可先执行 `bash scripts/start_demo.sh --setup-only`，再执行 `bash scripts/start_demo.sh --offline`；直接 `bash scripts/start_demo.sh` 可合并部署和启动。非当前验证平台需先核验底层密码 wheel 与依赖兼容性，不将脚本存在等同于跨平台实测通过。
 
-目标机器完全离线时，在相同 Python 版本和平台的已部署机器上准备完整材料。若使用下例携带公共 CRS，先在准备机器的 `runtime` 中生成或安装所需的 650/1,930 维、8 位参数：
+目标机器完全离线时，在相同 Python 版本和平台的已部署机器上准备完整材料。完整部署已在准备机器的目标 `runtime` 中补齐默认参数，下例将其公共 PK/VK 和清单一并携带，以便目标保留同一指纹：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --parameters-runtime runtime
@@ -90,7 +91,7 @@ Linux 环境可先执行 `bash scripts/start_demo.sh --setup-only`，再执行 `
 .\.venv\Scripts\python.exe scripts/package_submission.py --output dist/submission-full --full-offline-path full-offline
 ```
 
-完整包包含 CPU Torch/torchvision 的依赖闭包、受支持平台的 NVRTC、当前原生 wheel 及来源凭据、MNIST、CIFAR-10 和匹配的前端构建结果；目标仍需系统 Python，使用 GPU 另需兼容的 NVIDIA 驱动。公开 CRS 默认不包含，上例显式纳入准备机器 `runtime` 中预先安装的 650/1,930 维开发参数，保留其单方设置说明，不携带身份私钥或设置秘密。按包内 `full-offline/INSTALL.txt` 离线重装，详细步骤见[部署说明](docs/submission/deployment.md)。纯源码包仍排除大数据和依赖包；旧 `prepare_offline.py` 只准备 NumPy/MNIST 基础演示材料。
+完整包包含 CPU Torch/torchvision 的依赖闭包、受支持平台的 NVRTC、当前原生 wheel 及来源凭据、MNIST、CIFAR-10 和匹配的前端构建结果；目标仍需系统 Python，使用 GPU 另需兼容的 NVIDIA 驱动。公开 CRS 默认不随包分发，上例显式纳入准备机器的默认开发参数并保留其单方设置说明，不携带身份私钥或设置秘密。省略 `--parameters-runtime` 时，目标完整部署会离线本地补齐默认 CRS；携带已有参数则复用原指纹。按包内 `full-offline/INSTALL.txt` 离线重装，详细步骤见[部署说明](docs/submission/deployment.md)。纯源码包仍排除大数据和依赖包；旧 `prepare_offline.py` 只准备 NumPy/MNIST 基础演示材料。
 
 退出控制服务使用终端的 `Ctrl+C`。节点是独立进程，随后运行以下命令停止本运行目录管理的节点：
 
@@ -118,16 +119,17 @@ powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly
 
 Linux 对应 `bash scripts/start_demo.sh --setup-only`。匹配 wheel、来源凭据与安装摘要保存在 `tmp/native-toolchain/`，离线启动需保留相关材料。只手动安装基础 NumPy 环境时，可运行无需证明的明文基线；新加密实验必须加载支持持久参数的 Lego 原生扩展。完整一键部署会要求原生扩展就绪。实际启用状态、原生源码/二进制摘要会写入实验记录。
 
-Lego 的本地实验参数需要明确执行一次离线设置，再在网页选择匹配维度和位宽的 CRS。安装新的原生模块后应重启相关进程，节点 health 会检查实际加载的能力。以下生成操作只保存公共 PK/VK 和清单，角色启动不会代做；这是单方开发设置，正式部署需要另行建立可信设置流程。
+完整部署在安装原生后端之后、角色启动之前调用默认参数准备：MNIST 650 维、CIFAR-10 1,930 维，均为 8 位。已有完整参数经过核验后复用，不覆盖、不重新随机生成；缺少的形状使用本地单方开发设置补齐，离线部署同样不下载参数。部署就绪记录的 `proof_parameters` 保存核验结果。只保存公共 PK/VK 与清单，不保存设置陷门；这不是正式多方可信设置仪式。角色及实验启动本身不会生成 CRS。
+
+已完成依赖部署的旧运行目录可单独补齐默认参数：
 
 ```powershell
-# MNIST，8×8 池化，650 维
-.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --dimension 650 --bits 8 --workers 4
-# CIFAR-10，RGB 8×8 池化，1,930 维
-.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --dimension 1930 --bits 8 --workers 4
+.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --defaults --workers 4
+# 非默认网格仍需显式维度，例如 MNIST grid=4 对应 170 维
+.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --dimension 170 --bits 8 --workers 4
 ```
 
-按数据集运行对应命令即可。纯源码目录不携带 `runtime` 或上述开发参数；新部署和新运行目录需要自行建立或安装维度匹配的 8 位参数。仅新增 CRS 无需重启服务，在部署页点击“刷新已安装参数”，再选择匹配的参数。更改池化网格后，模型维度也会改变，需要安装该维度对应的 CRS；原有参数可以保留。明文基线无需执行这一步。
+纯源码目录不携带 `runtime`、生成的参数或身份；完整部署会为其目标运行目录准备默认 CRS，直接使用 CLI 新建其他运行目录时则可执行 `--defaults` 补齐。仅新增 CRS 无需重启服务，在部署页点击“刷新已安装参数”，再选择匹配的参数；更换原生模块后仍须重启相关进程。更改池化网格后的非默认维度需显式使用 `--dimension`，原有参数可以保留。三机须共享同一组公共 PK/VK、清单和指纹，不要各自随机生成。明文基线无需 CRS。
 
 通过控制 API 创建加密实验时，使用 `"proof_suite":"lego_norm_v1"` 和已安装参数的完整 `proof_crs_hash`；可从 `GET /api/proof-parameters` 获取清单。新任务不接受旧 `legacy`、`compact_range_v1` 或 `compact_norm_v1` 方案。历史 [5B 示例配置](configs/acceleration-5b.json) 仅保留为研究材料，不能直接用于当前新建实验。
 

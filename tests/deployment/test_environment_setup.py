@@ -144,10 +144,17 @@ def test_complete_offline_environment_prepares_both_caches_and_checks_dependenci
 
     monkeypatch.setattr(setup, 'probe', probe)
     monkeypatch.setattr(setup, 'run', run)
+    parameter_calls = []
+    def parameters(**kwargs):
+        parameter_calls.append(kwargs)
+        return {'ready': True, 'setup_kind': 'single_party_development', 'parameters': []}
+    monkeypatch.setattr(setup, 'prepare_proof_parameters', parameters)
     monkeypatch.setattr(setup.shutil, 'which', lambda *_: pytest.fail('Matching offline frontend needs no node or npm'))
     native_stub(monkeypatch, native)
     result = setup.prepare_environment(project, offline=True)
     assert result['ready'] is True
+    assert result['proof_parameters']['ready'] is True
+    assert parameter_calls == [{'root': project, 'env': setup.deployment_environment(), 'runtime': None}]
     assert native_calls[0][1]['offline'] is True
     assert len(native_calls) == 1
     assert len(commands) == 3
@@ -287,6 +294,42 @@ def test_custom_runtime_prepares_data_where_roles_load_it(project, monkeypatch, 
         assert '--offline' in command
 
 
+@pytest.mark.parametrize('runtime', [None, Path('another runtime'), Path('nested')/'runtime'])
+def test_default_crs_setup_uses_the_selected_runtime_and_installed_interpreter(project, monkeypatch, runtime):
+    expected = {'ready': True, 'setup_kind': 'single_party_development', 'parameters': [
+        {'dimension': 650, 'bits': 8, 'crs_hash': 'ab'*32, 'installation': 'existing'},
+        {'dimension': 1930, 'bits': 8, 'crs_hash': 'cd'*32, 'installation': 'created'},
+    ]}
+    calls = []
+    def process(command, **kwargs):
+        calls.append((command, kwargs))
+        return json.dumps(expected)
+    monkeypatch.setattr(setup, 'run', process)
+    result = setup.prepare_proof_parameters(root=project, env={'fixture': 'local'}, runtime=runtime)
+    assert result == expected
+    command, kwargs = calls[0]
+    assert command[:3] == [sys.executable, '-B', str(project/'scripts'/'setup_lego_parameters.py')]
+    assert command[3:] == ['--runtime', str((project/(runtime or 'runtime')).resolve()), '--defaults', '--workers', '4']
+    assert kwargs == {'root': project, 'env': {'fixture': 'local'}, 'capture': True}
+
+
+@pytest.mark.parametrize('response', [None, {'ready': True}, {
+    'ready': True, 'setup_kind': 'single_party_development', 'parameters': [{'dimension': 650, 'bits': 8}],
+}])
+def test_partial_crs_setup_cannot_pass_deployment_check(project, monkeypatch, response):
+    monkeypatch.setattr(setup, 'run', lambda *a, **k: json.dumps(response))
+    with pytest.raises(RuntimeError, match='completeness'):
+        setup.prepare_proof_parameters(root=project, env={})
+
+
+def test_crs_failure_preserves_the_setup_diagnostic(project, monkeypatch):
+    def failed(command, **kwargs):
+        raise subprocess.CalledProcessError(1, command, stderr='Lego parameter setup failed: proving key digest mismatch\n')
+    monkeypatch.setattr(setup, 'run', failed)
+    with pytest.raises(RuntimeError, match='proving key digest mismatch'):
+        setup.prepare_proof_parameters(root=project, env={})
+
+
 def stub_environment_stages(monkeypatch, *, failure=None):
     completed = []
 
@@ -301,6 +344,7 @@ def stub_environment_stages(monkeypatch, *, failure=None):
     monkeypatch.setattr(setup, 'deployment_environment', lambda: {})
     monkeypatch.setattr(setup, 'training_dependency', stage('training'))
     native_stub(monkeypatch, stage('native'))
+    monkeypatch.setattr(setup, 'prepare_proof_parameters', stage('parameters'))
     monkeypatch.setattr(setup, 'gpu_dependency', stage('gpu'))
     monkeypatch.setattr(setup, 'prepare_datasets', stage('datasets'))
     monkeypatch.setattr(setup, 'frontend', stage('frontend'))
@@ -308,7 +352,7 @@ def stub_environment_stages(monkeypatch, *, failure=None):
     return completed
 
 
-@pytest.mark.parametrize('failure', ['training', 'native', 'gpu', 'datasets', 'frontend', 'pipcheck'])
+@pytest.mark.parametrize('failure', ['training', 'native', 'parameters', 'gpu', 'datasets', 'frontend', 'pipcheck'])
 def test_any_failed_deployment_stage_invalidates_stale_ready_without_publishing_success(project, monkeypatch, failure):
     stamp = stale_ready(project)
     completed = stub_environment_stages(monkeypatch, failure=failure)
@@ -326,7 +370,7 @@ def test_ready_is_atomically_written_only_after_every_stage_succeeds(project, mo
     published = []
 
     def publish(path, value):
-        assert set(completed) == {'training', 'native', 'gpu', 'datasets', 'frontend', 'pipcheck'}
+        assert completed == ['training', 'native', 'parameters', 'gpu', 'datasets', 'frontend', 'pipcheck']
         assert not stamp.exists()
         published.append(Path(path))
         atomic_json(path, value)

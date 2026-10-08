@@ -97,7 +97,7 @@ try {
     if ($Offline) { $SetupArguments += '--offline' }
     if ($MnistSource) { $SetupArguments += @('--mnist-source', $MnistSource) }
     if ($CifarSource) { $SetupArguments += @('--cifar-source', $CifarSource) }
-    Write-Host 'Preparing all runtime dependencies, both datasets and the frontend before opening the application.'
+    Write-Host 'Preparing runtime dependencies, default development CRS, both datasets and the frontend before opening the application.'
     Invoke-DgflPython -Arguments $SetupArguments
     if ($SetupOnly) {
         Write-Host 'Deployment completed. Run this script with -Offline to start without further downloads.'

@@ -14,7 +14,7 @@ GPU 硬件识别不依赖 NVIDIA Python 包；部署时自动安装所需 NVRTC�
 
 2026-10-08 曾完成本机全新环境部署、禁网离线检查和 CIFAR-10 / Torch / GPU 真实流程验证，详见[部署验收记录](docs/research/evidence/deployment-ready-20261008.json)。历史验收材料保留，运行部署和交付产物另行归档，不属于当前纯源码目录。
 
-纯源码包包含前端源码和依赖清单，不包含已安装的环境、完整数据缓存、前端构建产物、运行目录、CRS 或运行密钥。新部署须自行准备环境和数据，并为加密实验建立或安装匹配参数。需要发布时，按本文末尾命令冻结当前源码。
+纯源码包包含前端源码和依赖清单，不包含已安装的环境、完整数据缓存、前端构建产物、运行目录、生成的 CRS 或身份。完整部署脚本准备环境和数据，并在目标运行目录自动补齐默认开发参数。需要发布时，按本文末尾命令冻结当前源码。
 
 ## 保留内容
 
@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
 
 第一条联网完成部署，不启动任何节点或控制服务；第二条仅使用已部署环境和缓存启动。直接省略 `-SetupOnly` 也可完成部署后立即启动。Linux 对应 `bash scripts/start_demo.sh --setup-only` 和 `bash scripts/start_demo.sh --offline`。
 
-部署成功后 `.venv/dgflow-deployment.json` 记录依赖版本、原生源码与二进制摘要、GPU 自检、数据及前端状态。失败时不会发布就绪标记，也不会启动服务。源码变化后会重新核对原生与前端构建指纹，旧版本号相同的原生二进制不能冒充当前构建。
+部署成功后 `.venv/dgflow-deployment.json` 记录依赖版本、原生源码与二进制摘要、`proof_parameters` 默认 CRS 核验结果、GPU 自检、数据及前端状态。失败时不会发布就绪标记，也不会启动服务。源码变化后会重新核对原生与前端构建指纹，旧版本号相同的原生二进制不能冒充当前构建。
 
 下载源可在部署时指定：
 
@@ -60,13 +60,21 @@ powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -Offline
 powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1 -SetupOnly -CifarSource https://mindspore-website.obs.cn-north-4.myhuaweicloud.com/notebook/datasets/
 ```
 
-Linux 使用 `DGFL_MNIST_SOURCE` / `DGFL_CIFAR_SOURCE` 环境变量。镜像和离线缓存校验详见[部署说明](docs/submission/deployment.md)。运行中的训练不会下载数据或安装依赖，GPU 内核只在本地编译。Lego 的模型专用 CRS 需单独建立；默认 MNIST 为 650 维、CIFAR-10 为 1,930 维，均为 8 位量化，命令见 [README](README.md)。纯源码目录不携带 `runtime` 或这两组开发参数，新部署及新运行目录需自行建立或安装匹配参数。仅增加参数后，在网页刷新已安装参数并选择匹配指纹即可，无需重启服务。
+Linux 使用 `DGFL_MNIST_SOURCE` / `DGFL_CIFAR_SOURCE` 环境变量。镜像和离线缓存校验详见[部署说明](docs/submission/deployment.md)。运行中的训练不会下载数据或安装依赖，GPU 内核只在本地编译。完整部署在目标运行目录自动准备 MNIST 650 维和 CIFAR-10 1,930 维的 8 位 CRS：核验并复用已有完整参数，不覆盖或重新随机生成；缺少时使用本地单方开发设置补齐，离线也不下载参数。这不是正式多方可信设置仪式，角色及实验启动本身不生成 CRS。纯源码仍不携带生成的参数或身份。仅增加参数后，在网页刷新已安装参数并选择匹配指纹即可，无需重启服务。
+
+已有环境可独立补齐默认参数；非默认网格使用显式维度，命令见 [README](README.md)：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime runtime --defaults
+```
+
+三机应先在一台机器完成准备，再将同组公共 PK/VK、清单和指纹分发到各自运行目录，让其余部署复用；不要分别随机生成三组参数。
 
 Python、CPU Torch 与 npm 下载策略位于 `scripts/deployment_downloads.py`：默认优先国内镜像，失败后逐个回退。`DGFL_PIP_INDEX_URL`、`DGFL_TORCH_INDEX_URL`、`DGFL_NPM_REGISTRY` 可覆盖对应源，不改写用户或系统配置。数据集显式下载源仍只尝试所选地址。
 
 ## 完整离线部署材料
 
-在与目标相同 Python 实现、次版本、操作系统和架构的已部署机器上执行。下例携带公共 CRS，须先在该机器的 `runtime` 中准备所需的 650/1,930 维、8 位参数；不携带参数时省略 `--parameters-runtime runtime`：
+在与目标相同 Python 实现、次版本、操作系统和架构的已部署机器上执行。完整部署已补齐该机器目标 `runtime` 的默认参数，下例将其公共 CRS 随包分发；不携带参数时省略 `--parameters-runtime runtime`：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/prepare_full_offline.py --output full-offline --parameters-runtime runtime
@@ -76,7 +84,7 @@ Python、CPU Torch 与 npm 下载策略位于 `scripts/deployment_downloads.py`�
 
 `prepare_full_offline.py` 冻结当前环境的完整依赖闭包，准备 CPU Torch/torchvision、受支持平台的 NVRTC、当前原生 wheel 及源码凭据、两套经过校验的数据和匹配的 `web/dist`。`--wheelhouse` 可指定完整、精确的本地 wheel 集合以免再次下载；可用 `--native-wheelhouse` 选择一个带当前源码凭据的原生 wheel。输出目录必须尚不存在，已有目录使用 `--verify-only` 复查。
 
-公开 Lego 参数默认不随包分发。上例使用 `--parameters-runtime runtime` 纳入现有 650/1,930 维、8 位参数的 PK/VK 与清单；保留开发用单方设置来源，不包含设置秘密或节点身份。目标完全离线时，可直接使用这些公共参数完成新加密实验；不选择分发参数时，需在目标另行建立或安装匹配 CRS。明文基线始终无需 CRS。
+公开 Lego 参数默认不随包分发。上例使用 `--parameters-runtime runtime` 纳入现有 650/1,930 维、8 位参数的 PK/VK 与清单；保留开发用单方设置来源，不包含设置秘密或节点身份。携带时，目标恢复并复用相同指纹；不携带时，目标完整部署可离线本地补齐默认 CRS。非默认维度仍需显式准备，三机同一实验须共享同组公共参数。明文基线始终无需 CRS。
 
 目标先用系统 Python 运行包内 `full-offline/VERIFY.py` 核对文件大小、SHA-256 和目标平台，再按 `full-offline/INSTALL.txt` 创建环境、从本地 wheel 安装并执行深度核验和 `--restore-assets`，最后离线启动。恢复只补公共数据、前端、原生材料及所选公共参数，遇到冲突会拒绝，不覆盖既有身份。系统 Python 及系统运行库由目标机器提供；GPU 另需兼容的 NVIDIA 驱动。使用预构建材料不要求目标安装 Node.js、Rust 或 C++ 构建工具。
 
