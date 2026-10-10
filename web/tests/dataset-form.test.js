@@ -18,7 +18,7 @@ import { consoleStore as store } from '../src/lib/store.js'
 // Exercise the actual form setup while leaving browser effects and mounted RPCs idle.
 const source = readFileSync(new URL('../src/views/Deploy.vue', import.meta.url), 'utf8')
 const compiled = compileScript(parse(source).descriptor, { id: 'dataset-form-test' }).content
-const executable = compiled.replace(/^import .*\n/gm, '').replace('export default', 'globalThis.component =')
+const executable = compiled.replace(/^import [^\r\n]*\r?\n/gm, '').replace('export default', 'globalThis.component =')
 
 test('switching the actual deployment form updates RGB dimensions, CRS selection and data limits', async () => {
   const stops = []
