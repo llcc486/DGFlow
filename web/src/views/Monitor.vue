@@ -5,9 +5,11 @@ import MetricCard from '../components/MetricCard.vue'
 import EmptyState from '../components/EmptyState.vue'
 import PageHead from '../components/PageHead.vue'
 import RunToolbar from '../components/RunToolbar.vue'
-import AccuracyChart from '../components/AccuracyChart.vue'
+import TrainingCharts from '../components/TrainingCharts.vue'
+import ResourceCharts from '../components/ResourceCharts.vue'
+import TensorBoardPanel from '../components/TensorBoardPanel.vue'
 import { consoleStore as store } from '../lib/store'
-import { attackName, bytes, date, fmt, modeName, percent, roleName, seconds, splitStageTimes, stageLabel, stateName, timingShare } from '../lib/format'
+import { attackName, bytes, date, fmt, percent, roleName, seconds, splitStageTimes, stageLabel, stateName, timingShare } from '../lib/format'
 import { gpuEvidence, GPU_TIMING_NOTE } from '../lib/gpuEvidence'
 import { runDatasetName } from '../lib/datasets.js'
 
@@ -16,10 +18,6 @@ const emit = defineEmits(['navigate'])
 const run = computed(() => store.currentRun.value)
 const latestRound = computed(() => run.value?.rounds?.at(-1) || null)
 const currentMode = computed(() => run.value?.config?.mode || run.value?.mode)
-
-const trainSeries = computed(() =>
-  run.value ? [{ id: run.value.run_id, label: `${runDatasetName(run.value)} · ${modeName(currentMode.value)}`, rounds: run.value.rounds || [], color: '#1f6fb2' }] : [],
-)
 
 const stageSplit = computed(() => splitStageTimes(latestRound.value?.stage_times))
 const allStageTimes = computed(() => [
@@ -111,19 +109,7 @@ const eventsDesc = computed(() => [...(run.value?.events || [])].reverse())
       </div>
 
       <div class="nb-grid monitor-grid" style="margin-bottom:20px">
-        <section class="nb-card nb-span-2">
-          <div class="nb-card-head">
-            <div class="nb-card-head-left"><h2>训练收敛曲线</h2></div>
-            <span class="nb-card-note">测试准确率 / 全局轮次</span>
-          </div>
-          <AccuracyChart :series="trainSeries" />
-          <div class="nb-card-body tight nb-row between">
-            <span class="nb-row" style="gap:7px">
-              <i class="nb-legend-dot" style="background:#1f6fb2"></i>{{ modeName(currentMode) }}
-            </span>
-            <span class="nb-card-note">最新损失 <strong class="mono">{{ fmt(latestRound?.loss, 4) }}</strong></span>
-          </div>
-        </section>
+        <TrainingCharts class="nb-span-2" :run="run" />
 
         <section class="nb-card">
           <div class="nb-card-head">
@@ -164,6 +150,9 @@ const eventsDesc = computed(() => [...(run.value?.events || [])].reverse())
           <EmptyState v-else compact icon="clock" title="暂无阶段耗时" text="完成一轮后展示后端计时" />
         </section>
       </div>
+
+      <ResourceCharts :run="run" />
+      <TensorBoardPanel :run-id="run.run_id" />
 
       <section v-if="gpu.show" class="nb-card" style="margin-bottom:20px">
         <div class="nb-card-head">
