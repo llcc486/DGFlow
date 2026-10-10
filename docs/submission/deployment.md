@@ -49,6 +49,8 @@ py -3.12 -m venv .venv
 
 一键部署自动构建前端；需要单独重建时执行：
 
+监控页的 TensorBoard 已加入基础锁定依赖。旧环境更新后须重启控制服务并重建前端；旧离线包也需重新生成，以包含新增依赖。使用和采样口径见[监控与 TensorBoard](monitoring.md)。
+
 ```powershell
 Set-Location web
 npm.cmd ci

@@ -10,12 +10,12 @@ import { consoleStore as store } from '../src/lib/store.js'
 
 const source = readFileSync(new URL('../src/views/Monitor.vue', import.meta.url), 'utf8')
 const compiled = compileScript(parse(source).descriptor, { id: 'monitor-times-test' }).content
-const executable = compiled.replace(/^import .*\n/gm, '').replace('export default', 'globalThis.component =')
+const executable = compiled.replace(/^import [^\r\n]*\r?\n/gm, '').replace('export default', 'globalThis.component =')
 
 test('the actual monitor subtotal excludes nested timings and retains their parent denominators', () => {
   const context = createContext({
     ...format, computed, runDatasetName, store, gpuEvidence: () => ({ show: false }), GPU_TIMING_NOTE: '',
-    LabIcon: {}, MetricCard: {}, EmptyState: {}, PageHead: {}, RunToolbar: {}, AccuracyChart: {},
+    LabIcon: {}, MetricCard: {}, EmptyState: {}, PageHead: {}, RunToolbar: {}, TrainingCharts: {}, ResourceCharts: {}, TensorBoardPanel: {},
   })
   runInContext(executable, context)
   const monitor = context.component.setup({}, { expose() {}, emit() {} })
@@ -49,7 +49,7 @@ test('the actual monitor reads historical preparation and commit timings without
   const historical = JSON.parse(readFileSync(new URL('./fixtures/stage-times-prepare-commit.json', import.meta.url), 'utf8'))
   const context = createContext({
     ...format, computed, runDatasetName, store, gpuEvidence: () => ({ show: false }), GPU_TIMING_NOTE: '',
-    LabIcon: {}, MetricCard: {}, EmptyState: {}, PageHead: {}, RunToolbar: {}, AccuracyChart: {},
+    LabIcon: {}, MetricCard: {}, EmptyState: {}, PageHead: {}, RunToolbar: {}, TrainingCharts: {}, ResourceCharts: {}, TensorBoardPanel: {},
   })
   runInContext(executable, context)
   const monitor = context.component.setup({}, { expose() {}, emit() {} })

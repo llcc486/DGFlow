@@ -9,6 +9,7 @@ export default defineConfig({
       // Preserve the browser-facing Host so the control API can check the
       // complete same origin (scheme, hostname and port).
       '/api': { target: 'http://127.0.0.1:8765', changeOrigin: false },
+      '/tensorboard': { target: 'http://127.0.0.1:8765', changeOrigin: false },
     },
   },
 })

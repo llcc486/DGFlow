@@ -45,6 +45,8 @@ async function request(path, options = {}) {
 
 export const api = {
   status: signal => request('/status', { signal }),
+  tensorBoardStatus: signal => request('/tensorboard/status', { signal }),
+  syncTensorBoard: (id, signal) => request(`/runs/${encodeURIComponent(id)}/tensorboard`, { method: 'POST', signal }),
   prepareData: (dataset = 'mnist', signal) => request('/data/prepare', { method: 'POST', body: JSON.stringify({ dataset }), signal }),
   prepareCompute: signal => request('/compute/prepare', { method: 'POST', body: '{}', signal }),
   initializeDeployment: (configuration, signal) => deploymentRequest('init', configuration, signal),

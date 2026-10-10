@@ -1,0 +1,436 @@
+{
+  "purpose": "TensorBoard and monitoring acceptance, not cryptographic performance comparison",
+  "source_base_commit": "a8f495f1d59f0719cb78e07bf7a0ad2ce54e08f5",
+  "run_id": "782da76faccc45a3865dcd32a2140f13",
+  "raw_record_sha256": "f43e18a9bade16b0e665b568fd23a91bc2bee2714ce2740eacc3248f360aa939",
+  "config": {
+    "aggregator_count": 2,
+    "aggregator_threshold": 2,
+    "attack": "none",
+    "authority_count": 2,
+    "authority_threshold": 2,
+    "backend": "numpy",
+    "batch_strategy": "regroup",
+    "client_authorities": {
+      "client1": "authority1",
+      "client2": "authority2"
+    },
+    "client_count": 2,
+    "cloud_strategy": "auto",
+    "compute_device": "cpu",
+    "dataset": "mnist",
+    "execution": "auto",
+    "grid": 8,
+    "local_epochs": 5,
+    "malicious_clients": 0,
+    "max_norm_ratio": 2.0,
+    "max_norm_squared": null,
+    "min_cosine": 0.0,
+    "mode": "plain",
+    "non_iid": false,
+    "offline_aggregators": 0,
+    "proof_block_size": 128,
+    "proof_suite": "lego_norm_v1",
+    "rounds": 10,
+    "rpc_workers": 6,
+    "seed": 42,
+    "test_limit": 10000,
+    "train_limit": 60000,
+    "verification": "deterministic",
+    "verification_threads": 2,
+    "verification_workers": 1
+  },
+  "initial_metrics": {
+    "accuracy": 0.053,
+    "loss": 2.302594545233473,
+    "samples": 10000
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "accuracy": 0.7941,
+      "loss": 0.8753280720359798
+    },
+    {
+      "round": 2,
+      "accuracy": 0.8171,
+      "loss": 0.8211596402571835
+    },
+    {
+      "round": 3,
+      "accuracy": 0.8112,
+      "loss": 0.8176891123109501
+    },
+    {
+      "round": 4,
+      "accuracy": 0.8149,
+      "loss": 0.8046337382245703
+    },
+    {
+      "round": 5,
+      "accuracy": 0.8119,
+      "loss": 0.807937316382845
+    },
+    {
+      "round": 6,
+      "accuracy": 0.8105,
+      "loss": 0.8068245766437394
+    },
+    {
+      "round": 7,
+      "accuracy": 0.8094,
+      "loss": 0.8072864025283746
+    },
+    {
+      "round": 8,
+      "accuracy": 0.8115,
+      "loss": 0.8065634931502632
+    },
+    {
+      "round": 9,
+      "accuracy": 0.811,
+      "loss": 0.8065694543069483
+    },
+    {
+      "round": 10,
+      "accuracy": 0.8092,
+      "loss": 0.8057507198420667
+    }
+  ],
+  "summary": {
+    "accuracy": 0.8092,
+    "bytes_sent": 106402,
+    "completed_rounds": 10,
+    "controller_cpu_s": 5.953125,
+    "elapsed_s": 11.933317099930719
+  },
+  "hardware_samples": [
+    {
+      "cpu": {
+        "effective_frequency_mhz": null,
+        "errors": {
+          "effective_frequency_mhz": "requires valid OS MaxMhz reference and PDH performance ratio",
+          "processor_performance_percent": "warming_up: interval counters require two samples at least one second apart",
+          "system_utilization_percent": "warming_up: interval counters require two samples at least one second apart"
+        },
+        "frequency_limit_mhz": 2100.0,
+        "nominal_frequency_mhz": 2100.0,
+        "os_reported_current_frequency_mhz": 1950.6785714285713,
+        "processor_performance_percent": null,
+        "reported_frequency_mhz": 1950.0,
+        "system_utilization_percent": null
+      },
+      "elapsed_s": 0.26500000013038516,
+      "gpu": {
+        "errors": {},
+        "graphics_clock_mhz": 1605,
+        "memory_clock_mhz": 8200,
+        "memory_total_bytes": 8585740288,
+        "memory_used_bytes": 251658240,
+        "memory_utilization_percent": 0,
+        "power_w": 11.445,
+        "pstate": 0,
+        "sm_clock_mhz": 1605,
+        "temperature_c": 49,
+        "throttle_reason_mask": 1,
+        "throttle_reasons": [
+          "gpu_idle"
+        ],
+        "utilization_percent": 0
+      },
+      "processes": {
+        "cpu_percent": null,
+        "rss_bytes": 457035776
+      },
+      "round": 0,
+      "sample_index": 0,
+      "stage": "health",
+      "time": "2026-10-08T13:01:22.997+00:00",
+      "system": {
+        "disk_percent": 91.5,
+        "disk_total_bytes": 322123591680,
+        "disk_used_bytes": 294700478464,
+        "memory_percent": 85.2,
+        "memory_total_bytes": 16873545728,
+        "memory_used_bytes": 14371532800
+      }
+    },
+    {
+      "cpu": {
+        "effective_frequency_mhz": 3362.69913275517,
+        "errors": {},
+        "frequency_limit_mhz": 2100.0,
+        "nominal_frequency_mhz": 2100.0,
+        "os_reported_current_frequency_mhz": 2016.892857142857,
+        "processor_performance_percent": 160.12853013119857,
+        "reported_frequency_mhz": 1976.0,
+        "system_utilization_percent": 20.73139608707516
+      },
+      "elapsed_s": 3.8120000001508743,
+      "gpu": {
+        "errors": {},
+        "graphics_clock_mhz": 1605,
+        "memory_clock_mhz": 8200,
+        "memory_total_bytes": 8585740288,
+        "memory_used_bytes": 251658240,
+        "memory_utilization_percent": 0,
+        "power_w": 1.2,
+        "pstate": 0,
+        "sm_clock_mhz": 1605,
+        "temperature_c": 49,
+        "throttle_reason_mask": 4,
+        "throttle_reasons": [
+          "software_power_cap"
+        ],
+        "utilization_percent": 0
+      },
+      "processes": {
+        "cpu_percent": 7.860536612677768,
+        "rss_bytes": 865300480
+      },
+      "round": 0,
+      "sample_index": 1,
+      "stage": "data",
+      "time": "2026-10-08T13:01:24.285+00:00",
+      "system": {
+        "disk_percent": 91.5,
+        "disk_total_bytes": 322123591680,
+        "disk_used_bytes": 294700662784,
+        "memory_percent": 85.8,
+        "memory_total_bytes": 16873545728,
+        "memory_used_bytes": 14481326080
+      }
+    },
+    {
+      "cpu": {
+        "effective_frequency_mhz": 3354.6361378386837,
+        "errors": {},
+        "frequency_limit_mhz": 2100.0,
+        "nominal_frequency_mhz": 2100.0,
+        "os_reported_current_frequency_mhz": 1870.6785714285713,
+        "processor_performance_percent": 159.74457799231828,
+        "reported_frequency_mhz": 1870.0,
+        "system_utilization_percent": 23.30274746746025
+      },
+      "elapsed_s": 5.515000000130385,
+      "gpu": {
+        "errors": {},
+        "graphics_clock_mhz": 1605,
+        "memory_clock_mhz": 8200,
+        "memory_total_bytes": 8585740288,
+        "memory_used_bytes": 251658240,
+        "memory_utilization_percent": 0,
+        "power_w": 1.2,
+        "pstate": 0,
+        "sm_clock_mhz": 1605,
+        "temperature_c": 49,
+        "throttle_reason_mask": 1,
+        "throttle_reasons": [
+          "gpu_idle"
+        ],
+        "utilization_percent": 0
+      },
+      "processes": {
+        "cpu_percent": 5.079009730788394,
+        "rss_bytes": 793952256
+      },
+      "round": 0,
+      "sample_index": 2,
+      "stage": "data",
+      "time": "2026-10-08T13:01:25.990+00:00",
+      "system": {
+        "disk_percent": 91.5,
+        "disk_total_bytes": 322123591680,
+        "disk_used_bytes": 294705750016,
+        "memory_percent": 84.9,
+        "memory_total_bytes": 16873545728,
+        "memory_used_bytes": 14319845376
+      }
+    },
+    {
+      "cpu": {
+        "effective_frequency_mhz": 3243.9652091014555,
+        "errors": {},
+        "frequency_limit_mhz": 2100.0,
+        "nominal_frequency_mhz": 2100.0,
+        "os_reported_current_frequency_mhz": 1887.5714285714287,
+        "processor_performance_percent": 154.47453376673596,
+        "reported_frequency_mhz": 1907.0,
+        "system_utilization_percent": 23.903720011418162
+      },
+      "elapsed_s": 7.202999999979511,
+      "gpu": {
+        "errors": {},
+        "graphics_clock_mhz": 1605,
+        "memory_clock_mhz": 8200,
+        "memory_total_bytes": 8585740288,
+        "memory_used_bytes": 251658240,
+        "memory_utilization_percent": 0,
+        "power_w": 1.2,
+        "pstate": 0,
+        "sm_clock_mhz": 1605,
+        "temperature_c": 49,
+        "throttle_reason_mask": 1,
+        "throttle_reasons": [
+          "gpu_idle"
+        ],
+        "utilization_percent": 0
+      },
+      "processes": {
+        "cpu_percent": 6.557487741886396,
+        "rss_bytes": 763039744
+      },
+      "round": 3,
+      "sample_index": 3,
+      "stage": "training",
+      "time": "2026-10-08T13:01:27.680+00:00",
+      "system": {
+        "disk_percent": 91.5,
+        "disk_total_bytes": 322123591680,
+        "disk_used_bytes": 294705852416,
+        "memory_percent": 85.3,
+        "memory_total_bytes": 16873545728,
+        "memory_used_bytes": 14401097728
+      }
+    },
+    {
+      "cpu": {
+        "effective_frequency_mhz": 3193.7942255658704,
+        "errors": {},
+        "frequency_limit_mhz": 2100.0,
+        "nominal_frequency_mhz": 2100.0,
+        "os_reported_current_frequency_mhz": 1708.9285714285713,
+        "processor_performance_percent": 152.0854393126605,
+        "reported_frequency_mhz": 1708.0,
+        "system_utilization_percent": 24.481107273063174
+      },
+      "elapsed_s": 8.905999999959022,
+      "gpu": {
+        "errors": {},
+        "graphics_clock_mhz": 1605,
+        "memory_clock_mhz": 8200,
+        "memory_total_bytes": 8585740288,
+        "memory_used_bytes": 251658240,
+        "memory_utilization_percent": 0,
+        "power_w": 10.177,
+        "pstate": 0,
+        "sm_clock_mhz": 1605,
+        "temperature_c": 49,
+        "throttle_reason_mask": 1,
+        "throttle_reasons": [
+          "gpu_idle"
+        ],
+        "utilization_percent": 0
+      },
+      "processes": {
+        "cpu_percent": 7.178052755730301,
+        "rss_bytes": 763490304
+      },
+      "round": 6,
+      "sample_index": 4,
+      "stage": "training",
+      "time": "2026-10-08T13:01:29.376+00:00",
+      "system": {
+        "disk_percent": 91.5,
+        "disk_total_bytes": 322123591680,
+        "disk_used_bytes": 294706089984,
+        "memory_percent": 85.1,
+        "memory_total_bytes": 16873545728,
+        "memory_used_bytes": 14363570176
+      }
+    },
+    {
+      "cpu": {
+        "effective_frequency_mhz": 3034.691934793247,
+        "errors": {},
+        "frequency_limit_mhz": 2100.0,
+        "nominal_frequency_mhz": 2100.0,
+        "os_reported_current_frequency_mhz": 1772.0357142857142,
+        "processor_performance_percent": 144.50913975205938,
+        "reported_frequency_mhz": 1812.0,
+        "system_utilization_percent": 23.558965905930375
+      },
+      "elapsed_s": 10.172000000020489,
+      "gpu": {
+        "errors": {},
+        "graphics_clock_mhz": 1605,
+        "memory_clock_mhz": 8200,
+        "memory_total_bytes": 8585740288,
+        "memory_used_bytes": 251658240,
+        "memory_utilization_percent": 0,
+        "power_w": 10.285,
+        "pstate": 0,
+        "sm_clock_mhz": 1605,
+        "temperature_c": 49,
+        "throttle_reason_mask": 1,
+        "throttle_reasons": [
+          "gpu_idle"
+        ],
+        "utilization_percent": 0
+      },
+      "processes": {
+        "cpu_percent": 6.964285714285714,
+        "rss_bytes": 733102080
+      },
+      "round": 8,
+      "sample_index": 5,
+      "stage": "completed_round",
+      "time": "2026-10-08T13:01:30.649+00:00",
+      "system": {
+        "disk_percent": 91.5,
+        "disk_total_bytes": 322123591680,
+        "disk_used_bytes": 294706802688,
+        "memory_percent": 84.9,
+        "memory_total_bytes": 16873545728,
+        "memory_used_bytes": 14330998784
+      }
+    },
+    {
+      "cpu": {
+        "effective_frequency_mhz": 3200.22734504069,
+        "errors": {},
+        "frequency_limit_mhz": 2100.0,
+        "nominal_frequency_mhz": 2100.0,
+        "os_reported_current_frequency_mhz": 1838.25,
+        "processor_performance_percent": 152.39177833527097,
+        "reported_frequency_mhz": 1838.0,
+        "system_utilization_percent": 24.122740603765013
+      },
+      "elapsed_s": 11.437000000150874,
+      "gpu": {
+        "errors": {},
+        "graphics_clock_mhz": 1605,
+        "memory_clock_mhz": 8200,
+        "memory_total_bytes": 8585740288,
+        "memory_used_bytes": 251658240,
+        "memory_utilization_percent": 0,
+        "power_w": 12.068,
+        "pstate": 0,
+        "sm_clock_mhz": 1605,
+        "temperature_c": 49,
+        "throttle_reason_mask": 4,
+        "throttle_reasons": [
+          "software_power_cap"
+        ],
+        "utilization_percent": 0
+      },
+      "processes": {
+        "cpu_percent": 6.355164921427329,
+        "rss_bytes": 733491200
+      },
+      "round": 10,
+      "sample_index": 6,
+      "stage": "completed_round",
+      "time": "2026-10-08T13:01:31.912+00:00",
+      "system": {
+        "disk_percent": 91.5,
+        "disk_total_bytes": 322123591680,
+        "disk_used_bytes": 294706917376,
+        "memory_percent": 85.0,
+        "memory_total_bytes": 16873545728,
+        "memory_used_bytes": 14335606784
+      }
+    }
+  ],
+  "privacy_note": "Filesystem path removed from this excerpt; no private key or raw training sample is included."
+}

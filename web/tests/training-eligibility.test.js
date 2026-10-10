@@ -111,7 +111,7 @@ test('stale health, identity mismatches and invalid configurations never grant t
 
 const source = readFileSync(new URL('../src/views/Deploy.vue', import.meta.url), 'utf8')
 const compiled = compileScript(parse(source).descriptor, { id: 'training-eligibility-test' }).content
-const executable = compiled.replace(/^import .*\n/gm, '').replace('export default', 'globalThis.component =')
+const executable = compiled.replace(/^import [^\r\n]*\r?\n/gm, '').replace('export default', 'globalThis.component =')
 
 function formHarness(status) {
   const stops = []

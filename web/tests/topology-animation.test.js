@@ -11,7 +11,7 @@ import { cameraMatrices, projectPoint } from '../src/lib/webglTopology.js'
 // The compiler exposes its setup bindings, so behavior tests use real handlers.
 const source = readFileSync(new URL('../src/components/TopologyGraph.vue', import.meta.url), 'utf8')
 const compiled = compileScript(parse(source).descriptor, { id: 'topology-animation-test' }).content
-const executable = compiled.replace(/^import .*\n/gm, '').replace('export default', 'globalThis.component =')
+const executable = compiled.replace(/^import [^\r\n]*\r?\n/gm, '').replace('export default', 'globalThis.component =')
 
 function eventTarget() {
   const listeners = new Map()

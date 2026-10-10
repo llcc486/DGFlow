@@ -21,6 +21,7 @@ from dgfl import __version__
 from dgfl.deployment import configure_cluster, start_nodes
 from dgfl.experiments.runner import RunManager
 from dgfl.services.node import training_backends
+from dgfl.services.tensorboard import EmbeddedTensorBoard
 from dgfl.topology import TOPOLOGY_FIELDS, client_authorities, cluster_topology, validate_topology
 from dgfl.training.data import prepare_mnist
 from dgfl.training.datasets import dataset_spec
@@ -207,6 +208,7 @@ class DeploymentConfig(BaseModel):
 
 def create_control_app(runtime, *, auto_prepare_compute=True):
     runtime=Path(runtime).resolve(); manager=RunManager(runtime)
+    tensorboard=EmbeddedTensorBoard(manager.tensorboard)
     compute_shutdown=threading.Event(); compute_wakeup=threading.Event()
 
     @asynccontextmanager
@@ -220,9 +222,12 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             yield
         finally:
             compute_shutdown.set(); compute_wakeup.set()
+            tensorboard.close()
+            manager.tensorboard.close_all()
 
     app=FastAPI(title='DGFlow Lab',docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
     app.state.manager=manager
+    app.state.tensorboard=tensorboard
     app.add_middleware(ControlSafetyMiddleware)
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
     monitor={'time':0.,'nodes':[]}; monitor_lock=threading.Lock(); prepare_lock=threading.Lock()
@@ -585,6 +590,17 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     @app.get('/api/runs/{run_id}/export')
     def export(run_id:str):
         return JSONResponse(detail(run_id),headers={'Content-Disposition':f'attachment; filename="run-{run_id}.json"'})
+
+    @app.get('/api/tensorboard/status')
+    def tensorboard_status():
+        return tensorboard.status()
+
+    @app.post('/api/runs/{run_id}/tensorboard')
+    def tensorboard_sync(run_id:str):
+        try: return manager.sync_tensorboard(run_id)
+        except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    app.mount('/tensorboard',tensorboard,name='tensorboard')
 
     frontend=Path(__file__).resolve().parents[3]/'web'/'dist'
     if (frontend/'assets').exists(): app.mount('/assets',StaticFiles(directory=frontend/'assets'),name='assets')
