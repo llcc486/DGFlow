@@ -28,6 +28,7 @@ from dgfl.crypto import protocol as p
 from dgfl.deployment import cluster_topology
 from dgfl.experiments.resources import check_wire_resources
 from dgfl.experiments.telemetry import LocalProcessMonitor
+from dgfl.experiments.tensorboard import TensorBoardLogs
 from dgfl.services.roles import (
     AUTHORITIES as AUTHORITIES,
 )
@@ -335,6 +336,8 @@ class RunManager:
         self.runtime=Path(runtime).resolve(); self.runtime.mkdir(parents=True,exist_ok=True)
         self.lock=threading.RLock(); self.active=None; self.stop_event=threading.Event(); self.records={}
         self.last_nodes=[]
+        self._monitors={}
+        self.tensorboard=TensorBoardLogs(self.runtime)
         for path in sorted((self.runtime/'results').glob('*/result.json')):
             try:
                 record=json.loads(path.read_text('utf8'))
@@ -347,7 +350,30 @@ class RunManager:
     def snapshot(self,run_id):
         with self.lock:
             if run_id not in self.records: raise KeyError(run_id)
-            return json.loads(json.dumps(self.records[run_id],allow_nan=False))
+            record=json.loads(json.dumps(self.records[run_id],allow_nan=False))
+            monitor=self._monitors.get(run_id) if record['status'] in ('queued','running','stopping') else None
+        # Cached sampling only: never wait for sensors while holding the run lock.
+        if monitor is not None and callable(getattr(monitor,'snapshot',None)):
+            try:
+                resources=monitor.snapshot()
+                record.setdefault('evidence',{})['resources']=json.loads(json.dumps(resources,allow_nan=False))
+            except Exception:
+                pass  # A transient monitoring error must not hide experiment status.
+        return record
+
+    def _sync_tensorboard(self,record):
+        try:
+            result=self.tensorboard.sync(record)
+        except Exception as exc:
+            result={'available':False,'url':'/tensorboard/',
+                    'reason':'TensorBoard 日志写入失败：'+type(exc).__name__}
+        with self.lock:
+            record.setdefault('evidence',{})['tensorboard']=result
+        return result
+
+    def sync_tensorboard(self,run_id):
+        # Export a detached snapshot so API requests cannot iterate a live list.
+        return self._sync_tensorboard(self.snapshot(run_id))
 
     def _save(self,record):
         atomic_json(self.runtime/'results'/record['run_id']/'result.json',record)
@@ -504,6 +530,9 @@ class RunManager:
         outcome='completed'; failure=None
         try:
             monitor=LocalProcessMonitor(self.runtime)
+            monitor.on_sample=lambda row:self.tensorboard.write_sample(record['run_id'],row)
+            with self.lock:
+                self._monitors[record['run_id']]=monitor
             monitoring_stage='start'; monitor.start(); monitoring_stage=None
             execution,workers=execution_settings(cfg)
             executor=RunExecutor(execution,workers)
@@ -655,7 +684,8 @@ class RunManager:
                 _,_,tx,ty=load_dataset(self.runtime.parent/'data',cfg['dataset'],cfg['train_limit'],cfg['test_limit'],grid=grid)
             reference=quantize(initial_model(cfg['seed'],features=features),scale,bits)
             initial=evaluate(np.asarray(reference)/scale,tx,ty,features=features)
-            record['initial_metrics']=initial; self._save(record)
+            record['initial_metrics']=initial
+            self._sync_tensorboard(record); self._save(record)
             # The paper amortises AuthSetup: the authorities are set up once and
             # only re-run when the client set changes. The key epoch is therefore
             # task-level and the ceremony below runs on the first round only.
@@ -933,6 +963,7 @@ class RunManager:
                 with self.lock:
                     record['rounds'].append(row); self._save(record)
                 event('completed_round',f'第 {round_id} 轮完成，测试准确率 {metrics["accuracy"]:.2%}',round_id)
+                self._sync_tensorboard(record)
         except InterruptedError as exc:
             outcome='failed' if monitoring_stage is not None else 'aborted'; failure=str(exc)
         except Exception as exc:
@@ -969,6 +1000,12 @@ class RunManager:
                     memory['error']=self._failure_detail(exc)
             record['evidence']['memory']=memory
             record['evidence']['resources']=memory
+            self._sync_tensorboard(record)
+            try:
+                self.tensorboard.close(record['run_id'])
+            except Exception as exc:
+                record['evidence']['tensorboard']={'available':False,'url':'/tensorboard/',
+                    'reason':'TensorBoard 日志关闭失败：'+type(exc).__name__}
             if rpc:
                 try: rpc.close()
                 except Exception as exc: cleanup_failure('rpc_close',exc)
@@ -993,4 +1030,5 @@ class RunManager:
                     record['evidence']['persistence']={'saved':False,'stage':'finalize','error':detail}
                     record['events'][-1]['message']=record['error']
                 finally:
+                    self._monitors.pop(record['run_id'],None)
                     if self.active==record['run_id']: self.active=None
