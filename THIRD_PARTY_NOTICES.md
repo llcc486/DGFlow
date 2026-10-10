@@ -4,6 +4,24 @@
 
 匿名要求适用于本作品的参赛身份，不抹去公开上游的姓名、组织、版权和许可。以下保留安装包附带的许可原文；这些声明不授予本项目对第三方作品的所有权，也不等于完整许可证合规审计。
 
+## TensorBoard 监控新增依赖（2026-10-08）
+
+原生 TensorBoard 页面及事件格式使用 [TensorFlow / TensorBoard](https://github.com/tensorflow/tensorboard) 2.21.0（Apache-2.0），只启用其 Core 与 Scalars 插件；不安装 TensorFlow。依赖版本由 `requirements-lock.txt` 固定。以下许可来自已安装发行包元数据：
+
+| 发行包 | 版本 | 许可 |
+| --- | --- | --- |
+| tensorboard | 2.21.0 | Apache-2.0 |
+| tensorboard-data-server | 0.7.2 | Apache-2.0 |
+| absl-py | 2.5.0 | Apache-2.0 |
+| grpcio | 1.84.0 | Apache-2.0 |
+| Markdown | 3.11 | BSD-3-Clause |
+| Pillow | 12.3.0 | MIT-CMU |
+| protobuf | 7.36.2 | BSD-3-Clause |
+| Werkzeug | 3.1.9 | BSD-3-Clause |
+| MarkupSafe | 3.0.3 | BSD-3-Clause |
+
+新增依赖不随纯源码 ZIP 打包；制作并分发离线 wheelhouse 时须保留各 wheel 内的 LICENSE / NOTICE / METADATA。下文已有软件归属和许可原文保持有效。
+
 ## 数据与参考方案
 
 - **MNIST**：公开手写数字数据集，公开数据归属 Yann LeCun、Corinna Cortes；源自 NIST 数据。项目通过 HTTPS 镜像取得原始 IDX 压缩文件，并记录校验值。Keras 官方数据模块将其标注为 CC BY-SA 3.0；保留[官方说明](https://github.com/keras-team/keras/blob/master/keras/src/datasets/mnist.py)、[许可链接](https://creativecommons.org/licenses/by-sa/3.0/)、[MNIST主页](http://yann.lecun.com/exdb/mnist/)与[下载镜像](https://ossci-datasets.s3.amazonaws.com/mnist/)。本作品对输入执行 28×28 至 8×8 的平均池化、归一化和客户端分区；没有将这些变换描述为新采集的机构数据。原始缓存默认不进入源码提交包。
