@@ -3,6 +3,7 @@ import ipaddress
 import json
 import re
 import secrets
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -22,6 +23,9 @@ NONCE_BYTES = 12
 SIGNATURE_BYTES = 64
 MAX_TEXT_BYTES = 65535
 MAX_FRAME_BYTES = 1 << 28
+# Brief Windows reader/scanner locks must not abort a run. Bound the wait to
+# 1.63 seconds; permanent access failures still propagate to the caller.
+_WINDOWS_REPLACE_RETRY_DELAYS = (.01, .02, .04, .08, .16, .32, .5, .5)
 
 
 def _put_text(out, value, name):
@@ -115,9 +119,27 @@ def _atomic_binary(path, write):
     try:
         with temp.open('wb') as stream:
             write(stream)
-        temp.replace(path)
+        _replace_file(temp, path)
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _replace_file(temp, path):
+    """Publish a closed file, tolerating only Windows access/sharing locks.
+
+    Readers and virus scanners may briefly deny FILE_SHARE_DELETE. Retry the
+    same complete temporary file, preserving the old destination throughout;
+    never delete it or fall back to writing it in place.
+    """
+    for attempt in range(len(_WINDOWS_REPLACE_RETRY_DELAYS)+1):
+        try:
+            temp.replace(path)
+            return
+        except OSError as exc:
+            if (getattr(exc, 'winerror', None) not in (5, 32, 33)
+                    or attempt == len(_WINDOWS_REPLACE_RETRY_DELAYS)):
+                raise
+            time.sleep(_WINDOWS_REPLACE_RETRY_DELAYS[attempt])
 
 
 def read_bytes(path):
@@ -135,9 +157,8 @@ def _raw_public(key):
 
 
 def atomic_json(path, value):
-    path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
-    temp=path.with_name(path.name+'.'+secrets.token_hex(6)+'.tmp')
-    temp.write_bytes(canonical(value)); temp.replace(path)
+    raw = canonical(value)
+    _atomic_binary(path, lambda stream: stream.write(raw))
 
 
 def create_cluster(root,hosts):
