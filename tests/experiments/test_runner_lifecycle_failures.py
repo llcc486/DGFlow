@@ -50,6 +50,59 @@ class FakeRPC:
         self.closed = True
 
 
+def test_tensorboard_failure_does_not_fail_training(experiment, monkeypatch):
+    manager, record, _ = experiment
+
+    class BrokenLogs:
+        def sync(self, value):
+            raise OSError('event storage unavailable')
+
+        def write_sample(self, run_id, row):
+            raise OSError('event storage unavailable')
+
+        def close(self, run_id):
+            raise OSError('event close unavailable')
+
+    manager.tensorboard = BrokenLogs()
+    manager.records[record['run_id']] = record
+    manager._run(record)
+    assert record['status'] == 'completed'
+    assert record['summary']['completed_rounds'] == 1
+    assert record['evidence']['tensorboard']['available'] is False
+    assert record['run_id'] not in manager._monitors
+
+
+def test_tensorboard_receives_committed_metrics_and_sampling_callback(experiment, monkeypatch):
+    manager, record, _ = experiment
+    exported, sampled, closed = [], [], []
+
+    class RecordingLogs:
+        def sync(self, value):
+            exported.append(json.loads(json.dumps(value)))
+            return {'available': True, 'url': '/tensorboard/'}
+
+        def write_sample(self, run_id, row):
+            sampled.append((run_id, row))
+
+        def close(self, run_id):
+            closed.append(run_id)
+
+    class SamplingMonitor(StubMonitor):
+        def start(self):
+            self.on_sample({'sample_index': 1})
+
+    monkeypatch.setattr(runner, 'LocalProcessMonitor', SamplingMonitor)
+    manager.tensorboard = RecordingLogs()
+    manager._run(record)
+    assert record['status'] == 'completed'
+    assert any(value.get('initial_metrics') and not value['rounds'] for value in exported)
+    assert any(len(value['rounds']) == 1 for value in exported)
+    assert all(any(event['stage'] == 'completed_round' and event['round'] == 1
+                   for event in value['events']) for value in exported if value['rounds'])
+    assert sampled == [(record['run_id'], {'sample_index': 1})]
+    assert closed == [record['run_id']]
+
+
 @pytest.fixture
 def experiment(tmp_path, monkeypatch):
     runtime = tmp_path / 'runtime'
