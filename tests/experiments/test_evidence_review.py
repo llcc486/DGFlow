@@ -65,7 +65,8 @@ def test_failed_attempt_preserves_validation_evidence_with_explicit_counter_scop
     assert row['completed_round_honest_total']==0
     assert row['incomplete_round_validations']==failed['current_validations']
     assert row['status']=='aborted' and row['accuracy'] is None
-    assert 'honest_rejected' not in row and 'honest_total' not in row
+    assert row['attack_metrics_round'] is None
+    assert row['honest_rejected'] is None and row['honest_total'] is None
 
 
 @pytest.mark.parametrize('run_id',[

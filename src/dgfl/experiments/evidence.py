@@ -9,15 +9,18 @@ import tempfile
 from pathlib import Path
 
 
-def validate_suite(value, *, normalize=True):
-    from dgfl.services.control import ArchivedRunConfig as RunConfig
+def validate_suite(value, *, normalize=True, new=False):
+    from dgfl.services.control import ArchivedRunConfig, RunConfig
+    config_model=RunConfig if new else ArchivedRunConfig
     if set(value)!={'cases'} or not value['cases']: raise ValueError('suite requires nonempty cases')
     cases=[]; seen=set()
     for case in value['cases']:
         if set(case)!={'name','config'}: raise ValueError('case requires name and config')
         name=case['name']
         if not re.fullmatch('[a-z0-9_-]{1,80}',name) or name in seen: raise ValueError('unsafe or duplicate case name')
-        config=RunConfig(**case['config']).model_dump()
+        config=config_model(**case['config']).model_dump()
+        config={key:item for key,item in config.items()
+                if key not in ('model_name','model_descriptor','bits','scale') or item is not None}
         seen.add(name); cases.append({'name':name,'config':config if normalize else dict(case['config'])})
     return {'cases':cases}
 
@@ -42,6 +45,16 @@ def validate_record(record, requested, run_id, *, resolved_config=None):
     expected=RunConfig(**requested).model_dump()
     observed=RunConfig.model_validate({k:v for k,v in actual.items() if k!='client_authorities'},
                                       strict=True).model_dump()
+    optional=('model_name','model_descriptor','bits','scale')
+    expected={key:item for key,item in expected.items() if key not in optional or item is not None}
+    observed={key:item for key,item in observed.items() if key not in optional or item is not None}
+    from dgfl.experiments.resources import model_configuration
+    descriptor=model_configuration(expected)
+    if descriptor is not None:
+        expected['model_name']=descriptor['model_name']
+        expected['model_descriptor']=descriptor
+        expected.setdefault('bits',8)
+        expected.setdefault('scale',128)
     resolved_fields=set(TOPOLOGY_FIELDS)-{'client_count'}
     if 'client_authorities' in actual:
         # A resolved topology is all-or-nothing, including the owner of every
@@ -86,16 +99,31 @@ def summarize_records(records):
         completed_ids={r['round'] for r in rounds}
         current_validation_round=record.get('current_validations_round')
         incomplete=current_validation_round is not None and current_validation_round not in completed_ids
+
+        def completed_count(field):
+            values=[row.get(field) for row in rounds]
+            return sum(values) if all(type(value) is int and value>=0 for value in values) else None
+
         rows.append({'run_id':record['run_id'],'status':record['status'],**record['config'],
                      'attempted_round_count':max([record.get('current_round',0),*completed_ids]),
                      'completed_rounds':len(rounds),'accuracy':last.get('accuracy'),
                      'elapsed_seconds':record['summary'].get('elapsed_s'),
                      'completed_round_seconds':sum(r['duration_s'] for r in rounds),
                      'wire_bytes':record['summary'].get('bytes_sent'),
-                     'completed_round_attack_accepted':sum(r['attack_accepted'] for r in rounds),
-                     'completed_round_attack_submitted':sum(r['attack_submitted'] for r in rounds),
-                     'completed_round_honest_rejected':sum(r['honest_rejected'] for r in rounds),
-                     'completed_round_honest_total':sum(r['honest_total'] for r in rounds),
+                     'completed_round_attack_accepted':completed_count('attack_accepted'),
+                     'completed_round_attack_submitted':completed_count('attack_submitted'),
+                     'completed_round_honest_rejected':completed_count('honest_rejected'),
+                     'completed_round_honest_total':completed_count('honest_total'),
+                     'attack_metrics_round':last.get('round'),
+                     **{field:last.get(field) for field in (
+                         'attack_success_rate','attack_success_count','attack_success_denominator',
+                         'attack_eligible_samples','attack_eligible_success_rate',
+                         'attacker_acceptance_rate','honest_exclusion_rate',
+                         'attack_configured','attack_accepted','attack_submitted','attack_not_submitted',
+                         'attack_validation_rejected','attack_collateral',
+                         'honest_rejected','honest_total','honest_submitted','honest_not_submitted',
+                         'honest_validation_rejected','honest_collateral')},
+                     'attack_target_class':last.get('attack_target_class',record['config'].get('attack_target_class')),
                      'incomplete_validation_round':current_validation_round if incomplete else None,
                      'incomplete_round_validations':record.get('current_validations',[]) if incomplete else [],
                      'error':record['error']})

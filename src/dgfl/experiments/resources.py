@@ -7,6 +7,7 @@ that the machine has enough RAM/VRAM. No crypto, filesystem or RPC work is done.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 
 from dgfl.topology import (
@@ -21,6 +22,7 @@ from dgfl.topology import (
     MIN_AUTHORITY_THRESHOLD,
     MIN_CLIENT_COUNT,
 )
+from dgfl.training import model_adapter
 from dgfl.training.datasets import dataset_spec, feature_count
 from dgfl.transport.chunking import MAX_TOTAL_BYTES
 
@@ -35,6 +37,47 @@ _LIMITS = {
 _MODES = frozenset(('plain', 'encrypted', 'dgflow', 'optimized'))
 
 
+def model_configuration(config):
+    """Resolve optional explicit model metadata before any task/CRS side effect.
+
+    Absent metadata preserves the legacy linear path and its serialized policy.
+    A client-supplied dimension/hash never selects an implementation.
+    """
+    if not isinstance(config, Mapping):
+        raise ValueError('model configuration requires a mapping')
+    # Nullable API/archive additions must preserve historical omitted fields.
+    config={key:value for key,value in config.items()
+            if key not in ('model_name','model_descriptor','bits','scale') or value is not None}
+    if 'model_name' not in config and 'model_descriptor' not in config:
+        return None
+    supplied=None
+    if 'model_descriptor' in config:
+        supplied=model_adapter.validate_descriptor(config['model_descriptor'])
+    name=config.get('model_name',supplied['model_name'] if supplied else 'linear')
+    descriptor=model_adapter.resolve_model(config.get('dataset','mnist'),config.get('grid',8),name)
+    if supplied is not None and supplied!=descriptor:
+        raise ValueError('model configuration differs from trusted model descriptor')
+    if 'dimension' in config and (type(config['dimension']) is not int or config['dimension']!=descriptor['dimension']):
+        raise ValueError('model dimension must match the trusted factory')
+    if descriptor['model_name']!='linear':
+        if config.get('mode')!='plain':
+            raise ValueError('full CNN currently supports explicit plain mode only; encrypted CNN is not implemented')
+        if config.get('backend')!='torch':
+            raise ValueError('full CNN requires explicit torch training backend')
+    bits=config.get('bits',8)
+    scale=config.get('scale',128)
+    if type(bits) is not int or not 2<=bits<=16:
+        raise ValueError('model range bits must be an integer between 2 and 16')
+    if type(scale) is not int or not 1<=scale<=65536:
+        raise ValueError('model quantization scale must be an integer between 1 and 65536')
+    device=config.get('training_device','cpu')
+    if type(device) is not str or re.fullmatch(r'cpu|cuda(?::(?:0|[1-9][0-9]*))?',device) is None:
+        raise ValueError('training_device must be cpu or an explicit CUDA device')
+    if descriptor['model_name']=='linear' and device!='cpu':
+        raise ValueError('linear training supports CPU only')
+    return descriptor
+
+
 def check_wire_resources(config):
     """Return public encoded-size minima, rejecting only proven oversize.
 
@@ -46,6 +89,7 @@ def check_wire_resources(config):
     """
     if not isinstance(config, Mapping):
         raise ValueError('resource preflight requires a configuration mapping')
+    descriptor = model_configuration(config)
     dataset = config.get('dataset', 'mnist')
     spec = dataset_spec(dataset)
     values = {}
@@ -64,18 +108,19 @@ def check_wire_resources(config):
     if mode is not None and (type(mode) is not str or mode not in _MODES):
         raise ValueError('invalid resource preflight mode')
     result = {'scope': 'lower-bound', 'limit_bytes': MAX_TOTAL_BYTES, 'checks': []}
-    dimension = None
-    if 'grid' in values:
+    dimension = descriptor['dimension'] if descriptor is not None else None
+    if descriptor is not None: result['model_dimension']=dimension
+    if dimension is None and 'grid' in values:
         dimension = 10*(feature_count(dataset, values['grid'])+1)
-        if dimension > 20000:
-            raise ValueError('模型维度超过当前 20,000 维上限；请减小池化网格')
+    if dimension is not None and dimension > 20000 and (descriptor is None or descriptor['model_name']=='linear'):
+        raise ValueError('模型维度超过当前 20,000 维上限；请减小池化网格')
     if 'train_limit' in config and (type(config['train_limit']) is not int
                                     or not 1 <= config['train_limit'] <= spec['train_samples']):
         raise ValueError(f"train_limit must be between 1 and {spec['train_samples']} for {spec['name']}")
     if 'test_limit' in config and (type(config['test_limit']) is not int
                                    or not 1 <= config['test_limit'] <= spec['test_samples']):
         raise ValueError(f"test_limit must be between 1 and {spec['test_samples']} for {spec['name']}")
-    if mode is None or mode == 'plain' or 'grid' not in values:
+    if mode is None or mode == 'plain' or dimension is None:
         return result
 
     def add_check(stage, minimum_bytes, parameters, description, suggestion):

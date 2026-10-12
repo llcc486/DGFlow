@@ -162,18 +162,42 @@ def _train_torch(w, x, y, features, epochs, learning_rate, batch_size, rng, on_e
     return result
 
 
-def evaluate(weights, x, y, *, features: int = FEATURES) -> dict:
-    """Compute stable mean cross-entropy and top-1 accuracy on supplied data."""
+def evaluate(weights, x, y, *, features: int = FEATURES, target_class: int | None = None) -> dict:
+    """Compute stable mean cross-entropy and top-1 accuracy on supplied data.
+
+    ``target_class`` additionally reports the attack success rate the paper uses
+    for label-flipping: the share of test samples that are **incorrectly**
+    classified into the attacker's chosen target class, taken over all test
+    samples. Samples whose true label already is the target class are excluded
+    from the numerator, because predicting them correctly is not a success for
+    the attacker.
+    """
     w = _weights(weights, features)
     x, y = _data(x, y, features)
+    if target_class is not None and (type(target_class) is not int or not 0 <= target_class < CLASSES):
+        raise ValueError("target_class must be a class index in range")
     split = features * CLASSES
     logits = x @ w[:split].reshape(features, CLASSES) + w[split:]
     if not np.isfinite(logits).all():
         raise ValueError("evaluation produced nonfinite logits")
     shifted = logits - logits.max(axis=1, keepdims=True)
     loss = np.log(np.exp(shifted).sum(axis=1)) - shifted[np.arange(len(y)), y]
-    return {"accuracy": float(np.mean(logits.argmax(axis=1) == y)),
-            "loss": float(loss.mean()), "samples": len(y)}
+    predicted = logits.argmax(axis=1)
+    result = {"accuracy": float(np.mean(predicted == y)),
+              "loss": float(loss.mean()), "samples": len(y)}
+    if target_class is not None:
+        misrouted = (predicted == target_class) & (y != target_class)
+        successes = int(np.count_nonzero(misrouted))
+        eligible = int(np.count_nonzero(y != target_class))
+        result["attack_success_rate"] = successes / len(y)
+        result["attack_success_count"] = successes
+        result["attack_success_denominator"] = len(y)
+        result["attack_eligible_samples"] = eligible
+        # A separately named diagnostic avoids changing the paper's all-sample
+        # denominator. An all-target test set has no eligible attack examples.
+        result["attack_eligible_success_rate"] = successes / eligible if eligible else None
+        result["attack_target_class"] = int(target_class)
+    return result
 
 
 def average_models(models: Sequence[np.ndarray], sample_counts=None, *, features: int = FEATURES) -> np.ndarray:

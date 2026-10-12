@@ -253,11 +253,11 @@ Xi=0 是合法零向量的情况；余弦分母为零必须由筛选策略明确
 
 ## 15. LegoGroth16 毫秒级完整证明实验后端
 
-`crypto/lego.py` 与 `dgfl-native` 0.2 提供可显式选择的 `lego_norm_v1` 实验套件。它改变证明系统及设置假设，采用 Dock `legogroth16` 0.18.0。客户端、授权节点、运行管理器及网页已接入；默认套件仍为 `legacy`。只有预先安装匹配参数、节点实际加载支持持久参数的原生模块，才能启动 Lego 任务。
+`crypto/lego.py` 与 `dgfl-native` 0.2 提供可显式选择的 `lego_norm_v1` 实验套件。它改变证明系统及设置假设，采用 Dock `legogroth16` 0.18.0。客户端、授权节点、运行管理器及网页已接入；当前新建加密实验使用此套件，`legacy` 保留用于历史兼容和研究核对。只有预先安装匹配参数、节点实际加载支持持久参数的原生模块，才能启动 Lego 任务。
 
 数值电路先分配全部 signed `x_j`，再分配范围位及平方中间值。逐坐标约束 `x_j + 2^(bits-1) = sum(2^i * bit_ji)`，各位为 Boolean，最后约束 `sum(x_j^2) = norm`。范数为唯一公开输入，整数上界严格小于群阶，消除模域绕回。650 维、8 位共 6,501 条约束。椭圆曲线密文运算留在曲线群中，无需把 381 位坐标嵌入 255 位标量域电路。
 
-Lego 证明的 `D` 是对前 d 个见证的向量承诺。验证密钥给出公开基底 `Q_j` 和隐藏基底 `Q_v`，满足 `D = sum(Q_j*x_j) + Q_v*v`。完整证明另外保留以下关联关系：
+诚实生成器将前 d 个见证写入 `D = sum(Q_j*x_j) + Q_v*v`，其中 `Q_j` 与盲化基底 `Q_v` 都来自受信验证密钥。对于恶意证明，不能仅由数值配对验证通过推定 D 存在该形式的已知开口；完整提交还单独核验以下共享见证关系：
 
 ```text
 ct_j = F(ctx)*s_j + G*x_j
@@ -265,9 +265,11 @@ K_j  = G*s_j + H*k_j
 D    = sum(Q_j*x_j) + Q_v*v
 ```
 
-首消息分别为 `A_ct,j=F*u_j+G*a_j`、`A_K,j=G*u_j+H*w_j` 和 `A_D=sum(Q_j*a_j)+Q_v*xi`。同一 `zx_j=a_j+e*x_j` 同时用于密文及 D 开口；同一 `zs_j=u_j+e*s_j` 同时用于密文及注册密钥；其余响应为 `zk_j=w_j+e*k_j`、`zv=xi+e*v`。先生成完整 Lego 证明及所有首消息，再对完整 ABCD、上下文、客户端、密文、注册密钥、范数、首消息及 CRS 指纹生成独立域分离的非零 Fiat–Shamir 挑战。不存在仅证明另一组明文范围而未绑定实际密文的入口。
+首消息分别为 `A_ct,j=F*u_j+G*a_j`、`A_K,j=G*u_j+H*w_j` 和 `A_D=sum(Q_j*a_j)+Q_v*xi`。同一 `zx_j=a_j+e*x_j` 同时用于密文及 D 开口；同一 `zs_j=u_j+e*s_j` 同时用于密文及注册密钥；其余响应为 `zk_j=w_j+e*k_j`、`zv=xi+e*v`。先生成完整 Lego 证明及所有首消息，再对完整 ABCD、上下文、客户端、密文、注册密钥、范数、首消息及 CRS 指纹生成独立域分离的非零 Fiat–Shamir 挑战。完整提交入口同时核验数值 SNARK 和这些关联方程；数值原生 API 本身不能替代完整提交验证。
 
 完整验证包括 Lego 的数值关系、650 条密文关系、650 条注册密钥关系和一条 D 开口关系；原逐坐标 C 和相应第三条 Sigma 关系由 D 的一次向量开口连接替代。Lego 核心为 240 B（3 个 G1 点和 1 个 G2 点），完整规范二进制证明为 144,777 B，不能将 240 B 描述为整个提交包。所有外部点仍检查曲线、子群和规范字节，所有标量检查域内规范表示。确定性验证逐关系检查；随机验证在完整解析后采独立非零权重，额外批验误接受概率至多 `1/(q-1)`，失败后确定性复查。
+
+**安全论证边界（2026-10-11 补充）：**修订 LegoSNARK 的 §3.3（印刷页 17）、Theorem 3.2（页 19）及 Remark H.1（页 74）区分数值 ccGro16 的广义开口知识与标准承诺开口；不能将前者无条件当作后者。本项目使用 Dock 0.18.0 的无 CP_link 数值接口，并以外层 Sigma 的 D 开口关系补充连接，且同一 `zx` 参与密文方程。该结构具备提取普通开口的关键条件，但尚未完成 Dock/修订方案映射、Fiat–Shamir 提取器与 double-binding 提取器的兼容组合归约，也未获得外部密码学审计。相关负测不能替代安全证明；这里没有报告完整 v1 的可构造绕过。数值原生 `verify` 只是一项内部检查；`verify_linked` 也依赖受信调用方按完整转录计算 challenge。[LegoSNARK 官方修订全文](https://eprint.iacr.org/2019/142.pdf)
 
 `development_setup` 使用 OS 随机源作本地单方设置，返回内存中的 PK/VK，不写设置秘密。`scripts/setup_lego_parameters.py` 是显式离线操作，将公共证明密钥 PK、验证密钥 VK 和可信清单写入 `runtime/proof-parameters/<crs_hash>/`；角色启动和实验运行不会自动设置。PK 不是设置陷门。当前设置仅供本机实验，不是多方可信设置仪式，DGFlow 的 DKG 不替代 SNARK 设置。
 
@@ -277,7 +279,7 @@ D    = sum(Q_j*x_j) + Q_v*v
 
 原生生成器把 Sigma 点计算留在 Rust 中，并一次批量归一化；最多 4 个 Sigma 线程。Lego 的底层 MSM/FFT 在有界 Rayon 池内运行，原生上限为 8，实验使用 4。证明随机数不复用、不进入持久缓存；没有把验证用的公开 G/H 查表用于秘密。Arkworks 证明运算仍是变量时间实现，未声明常数时间。测量记录见[优化报告](../research/optimization-results.md)。
 
-依据：[LegoSNARK 原论文](https://eprint.iacr.org/2019/142.pdf)、[Dock 的承诺见证数据结构](https://github.com/docknetwork/crypto/blob/main/legogroth16/src/data_structures.rs)、[Dock 的证明生成接口](https://github.com/docknetwork/crypto/blob/main/legogroth16/src/prover.rs)。编译实际版本由 `native/dgfl-native/Cargo.lock` 固定。
+依据：[LegoSNARK 官方全文及版本记录](https://eprint.iacr.org/2019/142)、[Dock 0.18.0 对应提交的承诺见证结构](https://github.com/docknetwork/crypto/blob/0023be52a4b902bcd93e9b94501103f36e6cc94b/legogroth16/src/data_structures.rs)、[对应数值/链接验证接口](https://github.com/docknetwork/crypto/blob/0023be52a4b902bcd93e9b94501103f36e6cc94b/legogroth16/src/verifier.rs)。`native/dgfl-native/Cargo.lock` 固定版本及发布包摘要；代码版本固定不等于已证明组合安全。
 
 ## 16. 四套证明的实现分层与仅存一处的联动关系
 

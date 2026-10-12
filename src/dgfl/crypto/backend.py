@@ -8,7 +8,6 @@ tables never process secret witnesses or nonces.
 """
 import hashlib
 import json
-import math
 import secrets
 from functools import lru_cache
 
@@ -35,6 +34,8 @@ except ImportError:
     _native_batches = None
 
 from dgfl.transport.binary import packb
+
+from .discrete_log import BoundedLogCache
 
 ORDER = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
 FIELD = 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
@@ -536,34 +537,14 @@ def public_fixed_g1(point, coefficient: int):
     return g1_load(_public_g1_table(g1_dump(point)).mul_public(scalar_dump(coefficient)))
 
 
-@lru_cache(maxsize=8)
-def _log_table(width: int):
-    step = math.isqrt(width) + 1
-    if step > 100000:
-        raise ValueError('discrete logarithm range exceeds configured memory budget')
-    table, value = {}, GT.one()
-    for j in range(step):
-        table[value] = j
-        value = value * GT_BASE
-    return step, table, gt_pow(GT_BASE, -step)
-
-
 @lru_cache(maxsize=32)
 def _log_shift(lower: int):
     # Only a public interval endpoint is cached, never a target or recovered log.
     return gt_pow(GT_BASE, -lower)
 
 
+_public_log_cache = BoundedLogCache(GT, GT_BASE, gt_pow, _log_shift)
+
+
 def bounded_log(value, lower: int, upper: int) -> int:
-    if lower > upper:
-        raise ValueError('invalid discrete logarithm range')
-    step, table, inverse_step = _log_table(upper-lower+1)
-    current = value * _log_shift(lower)
-    for giant in range((upper-lower)//step+1):
-        baby = table.get(current)
-        if baby is not None:
-            result = lower + giant*step + baby
-            if result <= upper:
-                return result
-        current = current * inverse_step
-    raise ValueError('discrete logarithm outside authorized range')
+    return _public_log_cache.decode(value, lower, upper)

@@ -6,12 +6,21 @@ import EmptyState from '../components/EmptyState.vue'
 import PageHead from '../components/PageHead.vue'
 import RunToolbar from '../components/RunToolbar.vue'
 import { consoleStore as store } from '../lib/store'
-import { decisionName, decisionTone, fmt, seconds } from '../lib/format'
+import { decisionName, decisionTone, fmt, percent, seconds } from '../lib/format'
 
 const emit = defineEmits(['navigate'])
 const selectedRound = ref('latest')
 
 const run = computed(() => store.currentRun.value)
+const groupingNote = computed(() => {
+  const strategy = run.value?.config?.batch_strategy
+  if (strategy === 'fixed') {
+    const size = run.value.config.batch_size ?? 2
+    return `本次实验使用跨轮固定 ${size} 人批次（σ=${size}）。同组其他成员可能连带排除；连带排除不能解释为已识别的恶意客户端。`
+  }
+  if (strategy === 'regroup') return '本次实验将合格成员重新组队，属于可用性扩展，不具备论文固定批次的跨轮 MRPL 隐私保证。连带排除不能解释为已识别的恶意客户端。'
+  return '此历史记录未保存分组策略，无法据此确认固定批次或重新组队。连带排除不能解释为已识别的恶意客户端。'
+})
 
 /** The in-flight round: validation returned but the model is not published yet. */
 const pendingValidation = computed(() => {
@@ -35,6 +44,12 @@ const validationRound = computed(() =>
     ? pendingValidation.value || run.value?.rounds?.at(-1) || null
     : run.value?.rounds?.find(r => String(r.round) === selectedRound.value) || null,
 )
+const attackEvaluation = computed(() => validationRound.value?.pending ? null : validationRound.value)
+const attackSuccessCaption = computed(() => {
+  const row = attackEvaluation.value
+  if (!row || !Number.isInteger(row.attack_success_count) || !Number.isInteger(row.attack_success_denominator)) return '定向攻击指标未记录；缺失值不按零处理'
+  return `错分到目标 ${row.attack_target_class ?? '—'}：${row.attack_success_count} / ${row.attack_success_denominator}（全部测试样本）；非目标样本 ${row.attack_eligible_samples ?? '—'}`
+})
 
 watch(() => store.selectedRunId.value, () => { selectedRound.value = 'latest' })
 </script>
@@ -98,7 +113,7 @@ watch(() => store.selectedRunId.value, () => { selectedRound.value = 'latest' })
         <MetricCard
           label="批次连带排除" icon="layers" tone="warn"
           :value="validationRound ? validationRound.collateral_clients?.length ?? 0 : '—'"
-          :caption="run.config?.batch_strategy === 'regroup' ? '合格成员重新组队' : '固定批次的可用性代价'"
+          :caption="run.config?.batch_strategy === 'fixed' ? '固定批次的可用性代价' : run.config?.batch_strategy === 'regroup' ? '重新组队的可用性扩展' : '历史分组策略未记录'"
         />
         <MetricCard
           label="检查轮次" icon="refresh"
@@ -106,6 +121,31 @@ watch(() => store.selectedRunId.value, () => { selectedRound.value = 'latest' })
           :caption="validationRound?.pending ? '验证已返回 · 模型未发布' : validationRound ? `耗时 ${seconds(validationRound.duration_s)}` : '等待逐轮验证记录'"
         />
       </div>
+
+      <section v-if="run.config?.attack && run.config.attack !== 'none'" class="nb-card" style="margin-bottom:20px">
+        <div class="nb-card-head"><h2>攻击评估</h2><span class="nb-card-note">已完成轮次 · 受控攻击身份对照统计</span></div>
+        <div class="nb-card-body">
+          <p v-if="validationRound?.pending" class="nb-note">本轮模型尚未发布，等待 OA 与 ASR 评估；验证接纳资格不代表最终入选。</p>
+          <div class="nb-grid cols-4">
+            <MetricCard label="全局测试准确率 OA" :value="percent(attackEvaluation?.accuracy)" icon="activity" caption="与 ASR 使用同一份全局测试集" />
+            <MetricCard label="定向攻击成功率 ASR" :value="percent(attackEvaluation?.attack_success_rate)" icon="target" :caption="attackSuccessCaption" />
+            <MetricCard label="恶意提交接纳率" :value="percent(attackEvaluation?.attacker_acceptance_rate)" icon="shield"
+              :caption="`实际入选 ${attackEvaluation?.attack_accepted ?? '—'} / 成功提交 ${attackEvaluation?.attack_submitted ?? '—'}；无提交时未定义`" />
+            <MetricCard label="诚实客户端排除率" :value="percent(attackEvaluation?.honest_exclusion_rate)" icon="user"
+              :caption="`未入选 ${attackEvaluation?.honest_rejected ?? '—'} / 诚实客户端 ${attackEvaluation?.honest_total ?? '—'}；无诚实客户端时未定义`" />
+          </div>
+          <div class="nb-table-scroll" style="margin-top:16px">
+            <table class="nb-table">
+              <thead><tr><th>已知注入身份</th><th>配置数量</th><th>成功提交</th><th>未提交</th><th>验证直接拒绝</th><th>批次连带排除</th></tr></thead>
+              <tbody>
+                <tr><td>攻击客户端</td><td>{{ attackEvaluation?.attack_configured ?? '—' }}</td><td>{{ attackEvaluation?.attack_submitted ?? '—' }}</td><td>{{ attackEvaluation?.attack_not_submitted ?? '—' }}</td><td>{{ attackEvaluation?.attack_validation_rejected ?? '—' }}</td><td>{{ attackEvaluation?.attack_collateral ?? '—' }}</td></tr>
+                <tr><td>诚实客户端</td><td>{{ attackEvaluation?.honest_total ?? '—' }}</td><td>{{ attackEvaluation?.honest_submitted ?? '—' }}</td><td>{{ attackEvaluation?.honest_not_submitted ?? '—' }}</td><td>{{ attackEvaluation?.honest_validation_rejected ?? '—' }}</td><td>{{ attackEvaluation?.honest_collateral ?? '—' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="nb-note">接纳率和排除率描述实际返回与入选结果，不是恶意识别率。通信故障、退出和批次连带排除不能解释为检测成功；低 ASR 也需要结合 OA 判断模型是否仍有用。</p>
+        </div>
+      </section>
 
       <section class="nb-card" style="margin-bottom:20px">
         <div class="nb-card-head">
@@ -152,7 +192,7 @@ watch(() => store.selectedRunId.value, () => { selectedRound.value = 'latest' })
           <span class="nb-explain-icon"><LabIcon name="layers" :size="21" /></span>
           <div>
             <h3>接纳分组与连带影响</h3>
-            <p>默认将合格成员重新组队；论文对照可选择固定批次。连带排除单独统计，不能将其解释为已识别的恶意客户端。</p>
+            <p>{{ groupingNote }}</p>
             <div v-if="validationRound?.collateral_clients?.length" class="nb-chips">
               <span v-for="id in validationRound.collateral_clients" :key="id">{{ id }}</span>
             </div>

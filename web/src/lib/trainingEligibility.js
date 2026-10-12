@@ -1,4 +1,5 @@
 import { deploymentConfig, deploymentConfigError, deployedTopology, deploymentState, runCompatibilityError } from './deployment.js'
+import { batchConfigurationError, fixedBatchPreview } from './batchGrouping.js'
 
 /** Match choose_participants/apply_batches without changing full-deployment readiness.
  *  This checks current online membership, before attack injection or proof screening. */
@@ -9,7 +10,8 @@ export function trainingEligibility(status, configuration, connected) {
     clouds: [], excludedClouds: [], missingAuthorities: [],
     clientCount: config.client_count, authorityCount: config.authority_count,
     cloudCount: config.aggregator_count, cloudThreshold: config.aggregator_threshold,
-    mode: configuration?.mode ?? 'dgflow', batchStrategy: configuration?.batch_strategy ?? 'regroup',
+    mode: configuration?.mode ?? 'dgflow', batchStrategy: configuration?.batch_strategy ?? 'fixed',
+    batchSize: configuration?.batch_size === undefined ? 2 : configuration.batch_size,
   }
   const fail = reason => ({ ...result, reason })
   if (!connected) return fail('连接实验引擎后检查训练在线门槛。')
@@ -21,7 +23,9 @@ export function trainingEligibility(status, configuration, connected) {
   if (compatibilityError) return fail(compatibilityError)
   if (!deployment.configured) return fail('请先应用所选客户端、边缘、云数量及门限的真实部署。')
   if (!['plain', 'encrypted', 'dgflow', 'optimized'].includes(result.mode)) return fail('请选择有效的实验策略。')
-  if (!['fixed', 'regroup'].includes(result.batchStrategy)) return fail('请选择固定批次或合格成员重新组队。')
+  const grouping = { client_count: config.client_count, batch_size: result.batchSize, batch_strategy: result.batchStrategy }
+  const groupingError = batchConfigurationError(grouping)
+  if (groupingError) return fail(groupingError)
   const excluded = configuration?.offline_aggregators ?? 0
   if (!Number.isInteger(excluded) || excluded < 0 || excluded > config.aggregator_count) return fail('排除聚合节点数量必须为整数且不能超过部署数量。')
 
@@ -45,8 +49,8 @@ export function trainingEligibility(status, configuration, connected) {
   if (result.batchStrategy === 'regroup') {
     result.batchClients = result.clients.length >= 2 ? [...result.clients] : []
   } else {
-    for (let index = 0; index + 1 < clients.length; index += 2) {
-      if (online.has(clients[index]) && online.has(clients[index + 1])) result.batchClients.push(clients[index], clients[index + 1])
+    for (const group of fixedBatchPreview(grouping)) {
+      if (group.every(id => online.has(id))) result.batchClients.push(...group)
     }
   }
   if (result.mode !== 'plain') {
@@ -54,7 +58,7 @@ export function trainingEligibility(status, configuration, connected) {
     if (result.clouds.length < config.aggregator_threshold) return fail(`排除最高编号的 ${excluded} 个云后，实际可用云 ${result.clouds.length} 个，不足 ${config.aggregator_threshold}/${config.aggregator_count} 门限。`)
   }
   if (!result.batchClients.length) return fail(result.batchStrategy === 'fixed'
-    ? '固定批次没有完整在线双人组；批次为 client1/client2、client3/client4 等，奇数尾成员不单独成组。'
+    ? `固定批次没有完整在线的 ${result.batchSize} 人组；分组按声明成员编号固定，缺席成员的组本轮不参与。`
     : '在线客户端不足两人，不能形成有效参与组。')
   return { ...result, ready: true }
 }

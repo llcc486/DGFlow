@@ -12,6 +12,7 @@ import * as topology from '../src/lib/topology.js'
 import * as training from '../src/lib/trainingBackends.js'
 import * as clouds from '../src/lib/cloudStrategies.js'
 import { trainingEligibility } from '../src/lib/trainingEligibility.js'
+import * as batching from '../src/lib/batchGrouping.js'
 import { api, errorText } from '../src/lib/api.js'
 import { consoleStore as store } from '../src/lib/store.js'
 
@@ -24,7 +25,7 @@ test('switching the actual deployment form updates RGB dimensions, CRS selection
   const stops = []
   store.connected.value = false; store.status.value = null; store.selectedDataset.value = 'mnist'
   const context = createContext({
-    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds,
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
     LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {},
     onMounted() {}, onUnmounted() {},

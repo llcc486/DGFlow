@@ -47,6 +47,7 @@ KEY_SCALAR_TAGS = frozenset({
     'training/accuracy', 'training/cross_entropy', 'training/epoch_s',
     'clients/accepted', 'clients/rejected', 'clients/collateral', 'clients/failures',
     'clients/attack_accepted', 'clients/honest_rejected',
+    'attacks/attack_success_rate', 'attacks/attacker_acceptance_rate', 'attacks/honest_exclusion_rate',
     'protocol/stages/dkg_s', 'protocol/stages/client_stage_s', 'protocol/stages/validation_s',
     'protocol/stages/aggregate_key_s', 'protocol/stages/partial_decryption_s',
     'protocol/stages/combine_and_confirmation_s',
@@ -79,6 +80,9 @@ _FIELD_LABELS = {
     'collateral': ('同组连带剔除客户端', '个'), 'failures': ('未成功返回客户端', '个'),
     'attack_accepted': ('被接纳的恶意客户端', '个'), 'attack_submitted': ('已提交恶意客户端', '个'),
     'honest_rejected': ('被拒绝的诚实客户端', '个'), 'honest_total': ('诚实客户端总数', '个'),
+    'attack_success_rate': ('定向攻击成功率 ASR', '比例 0–1'),
+    'attacker_acceptance_rate': ('恶意提交接纳率', '比例 0–1'),
+    'honest_exclusion_rate': ('诚实客户端排除率', '比例 0–1'),
     'reference_norm_squared': ('全局量化模型平方范数', '量化坐标平方'),
     'dkg_s': ('分布式建钥阶段', '秒'), 'client_stage_s': ('客户端提交阶段墙钟', '秒'),
     'training_wall_sum_s': ('各客户端训练耗时之和', '秒'),
@@ -148,7 +152,7 @@ _GROUP_LABELS = {'evaluation': '全局测试集', 'round': '轮次执行', 'task
                  'pool': '设备内存池', 'configuration': '计算配置', 'kernel_resources': '内核资源',
                  'device_resources': '设备资源', 'system': '主机', 'cpu': 'CPU', 'gpu': 'GPU',
                  'processes': '实验进程', 'training': '本地训练集', 'training_round': '本地训练轮次',
-                 'monitoring': '监控额外开销'}
+                 'monitoring': '监控额外开销', 'attacks': '攻击评估'}
 
 
 def scalar_label_catalog():
@@ -167,7 +171,7 @@ def metric_metadata(tag):
     prefix = ' / '.join(_GROUP_LABELS.get(part, part) for part in parts[:-1])
     axis = '资源采样序号；实际采样时间可切换 Wall time 查看'
     if parts[0] in ('evaluation', 'round', 'task', 'communication', 'clients', 'model', 'protocol',
-                    'proof', 'combine', 'gpu_compute', 'training_round', 'monitoring'):
+                    'proof', 'combine', 'gpu_compute', 'training_round', 'monitoring', 'attacks'):
         axis = '全局轮次'
     elif parts[0] == 'training':
         axis = '累计本地 epoch，(全局轮次−1)×local_epochs+本地 epoch'
@@ -176,6 +180,15 @@ def metric_metadata(tag):
     if parts[0] == 'evaluation':
         notes.append('根记录为全局测试集；nodes/clientN 为每轮最后本地 epoch 的客户端训练集指标。'
                      '横轴均为全局轮次，客户端模型尚未攻击变换或量化，两类数据集口径不同。')
+    if tag == 'attacks/attack_success_rate':
+        notes.append('非目标测试样本被错误预测为目标类的数量÷全部测试样本数；仅定向攻击记录。'
+                     '应结合根记录 evaluation/accuracy（全局测试准确率 OA）判断，不可仅凭低 ASR 认定防御有效。')
+    if tag == 'attacks/attacker_acceptance_rate':
+        notes.append('实际入选聚合的恶意客户端数÷实际成功提交的恶意客户端数；无提交时不记录。'
+                     '接纳与否不等于恶意识别，掉线和批次连带排除不可计为检测成功。')
+    if tag == 'attacks/honest_exclusion_rate':
+        notes.append('未入选聚合的诚实客户端数÷配置中的诚实客户端数；无诚实客户端时不记录。'
+                     '包含掉线及固定批次连带排除，属于可用性结果，不等于检测误报率。')
     if parts[0] in ('protocol', 'combine'):
         notes.append('保留原始独立计时；父阶段、子阶段及并行进程耗时有重叠，不可直接相加成墙钟。')
     if field.endswith('wall_sum_s'):
@@ -222,6 +235,10 @@ def _round_metrics(row):
         _measured(metrics, 'clients/failures', len(failures))
     for field in ('attack_accepted', 'attack_submitted', 'honest_rejected', 'honest_total'):
         _measured(metrics, f'clients/{field}', row.get(field))
+    for field in ('attack_success_rate', 'attacker_acceptance_rate', 'honest_exclusion_rate'):
+        value = _number(row.get(field))
+        if value is not None and value <= 1:
+            metrics[f'attacks/{field}'] = value
     _measured(metrics, 'model/reference_norm_squared', row.get('reference_norm_squared'))
     stages = row.get('stage_times')
     if isinstance(stages, dict):

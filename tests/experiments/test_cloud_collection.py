@@ -227,5 +227,5 @@ def test_manager_normalizes_default_grid_before_derived_resource_check(tmp_path,
     monkeypatch.setattr(runner, 'implementation_evidence', forbidden)
     monkeypatch.setattr(runner.threading, 'Thread', forbidden)
     with pytest.raises(ValueError, match='完整建钥转录'):
-        runner.RunManager(tmp_path).start({'mode': 'encrypted', 'client_count': 33})
+        runner.RunManager(tmp_path).start({'mode': 'encrypted', 'client_count': 33, 'batch_size': 3})
     assert not (tmp_path/'results').exists()

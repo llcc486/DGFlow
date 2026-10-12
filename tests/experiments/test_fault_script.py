@@ -129,10 +129,11 @@ def suite_harness(script,tmp_path,monkeypatch,*,wrong_third=False,api_failure=Fa
         if path.startswith('/api/runs/'):
             case=int(path.rsplit('/',1)[1],16)
             if api_failure: raise OSError('deliberate controller interruption')
-            accepted=[f'client{i}' for i in range(1,n//2*2+1)]
-            collateral=[f'client{n}'] if n%2 else []
+            size=configs[case-1].get('batch_size',2)
+            accepted=[f'client{i}' for i in range(1,n//size*size+1)]
+            collateral=[f'client{i}' for i in range(len(accepted)+1,n+1)]
             if case==3 and not wrong_third:
-                accepted=accepted[2:]; collateral=sorted(['client2',*collateral])
+                accepted=accepted[size:]; collateral=sorted([*[f'client{i}' for i in range(2,size+1)],*collateral])
             aborted=case==2 or (case==3 and not accepted)
             return {'run_id':f'{case:032x}','config':configs[case-1],
                     'status':'aborted' if aborted else 'completed',
@@ -214,15 +215,16 @@ def test_cli_forwards_explicit_crs_without_starting_a_real_fault_check(script,tm
     calls=[]
     monkeypatch.setattr(script,'run_checks',lambda *args,**kwargs:calls.append((args,kwargs)))
     assert script.main(['--runtime',str(tmp_path/'runtime'),'--output',str(tmp_path/'evidence'),
-                        '--proof-crs-hash','cd'*32])==0
+                        '--proof-crs-hash','cd'*32,'--batch-size','3'])==0
     assert calls==[((tmp_path/'runtime',tmp_path/'evidence','http://127.0.0.1:8765',3600),
-                    {'proof_crs_hash':'cd'*32})]
+                    {'proof_crs_hash':'cd'*32,'batch_size':3})]
 
 
 @pytest.mark.parametrize('n,w,v,e',[(20,4,5,3),(6,3,4,2),(6,2,2,2),(3,2,2,2),(11,3,4,3)])
 def test_dynamic_cloud_faults_stop_exactly_enough_to_meet_and_then_miss_threshold(script,tmp_path,monkeypatch,n,w,v,e):
     stopped,restored,configs=suite_harness(script,tmp_path,monkeypatch,n=n,w=w,v=v,e=e)
-    index=script.run_checks(tmp_path/'runtime',tmp_path/'evidence')
+    size=2 if n%2==0 else n
+    index=script.run_checks(tmp_path/'runtime',tmp_path/'evidence',batch_size=size)
     expected=[f'aggregator{i}' for i in range(v,e-1,-1)]
     assert stopped==[*expected,'client1']
     assert restored==[set(expected),set(expected)|{'client1'}]
@@ -231,6 +233,23 @@ def test_dynamic_cloud_faults_stop_exactly_enough_to_meet_and_then_miss_threshol
     assert index['status']=='passed'
     assert all(cfg['client_count']==n and cfg['authority_count']==w and cfg['aggregator_count']==v
                and cfg['aggregator_threshold']==e and cfg['batch_strategy']=='fixed' for cfg in configs)
+
+
+@pytest.mark.parametrize('size',[3,6])
+def test_fault_observations_follow_selected_sigma(script,tmp_path,monkeypatch,size):
+    _,_,configs=suite_harness(script,tmp_path,monkeypatch)
+    index=script.run_checks(tmp_path/'runtime',tmp_path/'evidence',batch_size=size)
+    assert index['status']=='passed'
+    assert all(config['batch_size']==size for config in configs)
+    observation=index['cases'][-1]['observation']
+    assert ('同组 2 名成员连带退出' if size==3 else '唯一的 6 人固定批次缺员') in observation
+
+
+def test_invalid_sigma_cannot_stop_any_fault_test_process(script,tmp_path,monkeypatch):
+    stopped,restored,configs=suite_harness(script,tmp_path,monkeypatch)
+    with pytest.raises(ValueError,match='整除'):
+        script.run_checks(tmp_path/'runtime',tmp_path/'evidence',batch_size=4)
+    assert stopped==restored==configs==[]
 
 
 def test_timeout_rechecks_identity_before_forced_termination(script,tmp_path,monkeypatch):

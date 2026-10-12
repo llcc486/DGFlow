@@ -173,7 +173,7 @@ def test_control_config_refuses_certainly_oversized_before_any_run_is_created():
 def test_control_optional_topology_is_not_replaced_by_resource_defaults():
     from dgfl.services.control import RunConfig
 
-    value = RunConfig(client_count=33, grid=8, proof_crs_hash='ab'*32).model_dump()
+    value = RunConfig(client_count=33, batch_size=3, grid=8, proof_crs_hash='ab'*32).model_dump()
     assert value['authority_count'] is None
     assert resources.check_wire_resources(value)['checks'] == []
 
@@ -198,7 +198,7 @@ def test_manager_checks_derived_cluster_before_rpc_crs_or_record_creation(tmp_pa
     monkeypatch.setattr(runner, 'implementation_evidence', forbidden)
     monkeypatch.setattr(runner.threading, 'Thread', forbidden)
     monkeypatch.setattr(gpu, 'compute_capabilities', lambda: {'gpu': {'available': True}})
-    value = {'mode': 'optimized', 'client_count': 33, 'grid': 8,
+    value = {'mode': 'optimized', 'client_count': 33, 'batch_size': 3, 'grid': 8,
              'malicious_clients': 0, 'compute_device': 'gpu'}
     with pytest.raises(ValueError, match='完整建钥转录'):
         manager.start(value)

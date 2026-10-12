@@ -10,20 +10,46 @@ export const NAVIGATION = [
   { id: 'comparison', label: '对照' },
 ]
 
+/**
+ * Mode names state what the cryptography does, because the four modes differ
+ * only in their cryptographic obligations and filtering, not in training.
+ * `optimized` deliberately says it has the SAME cryptography as `dgflow`: in
+ * `roles.py` the two take the same branch, so presenting it as a stronger or
+ * additional protection would be false.
+ */
 export const MODES = [
-  { id: 'plain', number: '01', name: '明文基线', tag: 'PLAIN', description: '不执行密码保护，聚合端可读取本地模型，仅用于对照。', icon: 'info' },
-  { id: 'encrypted', number: '02', name: '仅加密聚合', tag: 'ENCRYPTED', description: '提交真实密文与证明，但不启用相似度筛选。', icon: 'lock' },
-  { id: 'dgflow', number: '03', name: 'DGFlow 鲁棒模式', tag: 'DGFLOW', description: '执行密文验证、范数与相似度筛选，合格成员重新组队。', icon: 'shield' },
-  { id: 'optimized', number: '04', name: '优化调度模式', tag: 'OPTIMIZED', description: '相同验证与筛选条件，可调整并行参数进行实验。', icon: 'bolt' },
+  { id: 'plain', number: '01', name: '无密码保护基线', tag: 'PLAIN',
+    protection: '主控可见每个客户端的完整模型；不生成密文、不生成证明、不做异常筛选。',
+    description: '不执行密码保护或鲁棒筛选，聚合端可读取本地模型，仅用于对照。', icon: 'info' },
+  { id: 'encrypted', number: '02', name: '加密 + 范数证明', tag: 'ENCRYPTED',
+    protection: '密文上传，LegoGroth16 把平方范数绑定到密文；不执行相似度与范数筛选。',
+    description: '校验密文与证明，不启用范数倍率、余弦相似度及聚类筛选。', icon: 'lock' },
+  { id: 'dgflow', number: '03', name: 'DGFlow 完整协议', tag: 'DGFLOW',
+    protection: '在上述证明之上，由归属边缘解出授权内积并按范数/余弦筛选，再按分组策略接纳。',
+    description: '执行密文验证、范数与相似度筛选，按所选分组策略接纳成员。', icon: 'shield' },
+  { id: 'optimized', number: '04', name: 'DGFlow（并行调度）', tag: 'OPTIMIZED',
+    protection: '密码学与「DGFlow 完整协议」完全相同；仅调度与传输优化，不增加任何密码学保证。',
+    description: '密码学与 DGFlow 完整协议相同，仅调度与传输优化，可调整并行参数进行实验。', icon: 'bolt' },
 ]
+
+/** Proof suites are pinned per task; the new-run entry accepts only the Lego suite. */
+export const PROOF_SUITES = {
+  lego_norm_v1: { name: 'LegoGroth16 范围与范数证明', short: 'LegoGroth16', note: '需匹配维度的已安装可信设置（CRS）。' },
+  legacy: { name: '逐坐标 Schnorr-Σ 范围/平方范数（历史）', short: 'legacy-Σ', note: '历史套件，新任务不接受。' },
+  compact_range_v1: { name: '聚合 Bulletproofs 范围（历史 5A）', short: 'compact-range', note: '历史套件，新任务不接受。' },
+  compact_norm_v1: { name: '块二次 IPA 范围+范数（历史 5B）', short: 'compact-norm', note: '历史套件，新任务不接受。' },
+}
 
 /** Historical callers without a dataset use MNIST. */
 export const MODEL_SIZES = modelSizes('mnist')
 
-export const ATTACKS = [  { value: 'none', name: '无异常', description: '测量正常训练条件下的准确率与开销。' },
+export const ATTACKS = [
+  { value: 'none', name: '无异常', description: '测量正常训练条件下的准确率与开销。' },
   { value: 'label_flip', name: '标签翻转', description: '指定客户端在本地训练中使用被翻转的标签。' },
+  { value: 'targeted_label_flip', name: '定向标签翻转', description: '攻击者把本地标签全部指向所选目标类。ASR 为被错误预测成目标类的样本数除以全部测试样本数。' },
   { value: 'sign_flip', name: '符号翻转', description: '指定客户端提交整体符号被反转的完整模型。' },
   { value: 'random', name: '随机更新', description: '指定客户端提交随机模型向量，检验异常接纳。' },
+  { value: 'free_rider', name: '回传全局模型（智能搭便车）', description: '不训练，原样提交本轮起始全局模型。属于论文展望中的智能搭便车扩展，不保证能被筛除；观察全局测试准确率 OA 与实际接纳结果。' },
   { value: 'tamper_proof', name: '证明篡改', description: '篡改公开范数，检验验证与拒绝路径。' },
   { value: 'dropout', name: '客户端退出', description: '指定客户端不提交，观察剩余合格成员的接纳与分组。' },
 ]
@@ -99,6 +125,18 @@ export const STAGE_LABELS = {
 
 export const modeName = id => MODES.find(m => m.id === id)?.name || id || '—'
 export const modeTag = id => MODES.find(m => m.id === id)?.tag || String(id || '—').toUpperCase()
+export const modeProtection = id => MODES.find(m => m.id === id)?.protection || '—'
+
+/**
+ * Historical records did not store the proof suite at all. Reporting a modern
+ * suite name for them would retroactively attribute a scheme they never named,
+ * so an absent field is reported as unrecorded instead of being guessed.
+ */
+export const proofSuiteKnown = value => typeof value === 'string' && value.length > 0
+export const proofSuiteName = value =>
+  proofSuiteKnown(value) ? (PROOF_SUITES[value]?.name || value) : '证明方案未记录（历史记录）'
+export const proofSuiteShort = value =>
+  proofSuiteKnown(value) ? (PROOF_SUITES[value]?.short || value) : '未记录'
 export const attackName = id => ATTACKS.find(a => a.value === id)?.name || id || '—'
 export const runStatusName = state => RUN_STATUS[state] || state || '未知'
 export const stateName = state => RUN_STATUS[state] || NODE_STATE[state] || state || '未知'

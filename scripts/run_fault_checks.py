@@ -191,8 +191,9 @@ def _observation(name,record,expected_config,stopped_nodes):
         raise AssertionError('returned configuration differs from the fixed fault-check configuration')
     rounds=record['rounds']
     n=expected_config['client_count']; e=expected_config['aggregator_threshold']; v=expected_config['aggregator_count']
-    fixed_members=[f'client{i}' for i in range(1,n//2*2+1)]
-    unpaired=[f'client{n}'] if n%2 else []
+    size=expected_config.get('batch_size',2)
+    fixed_members=[f'client{i}' for i in range(1,n//size*size+1)]
+    unpaired=[f'client{i}' for i in range(len(fixed_members)+1,n+1)]
     if name=='cloud_threshold_below':
         if (record['status']!='aborted' or rounds or record.get('current_round')!=0
                 or record['summary'].get('completed_rounds')!=0
@@ -201,11 +202,11 @@ def _observation(name,record,expected_config,stopped_nodes):
                 or any(e.get('stage') in ('training','dkg') for e in record['events'])):
             raise AssertionError('stopped clouds did not cause the expected threshold preflight abort')
         return f'实际停止 {", ".join(stopped_nodes)} 后，可用云少于 {e}/{v} 门限，预检中止，未进入建钥/训练，完成 0 轮。'
-    if name=='one_client_down' and not fixed_members[2:]:
+    if name=='one_client_down' and not fixed_members[size:]:
         if (record['status']!='aborted' or rounds or record['summary'].get('completed_rounds')!=0
-                or '合格' not in (record.get('error') or '')):
-            raise AssertionError('loss of the only fixed client pair did not abort without publishing a model')
-        return '实际停止 client1 后，唯一固定批次缺员，没有至少两人的合格在线组，完成 0 轮。'
+                or not any(word in (record.get('error') or '') for word in ('合格','完整在线'))):
+            raise AssertionError('loss of the only fixed client batch did not abort without publishing a model')
+        return f'实际停止 client1 后，唯一的 {size} 人固定批次缺员，没有完整在线组，完成 0 轮。'
     if (record['status']!='completed' or len(rounds)!=1
             or record['summary'].get('completed_rounds')!=1 or rounds[0].get('round')!=1):
         raise AssertionError('fault scenario did not complete exactly one real round')
@@ -215,9 +216,9 @@ def _observation(name,record,expected_config,stopped_nodes):
             raise AssertionError('single-aggregator failure changed the expected complete client set')
         return f'实际停止 {len(stopped_nodes)} 个云后，剩余 {e} 个云满足 {e}/{v} 门限，完成 1 轮，固定批次成员均获准。'
     if name=='one_client_down':
-        if accepted!=fixed_members[2:] or collateral!=sorted(['client2',*unpaired]):
-            raise AssertionError('client1 absence did not exclude precisely its fixed pair')
-        return f'实际停止 client1 后完成 1 轮；{len(accepted)} 名其余固定批次成员获准，client2 因固定批次连带退出。'
+        if accepted!=fixed_members[size:] or collateral!=sorted([*fixed_members[1:size],*unpaired]):
+            raise AssertionError('client1 absence did not exclude precisely its fixed batch')
+        return f'实际停止 client1 后完成 1 轮；{len(accepted)} 名其余固定批次成员获准，同组 {size-1} 名成员连带退出。'
     raise ValueError('unknown fault scenario')
 
 
@@ -247,14 +248,14 @@ def _pin_run_config(config,base,crs_hash=None):
     return RunConfig(**{**config,'proof_crs_hash':fingerprint}).model_dump(exclude_none=True)
 
 
-def run_checks(runtime,output,base='http://127.0.0.1:8765',timeout=3600,*,proof_crs_hash=None):
+def run_checks(runtime,output,base='http://127.0.0.1:8765',timeout=3600,*,proof_crs_hash=None,batch_size=2):
     runtime=Path(runtime).resolve(); output=Path(output).resolve()
     if timeout<=0: raise ValueError('timeout must be positive')
     if (output/'index.json').exists():
         raise FileExistsError('fault evidence already exists; use a new output directory to preserve it')
     config=_single_host_config(runtime)
     topology=cluster_topology(config)
-    run_config={**CONFIG,**{field:topology[field] for field in TOPOLOGY_FIELDS}}
+    run_config={**CONFIG,**{field:topology[field] for field in TOPOLOGY_FIELDS},'batch_size':batch_size}
     clouds=[f'aggregator{i}' for i in range(topology['aggregator_count'],0,-1)]
     meeting_stops=topology['aggregator_count']-topology['aggregator_threshold']
     before=api_request(base,'/api/status'); nodes=_status_nodes(before,config)
@@ -332,9 +333,10 @@ def main(argv=None):
     parser.add_argument('--url',default='http://127.0.0.1:8765')
     parser.add_argument('--timeout',type=float,default=3600,help='maximum seconds per task; polling is fixed at 5 seconds')
     parser.add_argument('--proof-crs-hash',help='select an installed Lego CRS when more than one matches the task circuit')
+    parser.add_argument('--batch-size',type=int,default=2,help='fixed privacy-group size sigma; must divide the deployed client count')
     args=parser.parse_args(argv)
     try:
-        run_checks(args.runtime,args.output,args.url,args.timeout,proof_crs_hash=args.proof_crs_hash)
+        run_checks(args.runtime,args.output,args.url,args.timeout,proof_crs_hash=args.proof_crs_hash,batch_size=args.batch_size)
     except (ValueError,OSError,RuntimeError) as exc:
         print(str(exc),file=sys.stderr)
         return 1

@@ -1,0 +1,201 @@
+{
+  "accepted": true,
+  "scope": "paper architecture, competition-scale models; not universal poisoning defense",
+  "runtime_report_sha256": "8b2699a60a2f88c1038065f1b596773fb7ee7282ae879f0ee757f3d08f77128f",
+  "cases": [
+    {
+      "case": "mnist/clean-plain",
+      "run_id": "308a1548695f4572a028bb35f506be17",
+      "status": "completed",
+      "rounds": 2,
+      "accuracy": 0.56,
+      "accepted_clients": [
+        "client1",
+        "client2",
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 4.3333187000243925,
+      "record_sha256": "00a555482fa81c522e1d3fad3ea663e2ebf6e5b54ffe0cd4e92cfb237f8d1fd0"
+    },
+    {
+      "case": "mnist/clean-encrypted",
+      "run_id": "f2ed7152421846b9bbe6a174d795d2b0",
+      "status": "completed",
+      "rounds": 2,
+      "accuracy": 0.56,
+      "accepted_clients": [
+        "client1",
+        "client2",
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 196.3669585000025,
+      "record_sha256": "a7187ff1f8ff3c9d1187057c297d0c7668ecff26f9ea1d442a6345431c70e5d9"
+    },
+    {
+      "case": "mnist/sign_flip",
+      "run_id": "0b8ca7ef21cd4ea38bee36faa03600b7",
+      "status": "completed",
+      "rounds": 1,
+      "accuracy": 0.2675,
+      "accepted_clients": [
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 98.54208899999503,
+      "record_sha256": "eb7369415b176b3dcc50820a661c82b298adc5fad6e94701d6040a32be21f843"
+    },
+    {
+      "case": "mnist/tamper_proof",
+      "run_id": "e9828b0fd91547629668d1b77094554a",
+      "status": "completed",
+      "rounds": 1,
+      "accuracy": 0.2675,
+      "accepted_clients": [
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 92.91244169999845,
+      "record_sha256": "98b6333af6c0bf862b3fdaa7fc3776bafee191f2098b9b73c8ca2044b30fafca"
+    },
+    {
+      "case": "cifar10/clean-plain",
+      "run_id": "b623375c084c42699b0b6595e3bf6c86",
+      "status": "completed",
+      "rounds": 2,
+      "accuracy": 0.1175,
+      "accepted_clients": [
+        "client1",
+        "client2",
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 3.3404129999980796,
+      "record_sha256": "c72615ce2c5b5493908f31a0d55cbf5c8629a86e590e9c027221c173a1d00837"
+    },
+    {
+      "case": "cifar10/clean-encrypted",
+      "run_id": "0a6083e7acdf45d4a34bf81cc580c401",
+      "status": "completed",
+      "rounds": 2,
+      "accuracy": 0.1175,
+      "accepted_clients": [
+        "client1",
+        "client2",
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 582.7667927000148,
+      "record_sha256": "7e9e020055dbc5024943030284d018d7e5bcb4cebceb0402814587ab4ead444f"
+    },
+    {
+      "case": "cifar10/sign_flip",
+      "run_id": "b9391d5e128a4044a686e162dcfa13e7",
+      "status": "completed",
+      "rounds": 1,
+      "accuracy": 0.13,
+      "accepted_clients": [
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 286.6970081999898,
+      "record_sha256": "f621ce015c330f6cbb6cb245c1e3dc608360b7af526a89227b9d8b0b6b9dc811"
+    },
+    {
+      "case": "cifar10/tamper_proof",
+      "run_id": "ee01c6e4dcf643559cb48735966e058b",
+      "status": "completed",
+      "rounds": 1,
+      "accuracy": 0.13,
+      "accepted_clients": [
+        "client3",
+        "client4",
+        "client5",
+        "client6"
+      ],
+      "attack_accepted": 0,
+      "elapsed_s": 287.5639418999781,
+      "record_sha256": "ea0dca5721ccc11cc7e0e9257dc741043daecf9bd4e8840c5c92c824c39a07f1"
+    }
+  ],
+  "independent_record_checks": [
+    "original records match report",
+    "current source hashes match",
+    "two unique clouds per encrypted round",
+    "owner-only nonduplicate proof verification",
+    "coordinator and three edge combination metrics",
+    "13 owned nodes stopped"
+  ],
+  "python_regressions": [
+    {
+      "file": "tmp\\attack-defense-audit-20261011\\owner-key-tests-20261012.xml",
+      "sha256": "2ce28a8fddc4afad2df59b49031d192841cb0aa9ade0b994b32cda8f736cf3b3",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "128",
+      "time": "48.298",
+      "timestamp": "2026-10-12T12:39:43.222343+08:00",
+      "hostname": "DESKTOP-GT1VP52"
+    },
+    {
+      "file": "tmp\\attack-defense-audit-20261011\\architecture-regression-20261012.xml",
+      "sha256": "3215baeac9c6c70090377f9a8a3db7ce2169ce11a4bcae5631e32823b78441e3",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "842",
+      "time": "428.187",
+      "timestamp": "2026-10-12T12:45:28.159749+08:00",
+      "hostname": "DESKTOP-GT1VP52"
+    }
+  ],
+  "overlapping_test_suites_are_not_additive": true,
+  "full_cnn_negative_result": {
+    "scope": "separate plaintext component experiment",
+    "targeted_report_sha256": "6ac7bf1636092c90d7a35dc6689ca6652d152795d32899a5b2f25aa2f0eeed2d",
+    "model_hashes_equal_all_10_rounds": true,
+    "all_six_attackers_accepted_all_10_rounds": true,
+    "final_metrics": {
+      "accuracy": 0.6512,
+      "attack_eligible_samples": 8990,
+      "attack_eligible_success_rate": 0.37775305895439376,
+      "attack_success_count": 3396,
+      "attack_success_denominator": 10000,
+      "attack_success_rate": 0.3396,
+      "attack_target_class": 3,
+      "loss": 1.0437394078746876,
+      "samples": 10000
+    },
+    "independently_reevaluated_rounds": 20
+  },
+  "limitations": [
+    "Specific sign-flip and invalid-proof fixtures, not universal poisoning detection",
+    "Development CRS; local processes do not constitute separate trusted physical machines",
+    "Cloud exclusion is configured participation, not a crash-recovery test"
+  ]
+}

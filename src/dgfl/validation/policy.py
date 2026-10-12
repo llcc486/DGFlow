@@ -1,25 +1,52 @@
 """Signed encoding and robust decision rules."""
 import math
+from decimal import Decimal
 
 import numpy as np
 
 from dgfl.topology import MAX_CLIENT_COUNT, MIN_CLIENT_COUNT
 
 SCREENING_DEFAULTS={'min_cosine':0.0,'max_norm_squared':None,'max_norm_ratio':2.0,
-                    'batch_strategy':'regroup'}
+                    'min_norm_ratio':None,'batch_strategy':'fixed'}
+
+
+def _finite_number(value):
+    return type(value) in (int,float) and (type(value) is int or math.isfinite(value))
+
+
+def _ratio_fraction(value):
+    # Configuration arrives as JSON decimal numbers. Preserve that decimal
+    # meaning at equality boundaries (e.g. 0.8**2 * 100 == 64), then compare
+    # integer cross-products without rounding verified squared norms.
+    return Decimal(str(value)).as_integer_ratio()
+
+
+def _validate_scores(scores):
+    if (not isinstance(scores,dict)
+            or any(type(cid) is not str or not cid or not _finite_number(s) or not -1<=s<=1
+                   for cid,s in scores.items())):
+        raise ValueError('invalid similarity')
 
 
 def screening_settings(value, *, defaults=False):
     """Validate task-pinned controls; omitted fields retain legacy behavior."""
+    if not isinstance(value,dict):
+        raise ValueError('screening settings must be a mapping')
     settings={**SCREENING_DEFAULTS,**{k:value[k] for k in SCREENING_DEFAULTS if k in value}} if defaults else {
         k:value[k] for k in SCREENING_DEFAULTS if k in value}
     minimum=settings.get('min_cosine',-1.0)
     ratio=settings.get('max_norm_ratio')
+    lower=settings.get('min_norm_ratio')
     limit=settings.get('max_norm_squared')
-    if type(minimum) not in (int,float) or not math.isfinite(minimum) or not -1<=minimum<=1:
+    if not _finite_number(minimum) or not -1<=minimum<=1:
         raise ValueError('invalid minimum cosine')
-    if ratio is not None and (type(ratio) not in (int,float) or not math.isfinite(ratio) or ratio<1):
+    if ratio is not None and (not _finite_number(ratio) or ratio<1):
         raise ValueError('invalid maximum norm ratio')
+    # Optional engineering heuristic, not a proof of poisoned training. Honest
+    # heterogeneous clients can also have a smaller norm; keep it disabled by
+    # default and evaluate false rejections before enabling it.
+    if lower is not None and (not _finite_number(lower) or not 0<lower<=1):
+        raise ValueError('invalid minimum norm ratio')
     if limit is not None and (type(limit) is not int or limit<1):
         raise ValueError('invalid maximum squared norm')
     if settings.get('batch_strategy','fixed') not in ('fixed','regroup'):
@@ -34,8 +61,9 @@ def screen(scores,norms,settings):
     an honest majority and does not establish honest local training.
     """
     settings=screening_settings(settings)
-    select(scores)  # Validate every score before threshold comparisons.
-    if set(norms)!=set(scores) or any(type(n) is not int or n<=0 for n in norms.values()):
+    _validate_scores(scores)
+    if (not isinstance(norms,dict) or set(norms)!=set(scores)
+            or any(type(n) is not int or n<=0 for n in norms.values())):
         raise ValueError('screening requires positive verified squared norms')
     remaining=set(scores); reasons={}
     for cid in sorted(remaining):
@@ -45,13 +73,21 @@ def screen(scores,norms,settings):
             reasons[cid]='平方范数超过配置门限'
     remaining-=set(reasons)
     ratio=settings.get('max_norm_ratio')
-    if remaining and ratio is not None:
+    lower=settings.get('min_norm_ratio')
+    if remaining and (ratio is not None or lower is not None):
         ordered=sorted(norms[cid] for cid in remaining)
         median=ordered[(len(ordered)-1)//2]
-        numerator,denominator=float(ratio).as_integer_ratio()
+        upper_fraction=_ratio_fraction(ratio) if ratio is not None else None
+        lower_fraction=_ratio_fraction(lower) if lower is not None else None
         for cid in sorted(remaining):
-            if norms[cid]*denominator**2>median*numerator**2:
-                reasons[cid]='范数幅度超过群体中位数门限'
+            if upper_fraction is not None:
+                numerator,denominator=upper_fraction
+                if norms[cid]*denominator**2>median*numerator**2:
+                    reasons[cid]='范数幅度超过群体中位数门限'
+            if lower_fraction is not None and cid not in reasons:
+                numerator,denominator=lower_fraction
+                if norms[cid]*denominator**2<median*numerator**2:
+                    reasons[cid]='范数幅度低于群体中位数门限'
         remaining-=set(reasons)
     chosen=select({cid:scores[cid] for cid in sorted(remaining)})
     for cid in remaining-chosen:
@@ -78,9 +114,8 @@ def cosine(inner,norm,reference_norm):
 
 
 def select(scores):
+    _validate_scores(scores)
     if not scores: return set()
-    if any(not math.isfinite(s) or not -1<=s<=1 for s in scores.values()):
-        raise ValueError('invalid similarity')
     lo,hi=min(scores.values()),max(scores.values())
     if hi-lo<.45: return set(scores)
     low_ids=set()
@@ -88,8 +123,9 @@ def select(scores):
         low_ids={cid for cid,s in scores.items() if abs(s-lo)<=abs(s-hi)}
         high_ids=set(scores)-low_ids
         if not low_ids or not high_ids: return set(scores)
-        new_lo=sum(scores[i] for i in low_ids)/len(low_ids)
-        new_hi=sum(scores[i] for i in high_ids)/len(high_ids)
+        # Stable centers across process hash seeds and Python float-sum versions.
+        new_lo=math.fsum(scores[i] for i in sorted(low_ids))/len(low_ids)
+        new_hi=math.fsum(scores[i] for i in sorted(high_ids))/len(high_ids)
         if abs(new_lo-lo)+abs(new_hi-hi)<1e-12:
             lo,hi=new_lo,new_hi; break
         lo,hi=new_lo,new_hi
@@ -104,8 +140,26 @@ def client_members(client_count=6):
     return [f'client{i}' for i in range(1,client_count+1)]
 
 
-def apply_batches(candidates,clients=6,*,strategy='fixed'):
+def fixed_batches(clients=6,*,batch_size=2):
+    """Canonical task groups; incomplete tails remain readable in old tasks."""
     members=client_members(clients)
+    if type(batch_size) is not int or not 2<=batch_size<=clients:
+        raise ValueError('分组大小 σ 必须为 2 到客户端总数之间的整数')
+    return [members[start:start+batch_size] for start in range(0,clients-batch_size+1,batch_size)]
+
+
+def validate_batch_configuration(clients,batch_size=2,strategy='fixed'):
+    """New tasks must account for every member before any training starts."""
+    fixed_batches(clients,batch_size=batch_size)
+    if strategy not in ('fixed','regroup'):
+        raise ValueError('invalid batch strategy')
+    if strategy=='fixed' and clients%batch_size:
+        raise ValueError('客户端总数必须能被分组大小 σ 整除，请调整人数或 σ')
+
+
+def apply_batches(candidates,clients=6,*,strategy='fixed',batch_size=2):
+    members=client_members(clients)
+    groups=fixed_batches(clients,batch_size=batch_size)
     candidates=set(candidates)
     if not candidates<=set(members):
         raise ValueError('batch candidates must belong to the declared clients')
@@ -116,8 +170,7 @@ def apply_batches(candidates,clients=6,*,strategy='fixed'):
         return accepted if len(accepted)>=2 else []
     if strategy!='fixed': raise ValueError('invalid batch strategy')
     accepted=[]
-    # An odd trailing member has no partner and must never become a singleton.
-    for start in range(1,clients,2):
-        batch=[f'client{start}',f'client{start+1}']
+    # No incomplete historical group may be released as a smaller batch.
+    for batch in groups:
         if set(batch)<=candidates: accepted.extend(batch)
     return accepted

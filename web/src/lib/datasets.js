@@ -10,7 +10,15 @@ export const datasetName = id => datasetInfo(id)?.name || id || 'MNIST'
 export const runDataset = run => run?.config?.dataset ?? (typeof run?.evidence?.dataset === 'string' ? run.evidence.dataset : 'mnist')
 export const runDatasetName = run => datasetName(runDataset(run))
 
-export function modelGeometry(dataset = 'mnist', grid = 8) {
+export const MODEL_ARCHITECTURES = [
+  { id: 'paper_cnn_mnist', dataset: 'mnist', name: 'MNIST 论文 CNN', features: 784, dimension: 582026, input: '28×28 灰度原图' },
+  { id: 'paper_cnn_cifar10', dataset: 'cifar10', name: 'CIFAR-10 论文 CNN', features: 3072, dimension: 878538, input: '32×32 RGB 原图' },
+]
+export const modelInfo = name => MODEL_ARCHITECTURES.find(model => model.id === name)
+
+export function modelGeometry(dataset = 'mnist', grid = 8, modelName = null) {
+  const cnn = modelInfo(modelName)
+  if (cnn) return cnn.dataset === dataset ? { features: cnn.features, dimension: cnn.dimension } : { features: null, dimension: null }
   const info = datasetInfo(dataset)
   if (!info || !Number.isInteger(grid)) return { features: null, dimension: null }
   const features = info.channels * grid * grid
@@ -21,6 +29,21 @@ export function modelConfigurationError(config = {}) {
   const dataset = config.dataset ?? 'mnist'
   const info = datasetInfo(dataset)
   if (!info) return '请选择 MNIST 或 CIFAR-10 数据集。'
+  const name = config.model_name ?? null
+  const cnn = modelInfo(name)
+  if (name !== null && name !== 'linear' && !cnn) return '请选择支持的线性模型或论文 CNN。'
+  const bits = config.bits ?? 8, scale = config.scale ?? 128
+  if (!Number.isInteger(bits) || bits < 2 || bits > 16) return '量化位宽需为 2–16 的整数。'
+  if (!Number.isInteger(scale) || scale < 1 || scale > 65536) return '量化比例需为 1–65,536 的整数。'
+  if (cnn) {
+    if (cnn.dataset !== dataset) return '论文 CNN 必须与所选数据集匹配。'
+    if (config.mode !== 'plain') return '论文 CNN 当前仅支持明文对照，尚不支持加密协议；没有可用的 CNN CRS，补充参数文件也不能启用。请明确选择 CNN 明文对照预设，或改用线性模型运行加密实验。'
+    if (config.backend !== 'torch') return '论文 CNN 需要明确选择 torch 训练后端。'
+    const grid = config.grid ?? 8
+    if (!Number.isInteger(grid) || grid < 2 || grid > info.imageSize) return '模型网格参数超出原图范围。'
+    return ''
+  }
+  if (bits !== 8 || scale !== 128) return '现有线性模型固定使用 8 位、128 量化比例。'
   const grid = config.grid ?? 8
   if (!Number.isInteger(grid) || grid < 2 || grid > info.maxGrid) {
     return `${info.name} 池化网格需为 2–${info.maxGrid} 的整数；模型最多 ${MAX_MODEL_DIMENSION.toLocaleString('zh-CN')} 坐标。`

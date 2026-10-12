@@ -18,6 +18,7 @@ def comparison_board(tmp_path_factory):
         'initial_metrics': {'accuracy': .125, 'loss': 2.},
         'rounds': [{
             'round': 1, 'accuracy': .5, 'loss': 1.25,
+            'attack_success_rate': 0., 'attacker_acceptance_rate': .5, 'honest_exclusion_rate': .25,
             'client_training_metrics': {
                 'client1': [
                     {'round_id': 1, 'epoch': 1, 'step': 1, 'accuracy': .625, 'loss': 1.},
@@ -101,9 +102,24 @@ def test_native_training_epochs_retain_their_distinct_axis(comparison_board):
         (1, .625), (2, .75), (3, .8125)]
 
 
+def test_native_attack_group_has_three_global_curves_and_no_unrecorded_or_client_points(comparison_board):
+    tags=comparison_board.get('/tensorboard/data/plugin/timeseries/tags').json()['scalars']['runTagInfo']
+    expected={'attacks/attack_success_rate':0.,'attacks/attacker_acceptance_rate':.5,
+              'attacks/honest_exclusion_rate':.25}
+    assert {tag for tag in tags['comparison'] if tag.startswith('attacks/')}==set(expected)
+    assert all(not any(tag.startswith('attacks/') for tag in values)
+               for run,values in tags.items() if run!='comparison')
+    requests=[{'plugin':'scalars','tag':tag,'run':'comparison'} for tag in expected]
+    response=comparison_board.get('/tensorboard/data/plugin/timeseries/timeSeries',
+                                   params={'requests':json.dumps(requests)})
+    assert response.status_code==200
+    for row,value in zip(response.json(),expected.values(),strict=True):
+        assert [(point['step'],point['value']) for point in row['runToSeries']['comparison']]==[(1,value)]
+
+
 def test_native_discovery_keeps_the_existing_bounded_chart_policy(comparison_board):
     tags = comparison_board.get('/tensorboard/data/plugin/timeseries/tags').json()['scalars']['runTagInfo']
-    assert len(KEY_SCALAR_TAGS) == 40
+    assert len(KEY_SCALAR_TAGS) == 43
     visible = {tag for run_tags in tags.values() for tag in run_tags}
     assert visible <= KEY_SCALAR_TAGS
     assert {tag for tag in visible if tag.startswith('evaluation/')} == {

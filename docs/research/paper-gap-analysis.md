@@ -1,502 +1,121 @@
-# DGFlow 论文对齐差距分析：功能设计逐项区别
-
-日期：2026-10-05。
-依据：项目所获论文 `docs/DGFlow-指导论文.pdf`（13 页，SHA-256 `e2421b9a6c56818f70d1b54537f19a9044d7d3b6cf1704e747aa680c7647801b`，与 `paper-alignment.md` 记录的 `DGFlow.pdf` 为同一文件）。
-方法：逐节核对论文 §III–§VI 的算法定义、构造、安全结论与实验设置，与 `src/` 下实际执行的代码路径对照；以代码为准，不采信文档中未落到代码的表述。
-
-本文只做差距定位，不新增实验数字，也不把未运行的规模、精度或提速填成结论。
-
-> **2026-10-07 当前实现核验**：下文未改写的表格、代码示例和完成度比例是历史分析，不代表当前代码。当前训练链路已经支持 MNIST 与 CIFAR-10 的池化线性模型，默认分别为 650 / 1,930 维，维度公式为 `10 × (channels × grid² + 1)`；模型仍受 20,000 坐标及消息资源预检约束。两种完整 CNN 尚未接入安全联邦链路。
->
-> 当前证明可选 legacy、紧凑 IPA 和 `lego_norm_v1`；不能再把逐位证明的体积或耗时概括为全部方案。Lego 必须使用与维度、位宽匹配的已安装 CRS，当前本机参数是明确标记的单方开发设置。鲁棒筛选已有经证明范数的相对幅度门限、可选平方范数绝对上限及余弦检查；这些工程规则不等同于一般投毒防御证明。
->
-> 规模、门限和单归属验证以 2026-10-06 更新为准；DKG 已按任务摊销。当前仍要求全部边缘参与任务初始化及关键轮次流程，云可处理网络缺席，但错误签名或数学证据会终止任务。默认重新组队与固定批次隐私模型存在差异；动态跨轮加入、论文级对比评估、完整安全归约和恶意节点 BFT 尚未完成。本次完整性检查另修复了阶段计时重复统计及异常退出后活动任务无法释放的问题，验证范围见[完整性核验记录](evidence/integrity-audit-20261007.json)。
-
-> **2026-10-06 拓扑更新**：下面差距表和代码示例保留 2026-10-04/05 的历史状态。§2.1 的固定规模、§2.6 的每个边缘重复全验、§2.9 的固定两层门限现已修正：新部署默认 n=6/w=3/v=4/s=2/e=2，支持 n=2–100、w/v=2–32、s=2–w、e=2–v；原始证明与加密提交只到唯一归属边缘，全部边缘共享 VKGen 份额，归属边缘核验后共享签名评分、范数、摘要及密文核心，全部边缘共同筛选授权。默认 w=3 与编号轮流分配均为工程选择，论文未指定该分配算法。现有历史集群与结果不自动改写，真实部署的新任务均使用单归属协议；无 cluster 的旧孤立测试保留兼容路径。详见[分层拓扑对齐](hierarchical-topology-20261006.md)。
->
-> 此更新只修正上述拓扑、参数化与验证分工差距。全员 DKG、coordinator 可用性单点、外部安全审查、完整论文性能/安全证明及 PFLlib CNN 端到端复现等差距仍需分别判断；允许配置 20/100 客户端不等于已经完成论文规模性能评估。
-
-> **线格式修订后的更新（本文其余部分保留修订前快照）**：P0 清单的第 3 项已完成前两步。
-> - **分块传输已实现**：超过 24 MiB 的请求按 8 MiB 切块，每块绑定目标动作、块序号/总数与整体 SHA-256 摘要；重放、重叠、缺块、截断、改序、混轮、混模型全部拒绝。
-> - **`dimension != 650` 硬编码已解除**：维度按池化网格 `grid` 2–28 参数化，服务可用 650–7,850 维。
-> - 编码已由十六进制 JSON 改为原始字节 + 紧凑二进制，实测单客户端封装 11,450 → 2,998 B/坐标。
-> - **仍未完成**：显式范数上界（P0-1）、紧凑 NIZK（P0-2）、`_bounds` 的 20,000 上限重算、CNN 真正接入密码链路。§2 的差距表与 §5 的"不能声称"清单因此**基本仍然成立**。
->
-> 详见 [protocol-v1.md](../protocol/protocol-v1.md) 的修订记录。
-
----
-
-## 0. 结论速览
-
-一句话：**论文的密码学骨架（DMAFE 的算法定义与代数构造）已被公式级忠实重建；论文的"系统规模、证明效率、对比评估、安全定理"四块基本还没有。**
-
-| # | 维度 | 论文 | 本项目 | 差距等级 |
-|---|---|---|---|---|
-| 1 | DMAFE 双解密代数构造 | §IV-B | 实现一致（加法记号） | ✅ 已对齐 |
-| 2 | 建钥频率：DKG 摊销 | §V-A 步骤 1（原文自相矛盾，见 §6.2） | **已改为任务级 epoch，仪式只跑首轮**，取论文的摊销读法 | ✅ 已对齐 |
-| 3 | 验证内积 → 余弦相似度 | §V-A 步骤 3 | 实现一致 | ✅ 已对齐 |
-| 4 | 门限部分解密 + 组合 | §V-A 步骤 4 | 实现一致，门限固定 2/3 | 🟡 部分 |
-| 5 | 系统规模（n / w / v） | n=20，v=4，可扩到 100 | n=6，w=3，v=3 | ❌ 未对齐 |
-| 6 | 模型规模（CNN 参数量） | 582,026 / 878,538 | 密码链路固定 650 维线性分类器 | ❌ 未对齐 |
-| 7 | 数据集 | MNIST + CIFAR-10 | 仅 MNIST | ❌ 未对齐 |
-| 8 | NIZK 证明构造 | batched Σ + 平方和 ZK 论证 | 逐位范围证明 + 链式表示证明 | 🟡 不同实现 |
-| 9 | 证明体积 | 紧凑（论文未给转录） | O(d·b)，每坐标约 2.6 KB 原始 | ❌ 未对齐 |
-| 10 | 显式范数上界 | §V-A "strictly bounds the magnitude" | 仅坐标区间隐含上界 | ❌ 未实现 |
-| 11 | 验证分工 | 边缘节点验证"所连接的"客户端 | 3 个 authority 各验证全部 6 个客户端 | 🟡 冗余替代 |
-| 12 | 良性簇识别 | k-means | 定阈值一维二均值（工程补充） | 🟡 不同实现 |
-| 13 | 固定批次 σ | 可配置的多样本隐私参数 | 硬编码每批 2 人、共 3 批 | 🟡 简化 |
-| 14 | 动态加入客户端 | 支持，新 σ 客户端成新批 | 不支持，改成员须新建任务 | ❌ 未实现 |
-| 15 | 门限参数 ς / ϵ | 任意 ς-out-of-w、ϵ-out-of-v | 均固定 2-of-3 | 🟡 固定化 |
-| 16 | 密码群 | 非对称双线性群，MNT224 | BLS12-381 | 🟡 不同曲线 |
-| 17 | 实现库 | Charm + PFLlib | py-arkworks-bls12381 + NumPy | 🟡 不同栈 |
-| 18 | 安全定理 | 3 个定理 + 4 条性质分析 | 仅方程级审查，组合归约未完成 | ❌ 未完成 |
-| 19 | 对比方案 | HybridAlpha / TAPFed / CZGQ / PrivLDFL | 一个都没实现 | ❌ 未实现 |
-| 20 | 评估指标 | 轮时、客户端/服务端运行时、通信量、ASR、OA | 准确率、轮时、字节数；无 ASR/OA | ❌ 未对齐 |
-| 21 | 可扩展性 | 20–100 客户端 | 最多 6 | ❌ 未实现 |
-| 22 | 攻击覆盖 | label-flipping + free-rider，0–50% 攻击比 | label_flip / sign_flip / random / tamper / dropout | 🟡 部分 |
+# DGFlow 与指导论文的当前差距
 
-**完成度评估（本文作者判断，非实测）**：密码原语约 85%；完整论文系统约 25–30%；论文的实验评估约 0–5%。
+更新：2026-10-11。本文描述当前源码和已经结束的实验；历史配置与原始结果不追写。依据为[指导论文](../DGFlow-指导论文.pdf)（13页，SHA-256 `e2421b9a6c56818f70d1b54537f19a9044d7d3b6cf1704e747aa680c7647801b`）。页码从1开始，与PDF印刷页码一致。
 
----
+此前正文混入了不同日期的实现：固定6/3/3、每轮DKG、透明逐位证明、CNN仅被benchmark引用等描述已经过期。本次改为当前结论、实际证据和历史变更分别列出，不保留未经测量的“完成度百分比”。旧全文及SHA-256逐字保存在[审计前文档快照](../../tmp/attack-defense-audit-20261011/paper/historical-docs/)，该临时目录不保证随源码分发；当前结论以本文及列明的源码为准。
 
-## 1. 已经与论文公式级一致的部分
+## 1. 当前对照
 
-论文 §IV-B `Construction of DMAFE` 用乘法记号给出；实现用 G1/G2 加法记号。逐条对照如下（代码在 [protocol.py](../../src/dgfl/crypto/protocol.py)）：
+| 方面 | 论文原文 | 当前项目 | 判断与边界 |
+| --- | --- | --- | --- |
+| 拓扑 | p5 §III：客户端单归属边缘；无客户端互联、无云互联 | 单归属映射；归属边缘核验原始证明，其他边缘共享函数钥份额和签名结果 | 结构已对齐；映射算法、w的默认值是工程选择 |
+| 数量与门限 | p10 §VI：n=20、v=4；w与门限具体数值未给出 | 新部署默认6客户端/3边缘/4云，门限2；n可设2–100，w/v可设2–32，门限2至对应节点数 | 可配置不等于已完成20–100客户端安全链性能验收；旧三云结果仍是三云 |
+| DKG频率 | p8 §V-A把AuthSetup列在Round Initialization；p7–8的构造/安全博弈也支持固定密钥跨label使用 | 每任务一个key_epoch，首轮建立DKG，后续复用；轮次仍单独绑定 | 采用明确记录的摊销解释，不声称论文无歧义规定只运行一次 |
+| DKG可用性 | p8定理3给半诚实权威/云的机密性声明 | 完整认证转录和全部边缘ack才完成；异常中止 | 份额门限≠DKG拜占庭可用性；不能说“论文保证少于ς作恶就一定继续运行” |
+| DMAFE | p6–8 §IV：9个算法、双解密功能 | `crypto/protocol.py`有对应建钥、加密、验证内积、部分解密及合并算式 | 代数对应和负测试不是完整组合安全归约 |
+| 验证者/主控 | p6抽象V持validatory keys；p9具体DGFlow由归属edge执行验证 | 正常owner核验，但coordinator也取得全部提交者的签名G2验证函数钥、密文core和评分 | 主控具有功能验证能力；其授权信任域与同epoch函数span须明确建模，不是完全无解密功能的纯转发 |
+| 输入证明 | p8–9：平方范数与实际密文关系，NIZK/Fiat–Shamir | 新加密实验仅`lego_norm_v1`；范围/平方和数值电路加外层共享响应Sigma关联 | 独立重建，不是作者证明转录；整体证明还含O(d)群材料，不能说全部恒定大小 |
+| CRS | 论文定义Gen，但未给工程仪式及参数文件 | 按维度/位宽匹配已安装CRS，绑定清单及指纹 | 现有单方开发设置不等于生产多方可信设置 |
+| 范数规则 | p9 §V-A要求对已验证Xi设显式上界，未给数值 | 默认L2上界倍率2，即Xi大于群体下中位数4倍时拒绝；可设绝对平方范数上限；可选下界默认关闭 | 上界已实现；数值、校准和可选下界均属工程假设，不保证检测任意投毒 |
+| 余弦与聚类 | p9：完整量化模型与当前全局模型的余弦；k-means产生良性池 | 一维二均值，min/max初始化、最多32步；中心差≥.45且低中心<.25才丢低簇 | 论文未给k/初始化/簇选择/阈值；项目规则有实际漏检，不能称为精确复现 |
+| 批次/MRPL | p8–9：初始化分成不相交、不可变批次；任一成员无效/缺席则整批退出 | 新实验默认`fixed`、σ=2，可选择能整除人数的σ，按连续编号分组；启动后锁定；`regroup`保留作对照 | 保留同批跨轮参与列相同的结构前提；新实验拒绝不完整尾组，历史记录保留原语义；尚未支持动态新增批次或完成完整隐私归约 |
+| 动态加入 | p8：新σ个客户端组成新不可变批次 | 任务成员名单冻结，改人数须新任务 | 未实现任务内动态加入 |
+| 数据与线性模型 | p10：MNIST、CIFAR-10 | 两套原始数据均可离线加载；默认8×8池化模型分别650/1930参数 | 已不止MNIST，也没有固定650硬编码；池化线性模型不是论文CNN |
+| 完整CNN | p10：582026/878538参数，PFLlib；未给逐层结构/commit | 参数量匹配的两卷积两全连接重建，已接入API、调度、角色和监控的明文Torch路径 | 不是作者确认的FedAvgCNN；encrypted/dgflow/optimized明确拒绝完整CNN，加密20,000维上限仍在 |
+| 训练入口 | p10性能实验：MNIST10轮×10本地epoch，CIFAR30轮；p12攻击图至100轮 | API/UI/CLI可设最多100全局轮、20本地epoch | 配置范围已不阻断这些轮数；不能把不同论文图的设置混成一个实验 |
+| 量化与DLP | p9提及量化/反量化，未给bits/scale | 线性路径保留8/128；CNN明文可显式设2–16bit及scale；经证明Xi可收紧内积DLP区间 | Cauchy–Schwarz收紧已接入，不是待办；高精度CNN仍须单独测CRS/DKG/DLP/传输预算 |
+| 指标与攻击 | p11：OA及定向ASR；标签翻转、搭便车比例扫描 | OA、真实ASR分子/全测试集分母、条件ASR、恶意接纳与诚实排除/连带均记录；显式攻击身份可配置 | 不是“无ASR/OA”；模拟生成规则须注明；未完成论文攻击比/多种子/完整CNN加密矩阵 |
+| 云完整性 | p7 AggComb检查D相等，p8定理3为honest-but-curious | 额外核验云部分解密的配对象证明，并独立确认合并结果 | 对特定伪造的检查扩展，不是完整BFT：坏份额可使任务中止，不能自动推出活性 |
+| 实现栈与对照 | p10：Charm/MNT224、PFLlib及四个对照方案 | BLS12-381、Python/Rust、NumPy/可选Torch；本项目模式间对照 | 未实现四个论文基线，不能声称复现≥28%提速/≥83%省通信；不同曲线也不宜直接比秒数 |
 
-| 论文算法 | 论文公式 | 实现位置 | 结论 |
-|---|---|---|---|
-| `GlobalSetup(1^λ)` | `BG=(G,H,GT,p,g,h,e)`，`mpk=(BG,H,ϵ)` | [backend.py](../../src/dgfl/crypto/backend.py) 模块级 `G/H/G2/GT_BASE` | 等价（域分离常量替代 ϵ） |
-| `AuthSetup(n,m)` | w 个 authority 用 Pedersen DKG 分发 `n×m` 个 `s_{i,j}`，各自持 `msk_τ={s^(τ)_{i,j}}` | `Authority.__init__/set_commitments/receive_share/finalize` | 等价，且额外分发盲化多项式 `r` |
-| `EKGen(msk_τ,i)` | `ek_{τ,i}={s^(τ)_{i,j}}_j` | `Authority.client_share` | 等价（多返回 `r` 与 `public`） |
-| `VKGen(msk_τ,i,z)` | `vk_{τ,i,z}=h^{Σ_j s^(τ)_{i,j} z_j}` | `Authority.validation_key` | 一致 |
-| `DKGen(msk_τ,j,y)` | `H^(τ)_{j,y}(x)=Σ_i s^(τ)_{i,j} y_i + Σ_k d_{τ,k}x^k`，`dk_{τ,j,y,t}=h^{H(t)}` | `Authority.aggregate_key`（常数项取获准集合之和 + `cloud_threshold-1` 个随机系数） | 一致（`y_i∈{0,1}` 用"只累加获准者"实现） |
-| `Encrypt({ek_τ,i},ℓ,x_{i,j})` | 客户端先 Lagrange 合成 `s_{i,j}`，`ct_{i,j}=(f_ℓ)^{s_{i,j}} g^{x_{i,j}}` | `recover_client_key` + `encrypt` | 一致 |
-| `VerDec` | `D_i=Π_j e(ct_{i,j},h^{z_j})`，`V_i=D_i/e(f_ℓ,vkey_{i,z})`，`vs_i=log(V_i)` | `validate_inner_product`（MSM 合成 + multi_pairing） | 一致 |
-| `AggDec` | `D_{j,t}=Π_i e(ct_{i,j},h^{y_i})`，`E_{j,t}=e(f_ℓ,dkey_{j,y,t})` | `partial_decrypt` | 一致 |
-| `AggComb` | 检查所有 `D_{j,t}` 相等；`E_j=Π_t E_{j,t}^{ξ_t}`；`C_j=D_{j,1}/E_j`；`as_j=log(C_j)` | `combine` | 一致 |
-| 全局模型 | `m_ℓ=(as_1/Λ,…,as_m/Λ)`，`Λ=|Φ_ℓ|` | runner 中 `quantize(total/(len(approved)*scale))` | 一致（多一步再量化） |
-| 标签 `f_ℓ=H(ℓ)` 绑轮次 | 抗 MaMA | `hash_point(ctx)`，`ctx` 含 task/round/key_epoch/model_hash/量化参数 | 等价且更强 |
+源码入口：[拓扑](../../src/dgfl/topology.py)、[当前/历史配置](../../src/dgfl/services/control.py)、[角色](../../src/dgfl/services/roles.py)、[编排](../../src/dgfl/experiments/runner.py)、[资源与CNN拒绝条件](../../src/dgfl/experiments/resources.py)、[模型适配器](../../src/dgfl/training/model_adapter.py)、[验证策略](../../src/dgfl/validation/policy.py)。
 
-**这是本项目最扎实的部分**：DMAFE 不是"黑盒调用某个 MCFE 库"，而是按论文公式重写，配对消掩码与有界离散对数恢复都对得上。
+## 2. 安全和可用性分别判断
 
----
+论文p8定理3的权威与聚合器是honest-but-curious。少于边缘门限ς的秘密份额不能恢复客户端密钥，是机密性条件；它不意味着这些节点能任意造假、丢包或崩溃而DKG仍然成功。原文的跨层隔离声明也不能直接转成项目的BFT或端到端安全定理。
 
-## 2. 功能设计差异（逐项）
+当前其他边缘在共同授权时认证归属边缘签名的`proof_valid`、余弦和密文核心，**不重新核验客户端原始证明**。门限签名能固定同一策略和清单，不能让恶意owner的错误结论自动变真。这条路径依赖归属边缘诚实执行；本次攻击矩阵攻击客户端，没有模拟任意恶意边缘。
 
-### 2.1 系统拓扑与规模 —— 差距最大的一项
+2026-10-12已修复主控可读验证函数钥的权限差异：正式拓扑中的单个和批量发行均将签名份额密封给固定owner，主控只转发不透明信封，owner拒绝公开份额降级并检查上下文、发行者、客户端和门限。owner仍回传所有已提交客户端的完整密文core、范数和评分，不只最终获准者；这些属于允许输出的统计信息。发行边缘仍知道自己的份额，持有全部本机身份文件的管理员不受消息隔离保护。论文p9的边缘验证职责由此更接近实现，但不能由一次权限修复直接继承p8的完整安全定理。更完整的当前说明见[架构对照](architecture-comparison.md)。
 
-| 角色 | 论文 | 项目 | 代码约束 |
-|---|---|---|---|
-| 客户端 n | 20（§VI），可扩到 40/60/80/100（Table IV） | 6 | `NODE_PORTS` 只定义 `client1..client6`；runner `range(1,7)`；`apply_batches` 默认 `clients=6` |
-| 边缘/授权节点 w | w 个（未给具体值） | 3 | `AUTHORITIES=['authority1','authority2','authority3']`；`_policy` 要求成员严格为 `client1..clientN` |
-| 云聚合节点 v | 4（§VI，"simulate them via multiple processes"） | 3 | `NODE_PORTS` 只定义 `aggregator1..aggregator3` |
-| 主控 | 论文无独立"coordinator"角色 | 1 个本机控制服务 | [control.py](../../src/dgfl/services/control.py) |
+任务复用同一key_epoch时，G2验证函数钥不带轮次基底，可对历史密文在其自身ctx下求已发参考的内积，也可线性合成参考span内的函数钥。ctx/签名检查约束正常API消息使用，不使已经持有的函数钥代数失效；论文p7 VKGen也有这个结构，不能把标签叙述扩成函数钥跨标签不可复用。[独立生产代数小例](../../tmp/attack-defense-audit-20261011/streamed-dkg-draft/production-function-span-tiny-v1/result.json)真实运行3边缘/2门限DKG、2客户端、4坐标，以两个合法非单位参考完成44项检查及36次完整VerDec/oracle对照，49个实际源文件前后相同。它没有角色RPC、证明验证、单位基探测或原模型恢复，不属于旧47/49文件攻击矩阵。详见[历史信任边界审查](../../tmp/attack-defense-audit-20261011/streamed-dkg-draft/production-validation-key-trust-review.md)。本次正式信封修复缩小正常主控权限，但不改变已授权owner的上述代数能力。
 
-注意 `_policy` 在形式上允许 2–20 个偶数成员，但节点身份表、密钥生成、runner 的客户端列表都硬编码为 6。**因此"扩到 20 客户端"不是改一个配置项就能完成，需要同时扩身份表、扩 DKG 参与方、扩批次规则并重做资源预算。**
+Lego完整提交验证的目标关系同时涉及整数范围、平方和、密文、已发放密钥与D承诺开口；外层Sigma的同一响应参与关联方程。但Dock数值接口的广义开口知识不能无条件当作标准开口知识。本项目尚未完成修订LegoSNARK/double-binding提取器与Fiat–Shamir的兼容组合归约或外部密码学审计。已知numeric-only异常在完整v1验证中被拒绝，不应说成已发现完整v1绕过；也不能把这些负测试当作不存在任何绕过的证明。详见[证明规格](../protocol/proof-construction.md) §15。
 
-### 2.2 建钥：DKG 与门限
+固定批次只给跨轮参与矩阵的结构前提；同伴已知输入、客户端合谋、授权内积/范数和全局模型侧信息仍需独立分析。重新组队至少两人不够替代这一前提。σ=2也有明确成本：奇数末位无伙伴而不聚合；一个拒绝会连带诚实伙伴。coordinator是当前控制面可用性单点，但论文没给控制面协议，不能据此认定论文已实现主控容错。
 
-- 论文 §V-A 步骤 1：每轮 `Round Initialization` 调 `AuthSetup(n,m)`，`ς`-out-of-`w`；§IV-C 定理 3 声称"抗 ς−1 个被攻破 authority"。
-- 项目：每轮 `epoch=uuid4().hex` 触发一次全新 DKG ✅；但
-  - `p.Authority(..., [1,2,3], ..., 2, ...)` 把参与方与门限写死为 **3 与 2**；
-  - `finalize()` 要求 `set(self._received)==set(self.members)`，`roles.finalize` 要求**全部 3 个 authority 都 ack**；
-  - runner 的 `choose_participants` 在安全模式下直接 `raise` 除非 `set(AUTHORITIES) <= online`。
+## 3. 已完成实验与实际失败
 
-  → 结果是：**份额恢复有 2/3 门限，但建钥过程本身是"全员到齐否则中止"**，不提供论文所说的"少于 ς 个节点被攻破仍安全、其余节点继续"的性质。论文的 DKG 是抗崩溃/抗恶意参与的；项目的是崩溃即中止（文档已如实承认，见 `design-report.md` §4.1、`proof-construction.md` §3）。
+OA是全部测试样本的正确分类比例；本文定向ASR的分子是“预测为攻击目标、真实类别不是目标”的样本数，分母为全部测试样本。真实目标类的正确预测不计作攻击成功。另报的条件ASR使用非目标样本分母，两种口径不混用；非定向攻击不补造ASR。诚实排除包含验证拒绝、缺席与批次连带，不是纯误检测率。
 
-### 2.3 加密密钥分发：项目比论文多了一层 Pedersen 绑定
+### 3.1 旧47文件快照：16项真实链路
 
-| 项 | 论文 | 项目 |
-|---|---|---|
-| 客户端收到 | `{s^(τ)_{i,j}}_j` | `s`、`r`、以及公开 `public`（即 `K_{i,j}=g^{s}H^{r}`） |
-| 客户端校验 | 无（论文未描述） | `G*s+H*r == g1_load(pub)` |
-| 验证者持有 | `{vk}` / `{dk}` | 同样，外加每个客户端的 `K_j` 序列 |
+[旧矩阵摘要](../../tmp/attack-defense-audit-20261011/benchmark/matrix-seed42/analysis-final-v1/summary.md)对应seed42、6/3/3、两门限2、训练/测试1200/400、2轮×2epoch、线性650/1930维、IID、固定pair且攻击者client1/client2。16项已全部完成；公开模型、实际数据、签名owner结果及冻结源码有独立回查。它与后续49文件快照是不同版本，不能合并成同版本多种子统计。
 
-这是**为了把范围证明绑到"实际发放的密钥"而增加的机制**，论文的 NIZK 关系 `R(S,V): Z=Σa_j², c_j=f_ℓ^{s_j}g^{a_j}` 并不含 `K_j`。副作用是每客户端的公开密钥行与证明首消息都变大（论文报 MNIST 每轮每客户端加密密钥 99 MB）。
+| 末轮OA | encrypted不筛选 | DGFlow | 关键现象 |
+| --- | ---: | ---: | --- |
+| MNIST clean | 56% | 56% | 两轮模型哈希一致 |
+| MNIST targeted | 8.75% | 36.25% | ASR365/400→0/400，但相对clean仍低19.75个百分点 |
+| MNIST sign-flip | 20.25% | 36.25% | 两恶意拒绝 |
+| MNIST智能搭便车 | 30.25% | 30.25% | 两恶意均接纳，两轮模型一致 |
+| CIFAR clean | 11.75% | 11.75% | 基线很弱，两轮模型一致 |
+| CIFAR targeted | 9.5% | 9.5% | ASR362/400，两恶意均接纳，两轮模型一致 |
+| CIFAR sign-flip | 9% | 12.5% | 两恶意拒绝，不能当高OA鲁棒性复现 |
+| CIFAR智能搭便车 | 16% | 16% | 两恶意均接纳，两轮模型一致 |
 
-### 2.4 输入验证：NIZK 构造不同
+旧CIFAR targeted第1轮余弦总跨度约.211<.45且范数未超上限；第2轮攻击余弦约.941，高于多个诚实客户端，中心差约.439<.45，再次全部接纳。因此“始终只留高簇”也没有一般保证。该clean模型本身已有333/400样本错误流入目标类3；攻击后362/400，差29/400是同目标背景诊断，clean记录不改写成攻击ASR。原始[漏检证据](../../tmp/attack-defense-audit-20261011/benchmark/matrix-seed42/cifar-targeted-seed42-failure.json)保留，没有事后调阈值隐藏失败。
 
-| 项 | 论文 §V-A 步骤 2 | 项目 |
-|---|---|---|
-| 关系 | `Z=Σ_j a_j²`，`c_j=f_ℓ^{s_j}g^{a_j}` | 范围（b 位）+ 表示 + 平方 + 已发放密钥绑定 |
-| 技术 | "batched Σ-protocol for ciphertext well-formedness" + "zero-knowledge sum-of-squares argument" + Fiat–Shamir | 每坐标 b 个 Pedersen 位承诺 + Schnorr OR；再 4 元联合表示关系；再平方关系；FS 用 SHA-512 mod q |
-| CRS | `crs ← NIZKP.Gen(1^λ, L)`（系统初始化一次） | 无 CRS（透明，hash-to-curve + 确定性转录） |
-| 体积 | 未给转录；论文 §VI 隐含紧凑 | **O(d·b)**；`paper-alignment.md` 估算 8 位下每坐标约 2,576 字节原始 |
-| 证明的额外绑定 | 论文关系不绑密钥承诺 | 绑定 task/round/epoch/client/model/量化参数/`K_j` |
+### 3.2 本轮旧49文件冻结版：重复种子与分离pair
 
-**差异的实质**：项目证明在"绑定强度"上更强（多绑了 DKG 发放密钥与量化上下文），但在"效率"上差 2–3 个数量级。论文 §VI 的整个性能叙事（DGFlow 比 CZGQ/PrivLDFL 快 28%）依赖紧凑的 batched 证明；**用当前逐位证明无法声称论文性能**。`paper-alignment.md` §3.2 已明确写为待办。
+共同快照SHA-256为`b8ea40c61e8bec995fd0af5ab834aaa57adb491c9088d1820b770c1249491637`，覆盖benchmark脚本及`src/dgfl`全部Python，共49文件，不含web/tests/其他脚本/native源码。该版本早于后续数据加载优化和LOCALONLY向量档案合入；原始report/snapshot不改写，不将这些结果升级为合入后源码的验收。首组8项及split2项均已成功完成，执行失败0项，分别核验16/4轮公开模型、48/12份边缘确认、96/24份真实证明度量和96/24条owner签名。攻击漏检完整保留，未用攻击身份代替筛选器。
 
-同时必须指出：论文**没有给出完整可复用的证明转录**，所以项目这条路线是独立重建，不能称为"作者的证明实现"（文档已如此声明）。
+| 同版本末轮 | clean OA（两mode一致） | targeted encrypted OA / ASR | targeted DGFlow OA / ASR |
+| --- | ---: | --- | --- |
+| MNIST seed42，同pair | 56% | 8.75% / 365÷400 | 36.25% / 0÷400 |
+| MNIST seed43，同pair | 48.75% | 8.75% / 365÷400 | 8.75% / 365÷400 |
+| MNIST seed42，split pair | 同版本seed42 clean见上行 | 8.75% / 365÷400 | 8.75% / 365÷400 |
 
-### 2.5 范数上界 —— 论文有，项目没有
+seed43第一轮实际拒绝两个恶意；第二轮其Xi=73500/73153≤4×21230=84920。二均值已经分出恶意低簇.312963与诚实高簇.929244，差.616280≥.45，却因附加条件要求低簇<.25而重新全部接纳。不能解释成“聚类未分开”。详见[逐轮漏检及签名证据](../../tmp/attack-defense-audit-20261011/benchmark/targeted-seeds42-43/mnist-targeted-seed43-failure.json)。
 
-- 论文 §V-A 步骤 3 两次明确："**strictly bounds the magnitude of the update**"、"enforces an **explicit upper bound** on the verified `X_i` against magnitude-scaling attacks"；§V-B 也把这条列为抗 MPA 的组成部分。
-- 项目 [verify()](../../src/dgfl/crypto/protocol.py) 只有 `not 0<=norm<=d*offset*offset` 这一个**由坐标区间推出的隐含上界**（`d·o²=10,649,600`），没有独立配置、独立校准、独立策略绑定的范数门限。
-- `paper-alignment.md` §1 自己承认："当前仅有坐标范围隐含上界；独立任务范数上限及校准仍待实现"。
+split明确使用client1/client3：第一轮拒绝两恶意，同时固定pair连带排除诚实client2/client4，只剩client5/client6，诚实排除50%、OA28.75%、ASR25/400；第二轮恶意低簇中心.398946仍高于.25，又全部接纳，OA8.75%、ASR365/400。末轮诚实排除0不能掩盖前轮50%连带成本。[完整两轮证据](../../tmp/attack-defense-audit-20261011/benchmark/targeted-splitpair-seed42/mnist-targeted-splitpair-seed42-failure.json)。
 
-→ 这是论文明确声称、项目明确缺失的一条**功能**，不是实现细节。
+### 3.3 Non-IID与CNN的证据范围
 
-### 2.6 验证分工：3× 冗余替代了连接式委派
+同一旧49文件冻结版的Non-IID clean四项均已终态并完成真实数据/模型/分区回读。每数据集两个模式的两轮全局模型哈希完全相同，诚实排除均0，恶意接纳率为不适用而非补零。
 
-**状态更新（2026-10-06）**：本节以下为旧实现记录。真实集群的新任务已改为单归属边缘验证与共享签名结果；其他边缘不再重复原始证明核验，仍共同执行全局筛选与一致授权。V/VerDec 由归属边缘内部执行，不新增独立角色。
+| Non-IID clean末轮 | encrypted OA / loss | DGFlow OA / loss | 每轮诚实排除 |
+| --- | --- | --- | --- |
+| MNIST | 47.5% / 2.1553387439 | 47.5% / 2.1553387439 | 0 / 0 |
+| CIFAR-10 | 16.75% / 2.4490592086 | 16.75% / 2.4490592086 | 0 / 0 |
 
-- 论文 §V-A 步骤 3："each edge node runs `DMAFE.VKGen(msk_τ, i, z=m_{ℓ-1})` … and shares it with other edge nodes"，然后"**the connected edge node** … computes `Z_i`"、"each edge node runs `VKGen`" —— 即**某一个（客户端所连接的）边缘节点做内积解密**，其余节点只提供函数钥份额。
-- 项目 `runner.optional` 对**每个**客户端都调 `validation_key`，然后对**每个** authority 调 `authorize`，每个 authority 内部 `for cid in self.auth.clients:` 遍历全部 6 个客户端做完整验证（`p.verify` + `validate_inner_product` + 筛选），最后 `authorization()` 要求 **≥2 份完全一致的签名决策**。
+实际划分是seed打乱后按标签稳定排序，分成6个连续等量shard再随机分配客户端，是合成label-skew，不是自然医院划分。每人200个样本，每数据集的1200样本完整覆盖一次；例如MNIST client4只有类别0的117个和类别1的83个，CIFAR client4只有类别0的120个和类别1的80个。完整类别计数及分区哈希见[真实分区回读](../../tmp/attack-defense-audit-20261011/benchmark/noniid-clean-seed42/analysis-final-v1/verified-partitions.json)，逐轮公开模型复算见[CSV](../../tmp/attack-defense-audit-20261011/benchmark/noniid-clean-seed42/analysis-final-v1/verified-public-rounds.csv)。不能由一个clean小规模划分宣称极端Non-IID防御已解决。
 
-→ 功能设计上：项目把"验证"从"按连接委派 + 函数钥共享"改成了"**3 份独立全量验证 + 2/3 一致投票**"。这更接近 BFT 许可，代价是验证成本约为论文的 3 倍（论文 MNIST 验证成本 636 s；项目同口径会是数倍）。文档 `protocol-v1.md` §一 也承认"当前每个 authority 验证全部客户端"。
+本轮三组共14/14完成、0执行失败、0未启动，合计28轮公开模型、84份边缘确认、168份真实证明度量及168条owner签名结果已核验。三个report的49文件before/after与共同ZIP逐一一致；释放冻结前又核对了当时当前49源文件，之后源码已继续更新。最终[14例CSV](../../tmp/attack-defense-audit-20261011/benchmark/followup14-final-v1/final-cases.csv)保留组别、种子、实际恶意身份和Non-IID状态；[跨组baseline核对](../../tmp/attack-defense-audit-20261011/benchmark/followup14-final-v1/cross-group-baseline.json)确认split与seed42 clean除攻击注入字段外配置、6个非空分区、数据和历史源指纹一致。基准采样进程RSS峰约1067.5MiB，2GiB监测中止预算不是内核内存硬上限；共机用时不用于速度优劣比较。
 
-### 2.7 良性簇识别：k-means vs 定阈值二均值
+完整CNN已有真实训练、量化及筛选的**明文组件**诊断，当前明文角色路径也已接通，详情见[攻击防御核验](attack-defense.md#完整cnn量化诊断)与[模型基础](paper-models.md)。582026/878538只是论文参数量匹配的重建；没有作者确认的完整层配置。MNIST6000/1000子集、20客户端、10×10的组件记录不能冒充全60000/10000数据或完整加密链路。12bit/2048、学习率0.01等是项目假设，8bit重复量化低OA与更高精度结果应连同初始量化差异说明；不能泛称“CNN训练不是瓶颈”或“单一scale必然发生饱和”。
 
-| 项 | 论文 | 项目 |
-|---|---|---|
-| 算法 | "edge nodes apply the **k-means** algorithm [26] to identify an initially benign client pool" | `select()`：最小/最大分数初始化的一维二均值，最多 32 次迭代 |
-| 排除条件 | 未给 | 中心差 `≥0.45` **且** 低中心 `<0.25` |
-| 全同分数 | 未给 | 不拆簇，全通过 |
+上述旧49文件证据完成后，当前工作区另合入LUT/NCHW原图加载优化及默认关闭的LOCALONLY完整向量档案：归一化保持旧float64除255后转float32的相同位模式，避免整split的float64中间数组；档案仅供隔离明文组件的独立回读，不把客户端原始模型发给主控/云。其内存与真实性边界见[模型对照](model-comparison.md)。新全量MNIST明文CNN正常与30%定向投毒对照均已完成并独立回读：正常OA97.88%，投毒OA65.12%/ASR33.96%，筛选未剔除这组攻击者；详情见[攻击防御核验](attack-defense.md)。20,003维分段组件也完成公开回读，但仍不是正式角色传输或完整CNN密文链验收。
 
-项目的规则是**自补充的固定工程规则**（`protocol-v1.md` §六、`design-report.md` §4.4 均已声明"不声称由原论文逐字给出"）。这是合理的工程化，但与论文的 k-means 在算法、可解释性和超参敏感性上都不同。
+真实链路基准使用认证密封二进制RPC、实际RoleWorker、Lego、DKG、VerDec、共同授权、门限部分解密及独立合并确认，只有HTTP传输换成进程内适配器。它不验证真实TLS、多机网络或进程秘密隔离。公开模型回读复算和签名核验也不是另一套SNARK独立验算。上述结果不能声称论文CNN、全部攻击比例、生产安全或普遍提速。
 
-### 2.8 固定批次与 MRPL
+## 4. 竞赛范围与后续研究
 
-| 项 | 论文 | 项目 |
-|---|---|---|
-| 批次划分时机 | System Initialization，一次划分、不相交、不可变 | 任务登记时确定，`batch_size` 必须为 2 |
-| 批次大小 σ | **多轮隐私参数**，需在"严格隐私保证 / 客户端掉线概率 / 收敛所需最小活跃数"之间权衡后确定 | 硬编码 2（`_policy` 强制 `batch_size==2`），共 3 批 |
-| 批次构成 | 未指定 | 相邻下标成对：`(client1,client2) (client3,client4) (client5,client6)` |
-| 秩亏论证 | §V-B 给出参与矩阵秩亏的数学论证 | 无形式化论证；`design-report.md` 只作定性描述 |
-| 新加入者 | 新 σ 客户端聚为新批次 | 不支持 |
+本轮按用户要求以论文实现架构为主，不要求完整复现论文实验规模。正式交付检查分层归属、密钥隔离、真实证明、签名筛选、固定批次、门限聚合及真实节点演示，见[竞赛验收](../submission/attack-defense-acceptance.md)。下面列的是扩展研究，不应再把完整CNN压力实验作为当前交付的先决条件。
 
-→ 机制形状一致（整批进/整批出），但**σ 这个论文强调的隐私参数在项目里被固定成 2**，且缺少论文的秩亏形式化。
+1. 完整CNN安全链：测量真实CRS/证明、DKG转录、每种逻辑消息、内积DLP和合并预算，再设计并验收；不能直接调大20,000维上限。
+2. 鲁棒筛选：保留seed43、split与CIFAR漏检，训练/测试分离，扩多种子、0–50%攻击比例、正常异质数据及诚实连带成本；不按已知恶意身份剔除，也不事后只报告命中门限的案例。
+3. 论文重建参数：保存量化、优化器、学习率、批次、层结构、k-means及范数上限假设；向作者确认缺失细节。论文p12将冷启动、极端Non-IID、智能搭便车列为未来工作，不能填成已经解决。
+4. 系统与安全：任务内动态新增批次、σ可配置、坏份额隔离/重试及可用性设计、coordinator的Verifier授权与同epoch函数查询泄露、生产CRS与组合归约/外部密码审查分别验收，不能由同一项测试自动推导其余属性。
+5. 可比评估：实现论文对照基线、统一曲线/安全参数与payload口径。论文p10 TableIII为MNIST10轮60107秒、CIFAR30轮270780秒；p11通信量是每客户端每轮payload，不是项目全部RPC总字节。没有对应实验前，不移植≥28%/≥83%或论文OA/ASR数字。
 
-### 2.9 聚合门限与 SPOF
+## 5. 历史记录的解释
 
-**状态更新（2026-10-06）**：下述固定 2/3 限制已解除，当前为可配置 s/w 与 e/v（均至少 2）。聚合预检按实际云数量及门限判断；历史三云故障记录仍只代表当时 2/3 配置。自动剔除坏云重试、全员 DKG 及 coordinator 单点等边界没有因此消失。
-
-- 论文 §III-A：`ϵ`-out-of-`v`，"as long as **any ϵ cloud servers** transmit their results"；§IV-C 定理 3：被腐化聚合者 `κ<ϵ` 时**信息论安全**。
-- 项目：`partial_decrypt(..., 2, ...)`、`combine(..., 2, ...)` 固定 2；runner 要求 `len(active_clouds)>=2`。
-- 实测（`docs/submission/evidence/faults/index.json`）：
-  - 停 `aggregator3` → 完成 1 轮 ✅（崩溃容错成立）
-  - 停 `aggregator2/3` → 门限预检中止，0 轮 ✅（行为正确）
-  - 停 `client1` → `client2` 因固定批次连带退出 ✅
-- 2026-10-04 已增加以 DKG 承诺为根的配对像正确性证明，错误 E 和共同伪造的 D 均被拒绝，见[证明规格第 17 节](../protocol/proof-construction.md#17-2026-10-04部分解密正确性证明)。未实现：任意 `ϵ`/`v` 可配置、自动剔除坏云后重试、完整拜占庭容错与跨层共谋分析。原论文关于跨层串谋的声明不能直接转移到本实现。
-
-另外，项目的 **coordinator 本身是可用性单点**（`design-report.md` §2 自认），论文在架构上通过"边缘节点合并"避免了额外的中心角色。
-
-### 2.10 动态客户端 —— 完全未实现
-
-- 论文 §III-A / §V-A 步骤 1 两处强调："DGFlow **supports dynamic clients**, where edge nodes perceive new clients and issue encryption keys to them in the new round"、"sets up the authorities with the updated size, where **newly joined σ clients are clustered into a new batch**"。这是论文相对 CZGQ（"prevents new clients from joining"）的核心卖点之一，也是 Table I 里 DGFlow 的 "Dynamic Addition ✔"。
-- 项目 `roles._policy`：
-  ```python
-  members != [f'client{i}' for i in range(1,len(members)+1)]
-  ```
-  强制成员必须是 `client1..clientN` 的连续前缀；`begin` 中若 `previous.get('policy') != policy` 直接抛 `'task policy already fixed; create a new task'`。
-- → 项目**只能新建任务**，不能在训练中途加入客户端。Table I 中 DGFlow 相对 Lepcat/CZGQ 的一项优势在实现里不存在。
-
-### 2.11 模型与数据 —— 密码链路上的根本差距
-
-| 项 | 论文 | 项目（密码链路） | 备注 |
-|---|---|---|---|
-| MNIST 模型 | 582,026 参数 CNN（PFLlib FedAvgCNN） | 650 参数线性 softmax（64×10 权重 + 10 偏置） | 见 `design-report.md` §4.5 |
-| CIFAR-10 模型 | 878,538 参数 CNN | **不存在** | grep 确认 `cifar` 只出现在 `paper_models.py` 与文档 |
-| 数据 | MNIST + CIFAR-10 | 仅 MNIST，28×28 平均池化到 8×8 | `data.py` `_pool` |
-| 全局轮次 | MNIST 10 轮，CIFAR-10 30 轮 | 默认 3，上限 20（`RunConfig.rounds`） | |
-| 本地 epoch | MNIST 每轮 10 | 默认 2，上限 5 | `RunConfig.local_epochs` |
-| 优化器 | PFLlib 默认（论文未给 LR/batch） | 普通 SGD + 交叉熵，lr=0.3，batch=64 | 项目显式声明 lr/batch 是自己选的 |
-
-**关键事实**：`src/dgfl/training/paper_models.py` 确实实现了 582,026 / 878,538 参数的两层 CNN，`tests/training/test_paper_models.py` 覆盖了真实前反向，`scripts/benchmark_paper_training.py` 也跑过 512 样本的真实 MNIST 冒烟（`docs/research/evidence/paper-cnn-mnist-smoke.json`）。
-
-但是 grep 显示 `paper_models` **只被 benchmark 脚本和测试引用**，`runner.py` 从不 import 它；且密码层有三道硬闸：
-
-```python
-_bounds:        not 1 <= d <= 20000        # 20,000 维上限 << 582,026
-roles._prepare_data: policy['dimension'] != 650   → raise
-roles._train:        policy['dimension'] != 650   → raise
-```
-
-→ **论文规模模型进入加密联邦训练这件事，目前进度是"训练侧已备好、密码侧完全未接通"。** `paper-alignment.md` §3 已把分块传输、紧凑证明、整数边界与 BSGS 内存重新测算列为前置条件。两个模型的逐层结构、参数量推导、向量布局、实测记录与接入四大硬闸见 [model-comparison.md](model-comparison.md)。
-
-### 2.12 量化与解码边界
-
-| 项 | 论文 | 项目 |
-|---|---|---|
-| 量化 | §V-A 步骤 2 提到 "quantized value `x_{i,j}`"，未给 scale/bits | scale=128、bits=8、`[-128,127]`、半整数向偶数舍入 |
-| 有界 DLP | "resulting inner product fall within a polynomially bounded interval, thus allowing the recovery of the discrete logarithm" | BSGS，查找表上限 100,000 步；内积界 `Σ|z_j|·o`，聚合界 `[-N·o, N·(o-1)]` |
-| 范数上界 | 显式上界 | 仅 `d·o²` 隐含（见 2.5） |
-| 论文未给的参数 | 量化位宽/尺度、范数上限参数、CIFAR 训练配置 | `paper-alignment.md` §3.2 已列为"复现假设"，需向作者索取 |
-
-项目在 §2.5 提到的 Cauchy–Schwarz 收紧解码区间（`min(o·Σ|z_j|, isqrt(Xi·T))`）是**尚未接入代码的候选优化**（`paper-alignment.md` §3.4 自述）。
-
-### 2.13 密码群与实现栈
-
-| 项 | 论文 | 项目 |
-|---|---|---|
-| 群 | 非对称双线性群 `e:G×H→GT` | 同 |
-| 具体曲线 | **MNT224**（CZGQ/PrivLDFL/DGFlow）；HybridAlpha/TAPFed 用 1024-bit 整数群 | **BLS12-381** |
-| 库 | Charm | `py-arkworks-bls12381==0.5.0` |
-| 训练框架 | PFLlib | 自写 NumPy SGD（torch CPU 可选） |
-
-→ 曲线不同 ⇒ **不能与论文做同安全参数的秒级性能比较**（`paper-alignment.md` §1 已声明）。BLS12-381 约 128-bit 安全，MNT224 更低，项目这条线其实更强，但代价是群运算更慢。
-
-### 2.14 安全性证明 —— 论文的核心贡献之一，项目为零
-
-论文给出的形式化结论：
-
-| 论文结论 | 内容 | 项目状态 |
-|---|---|---|
-| 定理 1 | A1（拿到全部密文 + 可查 validatory 解密钥）:`Adv ≤ 2Q·Adv_DDH` | ❌ 无 |
-| 定理 2 | A2（拿到全部密文 + 可查 aggregate 解密钥 + 可腐化客户端）:`Adv ≤ 2Q·Adv_DDH` | ❌ 无 |
-| 定理 3 | 抗诚实但好奇的 authority 与 aggregator；`ς−1` 共谋抗性；`<ϵ` 聚合者时**信息论安全** | ❌ 无 |
-| §V-B | 抗 KEP / MaMA（标签绑定） | ❌ 无形式化；靠代码里 ctx 绑定 |
-| §V-B | 抗 MRPL（批次导致参与矩阵秩亏） | ❌ 无形式化 |
-| §V-B | 抗 MPA（NIZK 可靠性 + 显式 `X_i` 上界） | 🟡 半条（可靠性有测试，上界缺失） |
-
-项目 `proof-construction.md` §9 明确写的是"检查思路"（proof sketch），并自述"**组合外部审查未完成**"、"没有对本系统组合给出新的完整安全定理"。测试是负测试，不是安全归约。
-
-**这不是"差一点"，而是论文 §IV-C + §V-B 整章的对应物都不存在。**
-
-### 2.15 实验与评估 —— 论文的 §VI 基本没有对应物
-
-| 论文实验 | 内容 | 项目 |
-|---|---|---|
-| 对比方案 | HybridAlpha[19]、TAPFed[21]、CZGQ[22]、PrivLDFL[24]，均用 Charm 实现 | **一个都没有**（grep `HybridAlpha\|TAPFed\|CZGQ\|PrivLDFL` 在 `src/` 下零命中，仅文档出现） |
-| Table III | 总训练时间（MNIST 10 轮 / CIFAR 30 轮） | 无对应表；只有本项目自己的 plain/encrypted/dgflow/optimized 四模式对比 |
-| Table IV | 20/40/60/80/100 客户端可扩展性 | 最多 6 客户端 |
-| 客户端/服务端运行时分解 | Fig 4 | 无分解到论文粒度 |
-| 通信开销 | Fig 5，MNIST 每客户端每轮 203 MB | 有 `bytes_sent` 总量（dgflow 单轮 436 MB / 6 客户端），口径与论文不同（论文是每客户端 payload，项目是 coordinator 全部 RPC 收发） |
-| 攻击鲁棒性 | Fig 6 label-flipping（**ASR**）、Fig 7 free-rider（**OA**），攻击比 0–50% | **无 ASR、无 OA 计算**（grep 零命中）；攻击比上限受 `malicious_clients ≤ 2` 限制 |
-| 论文所报数字 | 训练时间降 ≥28%、客户端通信降 ≥83%、ASR 0.3%/18.2%、OA 98.7%/72.7% | 均未复现，且当前构造下不可复现 |
-
-关于攻击覆盖，还有两个具体问题：
-
-1. **free-rider 实际不可用**。`model.attack_weights` 支持 `'free_rider'`，但 `RunConfig.attack` 的 `Literal` 不含它，所以界面上根本选不到；且 `_train` 里 `if attack in ('sign_flip','random')` 才会调 `attack_weights`，即使传入 `free_rider` 也只会走到"已训练模型原样返回"的分支，而 `attack_weights` 的 docstring 自己指出：要模拟 free-rider 必须传**本轮全局模型**，传已训练模型是错的。→ 论文 Fig 7 对应的攻击**在当前代码里无法正确执行**。
-2. **label-flipping 是"标签整体 +1 偏移"**，不是论文语境下的目标类定向翻转；且论文用 ASR 度量"被误分类到攻击者选定目标类的比例"，项目只记录 `accuracy` 和 `attack_accepted`。
-
-### 2.16 项目自己记录的差距（与本文一致）
-
-`docs/research/paper-alignment.md` 与 `docs/submission/design-report.md` §9 已经如实列出：证明的 O(d·bits) 开销、模型坐标量化、范数及内积泄漏、固定批次损失、主控可用性单点、无 CUDA 实测、无三机实测、无外部密码审查、无大模型加密运行。本文与之一致，只是把"功能设计区别"拆得更细并补上代码级证据。
-
----
-
-## 3. 项目超出论文的部分（不是差距，但需在报告中区分来源）
-
-### 3.1 密码学扩展（改变威胁模型，需单独论证）
-
-- **`DGFL-AGGREGATE-PAIRING-V1`**：把聚合器从论文的 honest-but-curious 提升到**拜占庭**模型。为每个云函数钥生成配对像正确性证明，合并端逐坐标核验 `E`，并从可信 DKG 转录独立派生承诺常数作锚。论文的 `AggComb` 只用 `D` 相等做一致性检查，而 `E` 本就逐云不同、无法用相等性约束。**代价是 650 维下单次合并约 73 s（占轮时 76%），详见 [aggregate-block.md](aggregate-block.md)。**
-- **建钥摊销**：论文 §V-A 步骤 1 把 `AuthSetup` 列在 "Round Initialization" 下，但 §IV-C 的安全博弈 G1 只在 Initialization 跑一次、随后跨多个 label ℓ 查询，且密钥记号无轮次下标。项目按**摊销**实现（见 §7.1），与定理覆盖的构造一致。
-
-### 3.2 工程实现（不改变密码学主张）
-
-论文里没有、项目自建的工程能力：
-
-- 四种可对照模式 `plain / encrypted / dgflow / optimized`（论文只有一种基线）；
-- 完整跨进程角色隔离：HTTPS 双向证书 + Ed25519 签名 + X25519/HKDF + AES-GCM 密封信封（论文只给算法，不给网络协议）；
-- 持久化不可变业务提交键、任务策略冻结、RPC 幂等重试、原子 JSON 状态；
-- 真实进程故障注入实验（停 1 个 / 停 2 个聚合节点、停 1 个客户端）与证据留存；
-- 本机 Web 控制台、历史对照、验证逐客户端视图、证据导出与打包校验；
-- 论文未涉及的 GT 规范反序列化适配（`backend.gt_load`），用 Fp12 线性基还原而非 pickle；
-- 四种客户端证明套件（`legacy` / `compact_range_v1` / `compact_norm_v1` / `lego_norm_v1`）与原生化 GT 批处理。
-
-**3.1 是密码学上的实质扩展，必须给出自己的安全论证；3.2 应在报告里写成"作品工程实现"，不能算作对论文的复现。**
-
----
-
-## 4. 补齐到论文的最小工作清单（建议优先级）
-
-按"论文声称 + 项目当前缺口 + 可见收益"排序：
-
-**P0 — 决定能否声称"复现论文"**
-1. 实现论文的**显式范数上界**（§V-A 步骤 3），并把它绑进任务策略与学生成证明。
-2. 实现**紧凑 NIZK**：batched Σ + 平方和 ZK 论证 + Fiat–Shamir，替换逐位范围证明。这是所有性能数字的前提。
-3. 训练侧 582,026 / 878,538 参数 CNN **接入密码链路**：~~先做分块传输（绑定 task/round/epoch/清单摘要/块号/总数/整体摘要 + 重放/缺块/乱序负测试），再解除 `dimension != 650` 硬编码~~，再重算 `_bounds` 的 20,000 上限与 BSGS 内存。**（分块传输与维度参数化已完成，见文首更新）**
-
-**P1 — 决定能否声称"与论文可比"**
-4. **动态客户端加入**：放宽 `_policy` 的连续前缀约束，支持 `AuthSetup` 用更新后的 n 重跑并把新 σ 客户端聚为新批次。
-5. **σ 可配置**：把 `batch_size==2` 变成受策略约束的参数，并补论文 §V-B 的秩亏论证。
-6. **可配置门限 ς / ϵ**：替换 `[1,2,3]` + `2` 的硬编码；DKG 从"全员 ack 否则中止"升级为真正的 ς-out-of-w。
-7. ~~**验证分工**：改为论文的"连接式委派 + 函数钥共享"~~。2026-10-06 已实现；新的分工与参数组合仍需独立性能评估。
-
-**P2 — 决定能否声称"论文规模"**
-8. 2026-10-06 已接通可配置客户端/边缘/云、动态参与方及门限；仍需补充 20–100 客户端的论文粒度资源预算和性能实测。
-9. 补 CIFAR-10 数据加载与 878,538 参数模型的端到端加密训练。
-10. 补 ASR / OA 指标与 0–50% 攻击比；修好 free-rider（必须传本轮全局模型）。
-
-**P3 — 决定能否声称"性能优越"**
-11. 实现至少一个对照方案（CZGQ 或 PrivLDFL）的等价基线，否则 ≥28% / ≥83% 无法验证。
-12. 客户端/服务端运行时按论文粒度分解。
-
-**P4 — 学术完整性**
-13. 补 §IV-C 定理 1–3 对应的归约文档；补 §V-B 的 MaMA / MRPL / KEP 形式化论证；两者都需要外部密码学审查。
-14. 把论文未给的量化、范数上限、CIFAR 训练配置列为**复现假设**并向作者索取。
-
----
-
-## 5. 应如实保留、不应声称的部分
-
-在当前代码状态下，以下表述**不能写进报告或答辩**：
-
-- ❌ "复现了论文的 582,026 参数 CNN 安全联邦训练"（密码链路是 650 维线性分类器）；
-- 已修正：支持配置 20 客户端与 4 云聚合（上限 100/32/32）；不能写成已完成论文规模性能评估。
-- ❌ "支持客户端动态加入"（实际必须新建任务）；
-- ❌ "DGFlow 比 CZGQ/PrivLDFL 快 28%、通信省 83%"（对照方案未实现，且曲线不同）；
-- ❌ "ASR 0.3%、OA 98.7%"（无 ASR/OA 计算）；
-- ❌ "已证明 DMAFE 安全性"（无定理，仅方程级审查）；
-- ❌ "抗 ς−1 个被攻破 authority"（DKG 全员到齐否则中止）；
-- 当前可在已配置 e/v 下由足够合法份额恢复；不能据此宣称自动拜占庭容错或完整论文安全结论。
-
-可如实声称的：**DMAFE 的算法定义与代数构造已按论文公式重建；完整模型参数实际进入配对群密码链路；验证、筛选、固定批次、门限聚合、崩溃容错与故障注入均有可复现的原始记录。**
-
----
-
-## 6. 论文自身的不足（向原文取证）
-
-前五节讲项目缺什么。本节反过来：**论文有哪些地方不足以支撑复现，或本身存在技术缺口。** 每条给出原文依据。
-
-### 6.1 `AggComb` 不核验 `E` —— 论文的威胁模型不含拜占庭聚合器
-
-论文 §IV-B 的 `AggComb({a_{j,t}})` 只有三步：
-
-```
-① checks all D_{j,t} in the collection are equal
-② E_j = Π_{t∈K} (E_{j,t})^{ξ_t}
-③ C_j = D_{j,1} / E_j,   a_{s_j} = log(C_j)
-```
-
-**① 是一致性检查，不是正确性检查。** `D_{j,t} = Π_i e(ct_{i,j}, h^{y_i})` **不依赖 t**，各云算出的 `D` 必须相同，相等即证明它们用了同一批密文。而 `E_{j,t} = e(f_ℓ, dkey_{j,y,t})` **本来就逐云不同**，无法用相等性检查 —— 论文在这一点上就停了。
-
-**这不是论文的疏漏，是威胁模型的边界。** 论文自己写明了：
-
-> **Theorem 3**: The encryption key and functionality result of DMAFE are secure against **honest-but-curious authorities and aggregators**, respectively.
-
-`Byzantine` 全文命中 **0 次**。论文给云列出的威胁只有 honest-but-curious 与**崩溃中断**（由 ϵ-out-of-v 门限容错覆盖）。
-
-**honest-but-curious 的定义就是"遵守协议"**，所以 `E` 永远正确，无需核验。
-
-**项目把聚合器扩展到拜占庭模型**：为每个云函数钥生成配对像正确性证明，合并端逐坐标核验。代价见 §7。
-
-**报告口径应是"扩展威胁模型"，不是"修补论文缺陷"。** 后者会被"论文从未声称要防这个"反驳，而前者站得住。
-
-### 6.2 `AuthSetup` 的执行频率在原文里是矛盾的
-
-§V-A 步骤 1 把它列在 **Round Initialization** 之下：
-
-> "1 Round Initialization. Edge nodes get the client size n, and run DMAFE.AuthSetup(n, m) to set up the authorities."
-
-读起来像每轮一次。但紧接着的一句是：
-
-> "**We note that DGFlow supports dynamic clients and sets up the authorities with the updated size**, where newly joined σ clients are clustered into a new batch."
-
-"with the **updated** size" 只有在"客户端集合变化时才重跑"的前提下才成立。
-
-**两种读法都讲得通，而这是协议里最贵的一步。** 论文既没有明确说摊销，也没有给出 `AuthSetup` 的复杂度或耗时。
-
-**项目已按摊销读法对齐**（见 §7.1）：每个任务只跑一次建钥仪式，后续轮次复用。这既省掉每轮约 14.4 s，也让实现落回论文明确写出的那条分支。论文本身仍应补一句说明，否则复现者会像本项目一样先按每轮实现。
-
-### 6.3 NIZK 只给了定义，没有给 CRS 的来源
-
-§IV-A 定义了 `Gen(1λ, L) → crs`，但全文：
-
-- 未说明 CRS 如何生成（单方？多方仪式？）
-- 未声明任何可信设置假设
-- 未说明 CRS 能否跨任务复用
-
-`crs` 在 `Prove`/`Verify` 里都是显式输入，来源成谜。**任何复现都必须自行补一个可信设置假设，而论文没有把它列为假设。**
-
-### 6.4 声称 "perfectly sound"，但关系式没有范围约束
-
-§IV-A 原文：
-
-> "The NIZK proof system is supposed to be **perfectly sound**, guaranteeing that the prover can only convince the verifier of a true statement."
-
-而关系式是：
-
-```
-R(S,V)=1  iff  Z = Σ_{j∈[m]}(a_j)²   ∧   c_j = f_ℓ^{s_j} g^{a_j}
-```
-
-**没有 `a_j ∈ [0, 2^b)` 一类的范围约束。** 在 `Z_p` 上取模，`(a_j)` 与 `(a_j + p)` 给出同一个 `Z`。项目在 [proof-construction.md](../protocol/proof-construction.md) 记录了由此产生的回绕面，并用逐位范围证明堵住。
-
-**"perfectly sound" 是对这个无范围关系的陈述，而这个关系本身不足以约束量化模型值。**
-
-### 6.5 规模、量化、分阶段耗时均未给出
-
-| 缺失项 | 原文状态 | 后果 |
+| 日期/旧说法 | 当时含义 | 当前结论 |
 | --- | --- | --- |
-| 量化位宽 / scale | 全文只出现一次 "dequantizes it" | 无法复现数值精度 |
-| 每阶段耗时 | Table III 只有总时长 | 60,107 s 无法归因 |
-| 安全强度声明 | 无 "bits of security" / "security level" 字样 | MNT224 的实际强度未被讨论 |
-| CRS 与证明体积 | 未给 | 无法估算通信与存储 |
+| 10月4–5日：固定6/3/3、重复全验、逐位透明证明、只有MNIST | 旧实现快照 | 不能再概括当前；节点/门限参数化、单归属、Lego及CIFAR已接通 |
+| 10月6日：分块/二进制传输、任务级DKG | 已完成工程变更 | 自动分块不解除1GiB逻辑消息限制，也不证明完整CNN预算可行 |
+| 10月7日：默认regroup | 当时可用性取舍，旧结果保留 | 新实验默认fixed；ArchivedRunConfig保留旧默认，不能重新解释历史隐私结构 |
+| 10月11日：仅benchmark引用CNN、rounds≤20、epochs≤5 | 审计中曾识别的缺口 | 明文模型适配已接入角色，入口上限100/20；加密CNN仍明确拒绝 |
+| 旧73秒/83秒聚合或14秒DKG时序 | 指定历史机器/模式/曲线/源码的样本 | 仅引用原始记录，不当当前全部实验耗时或严格提速对照；阶段重叠也不能直接求和 |
 
-### 6.6 Table III 里 DGFlow 并不是最快的
-
-| 数据集 | 方案 | 总时长 (s) |
-| --- | --- | ---: |
-| MNIST | **TAPFed** | **3,634** |
-| MNIST | HybridAlpha | 5,142 |
-| MNIST | **DGFlow** | **60,107** |
-| MNIST | CZGQ | 84,314 |
-| MNIST | PrivLDFL | 143,213 |
-
-**DGFlow 比 TAPFed 慢 16.5 倍、比 HybridAlpha 慢 11.7 倍**，只赢 CZGQ 与 PrivLDFL。
-
-论文的表述限定在 "compared to the state-of-the-art **FE-based** PPFL schemes"，这个限定是准确的；但**引用时不能简化为"DGFlow 更高效"**。
-
-另外：HybridAlpha 与 TAPFed 用 1024 位整数群，DGFlow / CZGQ / PrivLDFL 用 MNT224。**群不同意味着对比不是同一起跑线**，论文以 "maintain fair comparison" 一句带过，未给理由。
-
----
-
-## 7. 本轮新增的实测成本证据
-
-针对 §6.1 的缺口，项目自建的聚合完整性防护已量化（650 维、6 客户端、3 authority、3 云、门限 2，`lego_norm_v1`）：
-
-| 块 | 秒 | 占整轮 |
-| --- | ---: | ---: |
-| **聚合、证明核验与确认** | **83.14** | **76.0%** |
-| 分布式建钥（每轮） | 18.16 | 16.6% |
-| 云部分解密 | 5.52 | 5.0% |
-| 客户端 + 输入验证（紧凑证明，已是最快套件） | 8.09 | 7.4% |
-
-单次 `combine` 的分项（[验收记录](evidence/validation-authorization-20261004/combine-cost-acceptance.md)）：
-
-| 路径 | 秒 |
-| --- | ---: |
-| `_verify_aggregate_verification` × 9 条 | 59.57 |
-| 最终插值 + 有界离散对数 | ~7.98 |
-| `_aggregate_dkg_constants` | 4.67 |
-| `_aggregate_numerators`（重算 D） | 2.51 |
-
-**聚合块与客户端证明套件无关**：它用的是固定的 `DGFL-AGGREGATE-PAIRING-V1`，不出现在 `PROOF_SUITES` 中，因此紧凑证明/Lego 的加速完全触不到这 76%。
-
-**两个已实测的方向**（记录以免重复投入）：
-
-| 方向 | 实测 | 结论 |
-| --- | --- | --- |
-| 承诺解码去重 | 73.30 → 58.32 s（**1.26×**） | ✅ 已采纳 |
-| 随机权重批验证 | 5.790 → 5.165 s（**1.12×**） | ❌ GT 侧新增的 `B_j^{w_j}` 恰好抵消 `base^{zs}` 的节省；整轮仅 ~5%，不值得引入概率性 |
-
-**结论：成本集中在 11,700 次 GT 大指数（9 条 × 650 坐标 × 2），这是当前证明结构的内在成本。** 显著下降只能靠减少证明条数（3 云 × 3 authority = 9 条 → 更合适的证明构造），属研究级改动。
-
-**这也让 §6.2 的取舍可量化**：每轮重跑 DKG 花掉 16.6%，换来的是论文未声称的每轮密钥新鲜度；摊销可省约 1.57×，但须先确认这道防线是否有意为之。
-
-### 7.1 DKG 摊销已实施并与论文对齐（2026-10-06）
-
-确认每轮重建并非有意设计后，已按论文的摊销读法改造：
-
-| 位置 | 改动 |
-| --- | --- |
-| `runner.py` | `epoch` 提到轮循环外（任务级）；`transcript`/`share`/`receive_share`/`finalize` 只在首轮执行 |
-| `roles.py` `begin` | 同一 epoch 复用已建好的 `Authority`；仅新 epoch 才重建并重置 `finalized` |
-| `roles.py` | 新增 `envelope_context(ctx)`，把密封信封的绑定从 `key_epoch` 扩为 `key_epoch:round_id` —— epoch 变成任务级后，信封层否则会失去跨轮回放防护 |
-| 五个测试文件 | 角色测试装置改用同一个 `envelope_context`，不再各自复制线格式 |
-
-**实测（650 维、`lego_norm_v1`、3 轮）**：
-
-| 轮次 | 整轮墙钟 | `dkg_s` | DKG 占比 |
-| --- | ---: | ---: | ---: |
-| 1 | 49.7 s | **14.81 s** | 29.8% |
-| 2 | **36.0 s** | **0.49 s** | 1.4% |
-| 3 | **35.7 s** | **0.43 s** | 1.2% |
-
-轮 1 扣掉 DKG 后为 34.9 s，与轮 2/3 的 36 s 吻合，说明摊销没有引入其它副作用。**10 轮合计由约 500 s 降到约 370 s（1.35×）**，且后续轮次越摊越薄。
-
-**MaMA 防护未受影响**：`ctx` 仍逐轮携带 `round_id` 与 `model_hash`，二者照常进入 `f = hash_point(ctx)`。
-
-**回归**：1465 通过、12 跳过、0 失败；ruff 通过；跨版本冻结证明 4/4 仍接受、篡改仍拒绝。
+本文没有沿用“额外绑定所以完整安全更强”“DKG全员中止所以机密性门限无效”“测试通过所以继承论文定理”等推论。对应算式、实现能力、实测效果、形式化保证须分别举证。

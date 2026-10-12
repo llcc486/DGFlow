@@ -50,6 +50,13 @@ def resolve_suite_parameters(suite,base,*,pinned_suite=None,mapped=()):
         if not isinstance(case,dict) or set(case)!={'name','config'} or not isinstance(case['config'],dict):
             raise ValueError('case requires name and config')
         config=case['config']; previous=pinned.get(case['name'],{})
+        # Preserve the originally frozen grouping on resume, including a new
+        # suite whose YAML omitted its frozen batch settings. An explicit
+        # change still reaches the declaration/hash conflict check below.
+        if previous.get('batch_strategy') in ('fixed','regroup'):
+            config.setdefault('batch_strategy',previous['batch_strategy'])
+        if 'batch_size' in previous:
+            config.setdefault('batch_size',previous['batch_size'])
         if case['name'] in mapped:
             # Only a persisted mapping may refresh a historical protocol run.
             # Missing optional values in a current declaration reuse its pin.
@@ -105,7 +112,8 @@ def main(argv=None):
         raise ValueError('invalid persisted suite mapping')
     pinned_suite=json.loads(old_path.read_text('utf8')) if old_path.exists() else None
     suite=validate_suite(resolve_suite_parameters(yaml.safe_load(args.config.read_text('utf8')),args.url,
-                                                 pinned_suite=pinned_suite,mapped=state['cases'] if state else ()))
+                                                 pinned_suite=pinned_suite,mapped=state['cases'] if state else ()),
+                         new=state is None)
     if args.cloud_strategy is not None:
         for case in suite['cases']: case['config']['cloud_strategy']=args.cloud_strategy
     suite_hash=digest(suite)

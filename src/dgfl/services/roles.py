@@ -138,6 +138,8 @@ def _proof_policy(value):
 
 
 def _matches_proof_policy(ctx,policy):
+    if ctx.get('model_descriptor')!=policy.get('model_descriptor'):
+        return False
     settings=_proof_policy(policy)
     if policy.get('mode')=='plain' and settings['proof_suite']==_LEGO_SUITE:
         return all(ctx.get(name) is None for name in ('proof_suite','proof_crs_hash','proof_block_size'))
@@ -230,18 +232,46 @@ def _model_geometry(dimension,dataset='mnist'):
     return features, grid
 
 
+def _model_descriptor(value):
+    """Rebuild model meaning from pinned trusted metadata, without Torch."""
+    if 'model_descriptor' not in value:
+        return None
+    from dgfl.training import model_adapter
+    descriptor=model_adapter.validate_descriptor(value['model_descriptor'])
+    if type(value.get('scale')) is not int or not 1<=value['scale']<=65536:
+        raise ValueError('model quantization scale must be an integer between 1 and 65536')
+    if (type(value.get('dimension')) is not int or value['dimension']!=descriptor['dimension']
+            or value.get('dataset')!=descriptor['dataset']):
+        raise ValueError('model descriptor dimension or dataset mismatch')
+    return descriptor
+
+
+def _training_bounds(value,mode=None):
+    descriptor=_model_descriptor(value)
+    if descriptor is None or descriptor['model_name']=='linear':
+        return p._bounds(value)
+    # This is a plain-model shape check, not permission for the crypto protocol.
+    # All encrypted entry points retain their independent 20,000-coordinate cap.
+    if mode is not None and mode!='plain':
+        raise ValueError('full CNN currently supports explicit plain mode only')
+    bits=value.get('bits')
+    if type(bits) is not int or not 2<=bits<=16:
+        raise ValueError('unsupported range bits')
+    return 1<<(bits-1),descriptor['dimension']
+
+
 def _policy(value):
     """Validate the complete immutable policy supported by these role workers."""
     fields={'mode','scale','bits','dimension','members','batch_size'}
     if (not isinstance(value,dict) or not fields<=set(value)
-            or set(value)-fields-set(_PROOF_DEFAULTS)-set(SCREENING_DEFAULTS)-{'proof_crs_hash','dataset'}-TOPOLOGY_FIELDS):
+            or set(value)-fields-set(_PROOF_DEFAULTS)-set(SCREENING_DEFAULTS)-{'proof_crs_hash','dataset','model_descriptor'}-TOPOLOGY_FIELDS):
         raise ValueError('complete task policy is required')
     if value['mode'] not in ('plain','encrypted','dgflow','optimized'):
         raise ValueError('invalid task policy mode')
     if type(value['scale']) is not int or value['scale']<=0:
         raise ValueError('invalid task policy scale')
-    p._bounds(value)
-    if 'dataset' in value:
+    _training_bounds(value,value['mode'])
+    if _model_descriptor(value) is None and 'dataset' in value:
         _model_geometry(value['dimension'],value['dataset'])
     settings=_proof_policy(value)
     screening_settings(value)
@@ -250,12 +280,15 @@ def _policy(value):
     members=value['members']
     if (not isinstance(members,list) or not 2<=len(members)<=100
             or members!=[f'client{i}' for i in range(1,len(members)+1)]
-            or type(value['batch_size']) is not int or value['batch_size']!=2):
+            or type(value['batch_size']) is not int or not 2<=value['batch_size']<=len(members)):
         raise ValueError('invalid task policy members or fixed batches')
     topology=pinned_topology(value)
     if topology is not None and topology['client_count']!=len(members):
         raise ValueError('task topology membership mismatch')
-    return {**value,'members':list(members)}
+    result={**value,'members':list(members)}
+    descriptor=_model_descriptor(value)
+    if descriptor is not None: result['model_descriptor']=descriptor
+    return result
 
 
 def envelope_context(ctx):
@@ -275,12 +308,15 @@ def envelope_context(ctx):
 def _context(ctx):
     fields={'task_id','round_id','key_epoch','model_hash','bits','scale','dimension'}
     optional={'proof_suite','proof_block_size','proof_crs_hash'}
-    data_fields={'dataset'}
+    data_fields={'dataset','model_descriptor'}
     if not isinstance(ctx,dict) or not fields<=set(ctx) or set(ctx)-fields-optional-data_fields-TOPOLOGY_FIELDS:
         raise ValueError('invalid round context')
-    _safe_id(ctx['task_id']); _safe_id(ctx['key_epoch']); p._bounds(ctx)
-    if 'dataset' in ctx:
+    _safe_id(ctx['task_id']); _safe_id(ctx['key_epoch']); _training_bounds(ctx)
+    descriptor=_model_descriptor(ctx)
+    if descriptor is None and 'dataset' in ctx:
         _model_geometry(ctx['dimension'],ctx['dataset'])
+    if descriptor is not None and descriptor['model_name']!='linear' and set(ctx)&optional:
+        raise ValueError('plain CNN context cannot contain cryptographic proof fields')
     pinned_topology(ctx)
     suite,_=p.proof_settings(ctx)
     if suite=='legacy' and set(ctx)&optional:
@@ -295,7 +331,9 @@ def _context(ctx):
             or not isinstance(ctx['model_hash'],str)
             or not re.fullmatch(r'[0-9a-f]{64}',ctx['model_hash'])):
         raise ValueError('invalid round context')
-    return dict(ctx)
+    result=dict(ctx)
+    if descriptor is not None: result['model_descriptor']=descriptor
+    return result
 
 
 def authorization(identity,certificates,ctx):
@@ -388,6 +426,8 @@ class RoleWorker:
             raise ValueError('round context differs from pinned task topology')
         if ctx.get('dataset','mnist')!=policy.get('dataset','mnist'):
             raise ValueError('round context differs from pinned task dataset')
+        if ctx.get('model_descriptor')!=policy.get('model_descriptor'):
+            raise ValueError('round context differs from pinned model descriptor')
 
     # Same derivation the role harnesses import as ``envelope_context``.
     _envelope_context=staticmethod(envelope_context)
@@ -446,7 +486,9 @@ class RoleWorker:
         if self.node_id not in policy['members']:
             raise ValueError('task policy does not enroll this training client')
         dataset=policy.get('dataset','mnist')
-        _features,grid=_model_geometry(policy['dimension'],dataset)
+        descriptor=_model_descriptor(policy)
+        if descriptor is None:
+            _features,grid=_model_geometry(policy['dimension'],dataset)
         parameters_extra={}
         if policy.get('proof_suite')==_LEGO_SUITE and policy['mode']!='plain':
             start=time.perf_counter()
@@ -459,7 +501,11 @@ class RoleWorker:
                 raise ValueError('task data partition and policy already fixed; create a new task')
             return {**saved,**parameters_extra}
         if target.exists(): raise ValueError('existing task data has no registered policy; create a new task')
-        x,y,_,_=load_dataset(self.runtime.parent/'data',dataset,args['train_limit'],100,grid=grid)
+        if descriptor is None:
+            x,y,_,_=load_dataset(self.runtime.parent/'data',dataset,args['train_limit'],100,grid=grid)
+        else:
+            from dgfl.training import model_adapter
+            x,y,_,_=model_adapter.load_dataset(descriptor,self.runtime.parent/'data',args['train_limit'],100)
         indices=partition_clients(y,len(policy['members']),args['seed'],args['non_iid'])[policy['members'].index(self.node_id)]
         target.parent.mkdir(parents=True,exist_ok=True)
         temp=target.with_suffix('.tmp.npz'); np.savez_compressed(temp,x=x[indices],y=y[indices]); temp.replace(target)
@@ -487,9 +533,14 @@ class RoleWorker:
         jobs=[]; submitted=list(packets)
         for cid in submitted:
             materials=[]; seen=set()
-            for signed in all_keys[cid]:
-                sender=signed['sender']
+            for envelope in all_keys[cid]:
+                # The coordinator relays opaque shares. Only the pinned owner
+                # can open them; a public signed share is not a fallback format.
+                if not isinstance(envelope,bytes):
+                    raise ValueError('owned validation keys must be sealed to the assigned authority')
+                sender=parse_frame(envelope)['sender']
                 if sender not in authorities or sender in seen: raise ValueError('invalid validation key signer')
+                signed=self.identity.open(envelope,'owned-validation-key',self._envelope_context(self.ctx),sender)['payload']
                 seen.add(sender); value=self.identity.verify_public(signed,'validation-key',sender)
                 if (value['context_hash']!=b.digest(self.ctx) or value['client_id']!=cid
                         or value['material']['authority_id']!=node_number(sender,'authority')):
@@ -558,6 +609,7 @@ class RoleWorker:
 
     def _complete_authorization(self,packets,results):
         scores={}; valid_clients=set(); validations=[]
+        suite=self.policy.get('proof_suite'); crs=self.policy.get('proof_crs_hash')
         for cid in self.auth.clients:
             valid=False; score=None; reason='客户端未在本轮提交'
             if cid in results:
@@ -566,12 +618,29 @@ class RoleWorker:
                     valid_clients.add(cid)
                     if score is not None: scores[cid]=score; reason='密码验证通过'
                     else: reason='零范数或内积解码失败'
-            validations.append({'client_id':cid,'proof_valid':valid,'score':score,'decision':'pending','reason':reason})
+            # Record the public cryptographic objects the owner verdict is bound
+            # to. A row without a submission carries nulls rather than zeros so a
+            # consumer can tell "no submission" from "zero-valued field".
+            # The public owner path carries a hashed `proof_hash`; the legacy
+            # single-process path still carries the raw `proof`. Mirror
+            # `submission_core` so one field means the same thing on both.
+            core=packets.get(cid)
+            proof_hash=None
+            if core is not None:
+                proof_hash=(core['proof_hash'] if 'proof_hash' in core
+                            else b.digest(core['proof']) if 'proof' in core else None)
+            validations.append({'client_id':cid,'proof_valid':valid,'score':score,'decision':'pending','reason':reason,
+                                'proof_suite':suite,
+                                'proof_crs_hash':crs,
+                                'norm_squared':core['norm_squared'] if core is not None else None,
+                                'proof_hash':proof_hash,
+                                'packet_hash':b.digest(submission_core(core)) if core is not None else None})
         screening=screening_settings(self.policy); rejection_reasons={}
         if self.mode=='encrypted': candidates=valid_clients
         else: candidates,rejection_reasons=screen(scores,{cid:packets[cid]['norm_squared'] for cid in scores},screening)
         strategy=screening.get('batch_strategy','fixed')
-        approved=apply_batches(candidates,self.clients,strategy=strategy); collateral=sorted(candidates-set(approved))
+        approved=apply_batches(candidates,self.clients,strategy=strategy,batch_size=self.policy['batch_size'])
+        collateral=sorted(candidates-set(approved))
         for row in validations:
             cid=row['client_id']
             if cid in approved: row.update(decision='accepted',reason='通过并纳入聚合')
@@ -580,7 +649,8 @@ class RoleWorker:
             elif cid in scores: row.update(decision='rejected',reason=rejection_reasons[cid])
             else: row['decision']='rejected'
         manifest={'context_hash':b.digest(self.ctx),'members':list(self.policy['members']),'approved':approved,
-                  'packet_hashes':{cid:b.digest(submission_core(packets[cid])) for cid in approved},'batch_size':2}
+                  'packet_hashes':{cid:b.digest(submission_core(packets[cid])) for cid in approved},
+                  'batch_size':self.policy['batch_size']}
         if screening: manifest['screening']=screening
         topology=pinned_topology(self.policy)
         if topology is not None: manifest.update(topology)
@@ -592,13 +662,14 @@ class RoleWorker:
         if action=='begin':
             ctx=_context(payload['context'])
             reference=payload['reference']; clients=payload['clients']; mode=payload['mode']
+            _training_bounds(ctx,mode)
             if type(clients) is not int or not 2<=clients<=100 or mode not in ('encrypted','dgflow','optimized'):
                 raise ValueError('invalid task policy')
             policy=_policy({'mode':mode,'scale':ctx['scale'],'bits':ctx['bits'],'dimension':ctx['dimension'],
                             'members':[f'client{i}' for i in range(1,clients+1)],'batch_size':2})
             if 'policy' in payload:
                 supplied=_policy(payload['policy'])
-                if any(supplied[k]!=policy[k] for k in policy):
+                if any(supplied[k]!=policy[k] for k in policy if k!='batch_size'):
                     raise ValueError('authority task policy mismatch')
                 policy=supplied
             self._check_cluster_policy(policy)
@@ -744,7 +815,13 @@ class RoleWorker:
         if action=='validation_key':
             if set(payload)!={'client_id'}: raise ValueError('only the fixed reference function is authorized')
             cid=payload['client_id']; material=self.auth.validation_key(cid,self.reference)
-            return self.identity.sign_public('validation-key',{'context_hash':b.digest(self.ctx),'client_id':cid,'material':material})
+            signed=self.identity.sign_public('validation-key',{'context_hash':b.digest(self.ctx),'client_id':cid,'material':material})
+            if pinned_topology(self.policy) is not None:
+                return self.identity.seal(topology['client_authorities'][cid],'owned-validation-key',signed,
+                                          self._envelope_context(self.ctx))
+            # Unpinned policies are restricted to legacy fixtures; a deployed
+            # cluster rejects them before the task begins.
+            return signed
         if action=='validation_keys':
             if set(payload)!={'client_ids'}: raise ValueError('only fixed reference functions are authorized')
             clients=payload['client_ids']
@@ -863,8 +940,17 @@ class RoleWorker:
         raise ValueError('unsupported authority operation')
 
     def _train(self,args):
+        from dgfl.training.attacks import attack_settings
         from dgfl.training.model import attack_weights, train_local
+        attack,target=attack_settings(args)
+        if attack=='dropout':
+            raise ValueError('dropout is simulated by the coordinator withholding the train request')
         ctx=_context(args['context']); mode=args['mode']; reference=args['reference']
+        _training_bounds(ctx,mode)
+        descriptor=_model_descriptor(ctx)
+        if descriptor is not None:
+            from dgfl.training import model_adapter
+            model_adapter._execution(descriptor,args.get('backend','numpy'),args.get('training_device','cpu'))
         data_path=self.folder/'data'/(ctx['task_id']+'.npz'); registration=data_path.with_suffix('.json')
         if not registration.exists(): raise ValueError('training task has no registered policy')
         saved=json.loads(registration.read_text('utf8')); policy=_policy(saved.get('policy'))
@@ -877,8 +963,9 @@ class RoleWorker:
                 or not _matches_proof_policy(ctx,policy)
                 or ('policy' in args and _policy(args['policy'])!=policy)):
             raise ValueError('training request violates registered task policy')
-        features,_=_model_geometry(policy['dimension'],policy.get('dataset','mnist'))
-        offset,d=p._bounds(ctx)
+        if descriptor is None:
+            features,_=_model_geometry(policy['dimension'],policy.get('dataset','mnist'))
+        offset,d=_training_bounds(ctx,mode)
         if (b.digest(reference)!=ctx['model_hash'] or len(reference)!=d
                 or any(type(x) is not int or not -offset<=x<offset for x in reference)):
             raise ValueError('public model mismatch')
@@ -921,8 +1008,11 @@ class RoleWorker:
         binding={**business_round,'context':ctx,'request_hash':request_hash,'status':'pending'}
         atomic_bytes(marker,binding)
         with np.load(data_path,allow_pickle=False) as data: x,y=data['x'].copy(),data['y'].copy()
-        attack=args.get('attack','none')
         if attack=='label_flip': y=(y+1)%10
+        elif attack=='targeted_label_flip':
+            # Explicit all-to-one simulation. The paper does not specify which
+            # source labels to flip, so this is a reconstruction choice.
+            y=np.full_like(y,target)
         training_metrics=[]; metrics_eval_s=0.; metrics_callback_s=0.
 
         def record_epoch(metrics):
@@ -942,10 +1032,34 @@ class RoleWorker:
                 metrics_callback_s+=time.perf_counter()-callback_start
 
         start=time.perf_counter()
-        weights=train_local(np.asarray(reference,dtype=float)/ctx['scale'],x,y,features=features,epochs=args['local_epochs'],
-                            learning_rate=.3,batch_size=64,seed=args['seed'],backend=args.get('backend','numpy'),
-                            on_epoch=record_epoch)
-        if attack in ('sign_flip','random'): weights=attack_weights(weights,attack,args['seed'],features=features)
+        if attack=='free_rider':
+            # Echoing the global model is the smart free-rider left as future
+            # work in the paper, not a demonstrated detectable attack.
+            # A free-rider submits the round's starting global model unchanged
+            # instead of a model trained on its own data: it performs no local
+            # work and still hopes to be aggregated. attack_weights returns the
+            # supplied model unchanged by contract, so the attack is expressed
+            # by passing the reference model rather than trained weights.
+            if descriptor is None:
+                weights=attack_weights(np.asarray(reference,dtype=float)/ctx['scale'],
+                                       'free_rider',args['seed'],features=features)
+            else:
+                weights=model_adapter.attack_weights(descriptor,np.asarray(reference,dtype=descriptor['input_dtype'])/ctx['scale'],
+                    'free_rider',args['seed'],backend=args.get('backend','numpy'),device=args.get('training_device','cpu'))
+        else:
+            if descriptor is None:
+                weights=train_local(np.asarray(reference,dtype=float)/ctx['scale'],x,y,features=features,epochs=args['local_epochs'],
+                                    learning_rate=.3,batch_size=64,seed=args['seed'],backend=args.get('backend','numpy'),
+                                    on_epoch=record_epoch)
+                if attack in ('sign_flip','random'):
+                    weights=attack_weights(weights,attack,args['seed'],features=features)
+            else:
+                weights=model_adapter.train_local(descriptor,np.asarray(reference,dtype=descriptor['input_dtype'])/ctx['scale'],x,y,
+                    epochs=args['local_epochs'],batch_size=64,seed=args['seed'],backend=args.get('backend','numpy'),
+                    device=args.get('training_device','cpu'),on_epoch=record_epoch)
+                if attack in ('sign_flip','random'):
+                    weights=model_adapter.attack_weights(descriptor,weights,attack,args['seed'],
+                        backend=args.get('backend','numpy'),device=args.get('training_device','cpu'))
         q=quantize(weights,ctx['scale'],ctx['bits'])
         training_s=max(0.,time.perf_counter()-start-metrics_eval_s-metrics_callback_s)
         if mode=='plain':

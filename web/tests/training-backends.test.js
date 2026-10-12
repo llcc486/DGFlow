@@ -90,7 +90,7 @@ test('an unavailable saved Torch selection is blocked before submission and neve
 
 test('NumPy training submits normally with independent GPU cryptography configuration', async () => {
   const previous = globalThis.fetch, requests = []
-  const config = Object.freeze({ backend: 'numpy', compute_device: 'gpu', mode: 'dgflow', client_count: 9 })
+  const config = Object.freeze({ backend: 'numpy', compute_device: 'gpu', mode: 'dgflow', client_count: 9, batch_size: 3 })
   resetStore(capabilities, 9)
   globalThis.fetch = async (url, options) => {
     requests.push({ url, options })

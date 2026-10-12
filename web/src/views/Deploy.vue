@@ -5,15 +5,16 @@ import StepCard from '../components/StepCard.vue'
 import TopologyGraph from '../components/TopologyGraph.vue'
 import PageHead from '../components/PageHead.vue'
 import { consoleStore as store } from '../lib/store'
-import { ATTACKS, MODES, attackName, modeName } from '../lib/format'
+import { ATTACKS, MODES, attackName, modeName, proofSuiteName } from '../lib/format'
 import { computeDeviceError, computeDeviceStatus } from '../lib/computeDevices'
 import { api, errorText } from '../lib/api'
 import { DEFAULT_TOPOLOGY, TOPOLOGY_FIELDS, deployedTopology, deploymentState, deploymentConfigError, runCompatibilityError, validClientCount } from '../lib/deployment.js'
 import { nodesWithAuthorities, previewNodes } from '../lib/topology.js'
 import { trainingBackendError, trainingBackendStatus } from '../lib/trainingBackends.js'
 import { supportsCloudStrategy, withCloudStrategy } from '../lib/cloudStrategies.js'
-import { DATASETS, datasetInfo, datasetReady, modelConfigurationError, modelGeometry, modelSizes } from '../lib/datasets.js'
+import { DATASETS, MODEL_ARCHITECTURES, datasetInfo, datasetReady, modelConfigurationError, modelGeometry, modelInfo, modelSizes } from '../lib/datasets.js'
 import { trainingEligibility } from '../lib/trainingEligibility.js'
+import { batchConfigurationError, batchSizeOptions, fixedBatchPreview } from '../lib/batchGrouping.js'
 
 const emit = defineEmits(['deployed'])
 
@@ -23,6 +24,8 @@ const form = reactive({
   rounds: 5,
   seed: 42,
   attack: 'none',
+  attack_target_class: 0,
+  attack_client_ids: null,
   malicious_clients: 0,
   non_iid: true,
   offline_aggregators: 0,
@@ -33,16 +36,36 @@ const form = reactive({
   dataset: store.selectedDataset.value,
   compute_device: 'cpu',
   grid: 8,
+  model_name: null, bits: null, scale: null,
   execution: 'auto', rpc_workers: 6,
   cloud_strategy: 'auto',
   proof_suite: 'lego_norm_v1', verification: 'deterministic',
   verification_workers: 1, verification_threads: 2, proof_crs_hash: null,
-  min_cosine: 0, max_norm_squared: null, max_norm_ratio: 2, batch_strategy: 'regroup',
+  min_cosine: 0, max_norm_squared: null, max_norm_ratio: 2, min_norm_ratio: null, batch_strategy: 'fixed', batch_size: 2,
 })
+const availableBatchSizes = computed(() => batchSizeOptions(form.client_count))
+const groupingConfiguration = computed(() => ({ ...form, batch_size: form.batch_strategy === 'regroup' ? 2 : form.batch_size }))
+const groupingError = computed(() => batchConfigurationError(groupingConfiguration.value))
+const plannedBatches = computed(() => fixedBatchPreview(form))
 const advanced = ref(false)
 const selectedDataset = computed(() => datasetInfo(form.dataset))
 const selectedDatasetReady = computed(() => datasetReady(store.status.value, form.dataset))
-const geometry = computed(() => modelGeometry(form.dataset, form.grid))
+const selectedArchitecture = computed(() => modelInfo(form.model_name))
+const isCnn = computed(() => Boolean(selectedArchitecture.value))
+watch(() => form.model_name, name => {
+  if (modelInfo(name)) {
+    if (form.bits == null) form.bits = 8
+    if (form.scale == null) form.scale = 128
+  } else if (name == null || name === 'linear') {
+    form.bits = null
+    form.scale = null
+  }
+})
+function applyCnnPlainPreset() {
+  Object.assign(form, { model_name: `paper_cnn_${form.dataset}`, mode: 'plain', backend: 'torch',
+    compute_device: 'cpu', proof_crs_hash: null, bits: 12, scale: 2048, rounds: 10, local_epochs: 10 })
+}
+const geometry = computed(() => modelGeometry(form.dataset, form.grid, form.model_name))
 const availableModelSizes = computed(() => modelSizes(form.dataset))
 watch(() => form.dataset, dataset => {
   store.selectedDataset.value = dataset
@@ -63,7 +86,7 @@ const topologyView = ref('live')
 const deployment = computed(() => deploymentState(store.status.value, form, store.connected.value,
   store.hasActiveRun.value, store.deploying.value || store.submitting.value || store.preparing.value || gpuPreparing.value))
 const compatibilityError = computed(() => store.connected.value ? runCompatibilityError(store.status.value, form.mode) : '')
-const participants = computed(() => trainingEligibility(store.status.value, form, store.connected.value))
+const participants = computed(() => trainingEligibility(store.status.value, groupingConfiguration.value, store.connected.value))
 const showPreview = computed(() => topologyView.value === 'plan' || !store.nodes.value.length)
 const topologyNodes = computed(() => showPreview.value ? previewNodes(form.client_count, form.authority_count, form.aggregator_count)
   : nodesWithAuthorities(store.nodes.value, store.status.value?.client_authorities))
@@ -89,7 +112,7 @@ async function applyDeployment(startNodes = true) {
 }
 let parametersController = null
 let gpuController = null
-const matchingParameters = computed(() => proofParameters.value.filter(parameter =>
+const matchingParameters = computed(() => isCnn.value ? [] : proofParameters.value.filter(parameter =>
   parameter.dimension === geometry.value.dimension && parameter.bits === 8,
 ))
 
@@ -143,7 +166,19 @@ function applyPreset(preset) {
   if (form.attack !== 'none') form.malicious_clients = Math.max(1, form.malicious_clients)
 }
 
+const attackClientIdsText = computed({
+  get: () => Array.isArray(form.attack_client_ids) ? form.attack_client_ids.join(', ') : '',
+  set: value => {
+    const text = String(value).trim()
+    form.attack_client_ids = text ? text.split(/[,，、\s]+/).filter(Boolean) : null
+  },
+})
+
 const currentAttack = computed(() => ATTACKS.find(a => a.value === form.attack))
+const robustnessEnabled = computed(() => ['dgflow', 'optimized'].includes(form.mode))
+const attackClasses = computed(() => form.dataset === 'cifar10'
+  ? ['飞机', '汽车', '鸟', '猫', '鹿', '狗', '青蛙', '马', '船', '卡车']
+  : Array.from({ length: 10 }, (_, index) => `数字 ${index}`))
 const computeStatus = computed(() => computeDeviceStatus(store.status.value?.capabilities?.compute, store.connected.value))
 const deviceError = computed(() => computeDeviceError(form.compute_device, form.mode, computeStatus.value))
 const backendStatus = computed(() => trainingBackendStatus(store.status.value?.capabilities?.training_backends, store.connected.value))
@@ -185,23 +220,38 @@ const formErrors = computed(() => {
   const checkInteger = (value, low, high, label) => {
     if (!Number.isInteger(value) || value < low || value > high) errors.push(`${label}需为 ${low}–${high} 的整数。`)
   }
-  checkInteger(form.rounds, 1, 20, '全局训练轮数')
+  checkInteger(form.rounds, 1, 100, '全局训练轮数')
   const topologyError = deploymentConfigError(form)
   if (topologyError) errors.push(topologyError)
+  if (groupingError.value) errors.push(groupingError.value)
   checkInteger(form.seed, 0, 2147483647, '随机种子')
   checkInteger(form.malicious_clients, 0, form.client_count, '异常客户端数量')
+  if (!ATTACKS.some(attack => attack.value === form.attack)) errors.push('请选择支持的异常类型。')
+  checkInteger(form.attack_target_class, 0, 9, '攻击目标类别')
+  if (form.attack_client_ids != null) {
+    const ids = form.attack_client_ids
+    if (!Array.isArray(ids)) errors.push('攻击客户端身份需为列表或留空。')
+    else {
+      if (ids.length !== form.malicious_clients) errors.push('攻击客户端身份数量必须与异常客户端数量一致。')
+      if (new Set(ids).size !== ids.length) errors.push('攻击客户端身份不能重复。')
+      const declared = new Set(Array.from({ length: Number.isInteger(form.client_count) ? Math.max(0, Math.min(100, form.client_count)) : 0 }, (_, index) => `client${index + 1}`))
+      if (ids.some(id => typeof id !== 'string' || !declared.has(id))) errors.push('攻击客户端身份必须属于已声明客户端 client1 至 client' + form.client_count + '。')
+      if (form.attack === 'none' && ids.length) errors.push('无异常场景不能指定攻击客户端身份；请清空列表。')
+    }
+  }
   checkInteger(form.offline_aggregators, 0, form.aggregator_count, '本轮排除云服务器数量')
   checkInteger(form.train_limit, 120, selectedDataset.value?.trainCount ?? 60000, '训练样本上限')
   checkInteger(form.test_limit, 100, 10000, '测试样本上限')
-  checkInteger(form.local_epochs, 1, 5, '本地训练轮数')
+  checkInteger(form.local_epochs, 1, 20, '本地训练轮数')
   checkInteger(form.rpc_workers, 1, 24, '并行请求数')
   checkInteger(form.verification_workers, 1, 8, '每个验证节点的工作进程数')
   checkInteger(form.verification_threads, 1, 4, '每个验证节点的线程预算')
   if (!Number.isFinite(form.min_cosine) || form.min_cosine < -1 || form.min_cosine > 1) errors.push('最低余弦相似度需为 −1 到 1 之间的数值。')
   if (!Number.isFinite(form.max_norm_ratio) || form.max_norm_ratio < 1) errors.push('最大范数倍率需为至少 1 的数值。')
+  if (form.min_norm_ratio !== null && form.min_norm_ratio !== '' && (!Number.isFinite(form.min_norm_ratio) || form.min_norm_ratio <= 0 || form.min_norm_ratio > 1)) errors.push('最小范数倍率需大于 0 且不超过 1，或留空关闭。')
   if (form.max_norm_squared !== null && form.max_norm_squared !== '' && (!Number.isSafeInteger(form.max_norm_squared) || form.max_norm_squared < 1)) errors.push('平方范数上限需为正整数或留空。')
   if (form.proof_suite !== 'lego_norm_v1') errors.push('当前仅支持 LegoGroth16 证明方案，请重置实验配置。')
-  if (form.mode !== 'plain') {
+  if (form.mode !== 'plain' && !isCnn.value) {
     if (proofParametersLoading.value) errors.push('正在检查已安装的证明参数。')
     else if (proofParametersError.value) errors.push(proofParametersError.value)
     else if (!proofParametersAvailable.value) errors.push('后端缺少 Lego 原生扩展，请安装后重启服务。')
@@ -235,12 +285,16 @@ const blockedReason = computed(() => {
 const onlineCount = computed(() => store.connected.value ? store.nodes.value.filter(n => n.status === 'online').length : null)
 
 function runConfiguration() {
-  const { proof_crs_hash, ...configuration } = form
+  const { proof_crs_hash, model_name, bits, scale, ...configuration } = form
   return withCloudStrategy({
     ...configuration,
+    ...(model_name == null ? {} : { model_name }),
+    ...(isCnn.value ? { bits, scale } : {}),
     proof_suite: 'lego_norm_v1',
+    batch_size: groupingConfiguration.value.batch_size,
     ...(form.mode === 'plain' ? {} : { proof_crs_hash }),
     max_norm_squared: form.max_norm_squared === '' ? null : form.max_norm_squared,
+    min_norm_ratio: form.min_norm_ratio === '' ? null : form.min_norm_ratio,
     malicious_clients: form.attack === 'none' ? 0 : form.malicious_clients,
   }, store.status.value)
 }
@@ -254,13 +308,13 @@ async function launch() {
 function reset() {
   Object.assign(form, {
     ...(deployment.value.locked ? Object.fromEntries(TOPOLOGY_FIELDS.map(field => [field, form[field]])) : deployment.value.actualTopology ?? DEFAULT_TOPOLOGY),
-    mode: 'dgflow', rounds: 5, seed: 42, attack: 'none', malicious_clients: 0,
+    mode: 'dgflow', rounds: 5, seed: 42, attack: 'none', attack_target_class: 0, attack_client_ids: null, malicious_clients: 0,
     non_iid: true, offline_aggregators: 0, train_limit: 6000, test_limit: 1000,
-    local_epochs: 1, backend: 'numpy', dataset: 'mnist', compute_device: 'cpu', grid: 8,
+    local_epochs: 1, backend: 'numpy', dataset: 'mnist', compute_device: 'cpu', grid: 8, model_name: null, bits: null, scale: null,
     execution: 'auto', rpc_workers: 6,
     cloud_strategy: 'auto',
     proof_suite: 'lego_norm_v1', verification: 'deterministic', verification_workers: 1, verification_threads: 2, proof_crs_hash: null,
-    min_cosine: 0, max_norm_squared: null, max_norm_ratio: 2, batch_strategy: 'regroup',
+    min_cosine: 0, max_norm_squared: null, max_norm_ratio: 2, min_norm_ratio: null, batch_strategy: 'fixed', batch_size: 2,
   })
   if (!deployment.value.locked) topologyTouched.value = false
   store.clearMessages()
@@ -336,36 +390,55 @@ function exportConfig() {
               </div>
               <h3>{{ mode.name }}</h3>
               <p>{{ mode.description }}</p>
+              <p class="nb-mode-protection" :class="{ same: mode.id === 'optimized' }">{{ mode.protection }}</p>
             </button>
           </div>
           <div v-if="form.mode === 'plain'" class="nb-notice warning" style="margin:0">
             <LabIcon name="info" :size="16" />
-            <div>明文基线：聚合端能够读取本地模型，仅用于对照实验，不提供密码保护。</div>
+            <div>{{ modeName('plain') }}：聚合端能够读取本地模型，不执行证明校验或鲁棒筛选；用于攻击防御对照。</div>
           </div>
           <div v-else class="nb-notice info" style="margin:0">
             <LabIcon name="lock" :size="16" />
-            <div>使用后端真实密码实现；界面仅展示允许公开的协议状态与统计结果。</div>
+            <div>{{ robustnessEnabled ? '启用密码学验证及范数、余弦相似度和聚类筛选。筛选效果需以实际实验指标判断。' : modeName('encrypted') + '：校验密文与证明，鲁棒筛选关闭；下方范数倍率和最低余弦相似度设置不生效。' }}</div>
           </div>
         </StepCard>
 
         <StepCard no="3" title="训练条件" icon="layers" badge="参数随记录保存">
           <div class="nb-grid cols-2" style="gap:18px">
+            <div class="nb-field">
+              <label for="batch-strategy">接纳分组方式</label>
+              <select id="batch-strategy" v-model="form.batch_strategy" :disabled="store.hasActiveRun.value || store.submitting.value">
+                <option value="fixed">固定批次（默认）</option>
+                <option value="regroup">合格成员重新组队（可用性扩展）</option>
+              </select>
+              <small v-if="form.batch_strategy === 'fixed'">同组成员跨轮保持不变，一人缺席或未通过时整组退出本轮。</small>
+              <small v-else class="text-warn">重新组队保留至少两名合格成员，不使用固定组大小 σ；不具备论文固定批次的跨轮 MRPL 隐私保证。</small>
+            </div>
+            <div v-if="form.batch_strategy === 'fixed'" class="nb-field">
+              <label for="batch-size">固定组大小 σ</label>
+              <select id="batch-size" v-model.number="form.batch_size" :disabled="store.hasActiveRun.value || store.submitting.value">
+                <option v-if="!availableBatchSizes.includes(form.batch_size)" :value="form.batch_size" disabled>当前 σ={{ form.batch_size }} 与人数不匹配，请重新选择</option>
+                <option v-for="size in availableBatchSizes" :key="size" :value="size">{{ size }} 人 / 组 · 共 {{ form.client_count / size }} 组{{ size === 2 ? '（默认）' : '' }}</option>
+              </select>
+              <small>启动前选择，启动后锁定。σ 越大，一人异常时连带退出的人数越多。</small>
+              <small v-if="groupingError" class="text-warn" role="alert">{{ groupingError }}</small>
+            </div>
             <label class="nb-field">
               <label>数据集 <small>DATASET</small></label>
               <select v-model="form.dataset" :disabled="store.preparing.value || store.submitting.value">
                 <option v-for="dataset in DATASETS" :key="dataset.id" :value="dataset.id">{{ dataset.name }} · {{ dataset.input }}</option>
               </select>
-              <small>使用池化后的线性 softmax 模型；CIFAR-10 保留 RGB 三通道。</small>
+              <small>{{ isCnn ? 'CNN 使用完整分辨率原图；CIFAR-10 保留 RGB 三通道。' : '使用池化后的线性 softmax 模型；CIFAR-10 保留 RGB 三通道。' }}</small>
             </label>
             <label class="nb-field">
               <label>全局训练轮数 <small>ROUNDS</small></label>
-              <div class="nb-input-unit"><input v-model.number="form.rounds" type="number" min="1" max="20" required /><span>轮</span></div>
-              <small>1–20 轮</small>
+              <div class="nb-input-unit"><input v-model.number="form.rounds" type="number" min="1" max="100" required /><span>轮</span></div>
+              <small>1–100 轮；论文攻击曲线使用至 100 轮，实际耗时以实验记录为准。</small>
             </label>
             <label class="nb-field">
               <label>本地训练轮数 <small>EPOCHS</small></label>
-              <div class="nb-input-unit"><input v-model.number="form.local_epochs" type="number" min="1" max="5" required /><span>轮</span></div>
-              <small>每个客户端 1–5 轮</small>
+              <div class="nb-input-unit"><input v-model.number="form.local_epochs" type="number" min="1" max="20" required /><span>轮</span></div>
+              <small>每个客户端 1–20 轮；可设置论文 MNIST 使用的 10 个本地 epoch，实际耗时以实验记录为准。</small>
             </label>
             <label class="nb-field">
               <label>随机种子 <small>SEED</small></label>
@@ -382,7 +455,32 @@ function exportConfig() {
               <input v-model.number="form.test_limit" type="number" min="100" max="10000" required />
               <small>100–10,000 条</small>
             </label>
-            <label class="nb-field">
+            <div class="nb-field">
+              <label for="model-architecture">模型类型</label>
+              <select id="model-architecture" v-model="form.model_name">
+                <option :value="null">现有线性模型（默认）</option>
+                <option v-for="model in MODEL_ARCHITECTURES" :key="model.id" :value="model.id">{{ model.name }} · {{ model.dimension.toLocaleString('zh-CN') }} 参数（仅明文对照）</option>
+              </select>
+              <small v-if="isCnn">{{ selectedArchitecture.input }}，所有参数均训练。当前仅提供明文训练与量化对照，无需 CRS，不能视为加密 DGFlow 或安全方案复现。</small>
+              <div v-if="isCnn && form.mode !== 'plain'" id="cnn-protocol-unavailable" class="nb-notice warning" role="alert" style="margin:0">
+                <LabIcon name="info" :size="16" />
+                <div>CNN 加密训练尚未接通，当前没有可用的 CNN CRS。已有 650／1,930 维参数用于线性模型，不能用于此 CNN。可点击下方预设运行明文对照；需要加密与防御实验时请选择线性模型。</div>
+              </div>
+              <small v-else>沿用现有线性模型及 8 位／128 量化；模型类型省略时保留历史行为。</small>
+              <button type="button" class="nb-btn outline small" style="white-space:normal" @click="applyCnnPlainPreset">CNN 明文对照：Torch · 12 位／2048</button>
+              <small>此预设明确选择明文、Torch 和 10×10 轮次；可配置后再启动，不会自动运行。</small>
+            </div>
+            <div v-if="isCnn" class="nb-field">
+              <label for="model-quantization-bits">CNN 量化位宽</label>
+              <input id="model-quantization-bits" v-model.number="form.bits" type="number" min="2" max="16" step="1" required />
+              <small>仅控制整数编码范围；未执行范围证明。</small>
+            </div>
+            <div v-if="isCnn" class="nb-field">
+              <label for="model-quantization-scale">CNN 量化比例</label>
+              <input id="model-quantization-scale" v-model.number="form.scale" type="number" min="1" max="65536" step="1" required />
+              <small>8 位／128 与 12 位／2048 的收敛及裁剪需按实验判断，预设不代表准确率保证。</small>
+            </div>
+            <label v-if="!isCnn" class="nb-field">
               <label>模型规模 <small>MODEL</small></label>
               <select v-model.number="form.grid">
                 <option v-for="size in availableModelSizes" :key="size.grid" :value="size.grid">{{ size.label }}</option>
@@ -417,6 +515,19 @@ function exportConfig() {
               </div>
               <small>0–{{ form.client_count }} 个；无异常时固定为 0</small>
             </label>
+            <label v-if="form.attack === 'targeted_label_flip'" class="nb-field">
+              <label for="attack-target-class">攻击目标类别</label>
+              <select id="attack-target-class" v-model.number="form.attack_target_class">
+                <option v-for="(name, index) in attackClasses" :key="index" :value="index">{{ index }} · {{ name }}</option>
+              </select>
+              <small>攻击客户端使用此目标标签训练；该配置随实验记录保存。</small>
+            </label>
+            <div v-if="advanced || form.attack_client_ids != null" class="nb-field">
+              <label for="attack-client-ids">攻击客户端身份（可选）</label>
+              <input id="attack-client-ids" v-model="attackClientIdsText" type="text" placeholder="client1, client3" />
+              <small>留空使用前 {{ form.malicious_clients }} 个客户端；填写时用逗号或空格分隔，数量须与异常客户端数量一致。这里只设置实验注入位置，不参与防御筛选。</small>
+              <small>固定批次下，可根据本次实验清单的分组对比同组与跨组攻击；攻击身份不会改变分组。缩减部署人数后，非法身份需明确修改。</small>
+            </div>
             <label class="nb-field">
               <label>
                 本轮排除云服务器
@@ -436,7 +547,7 @@ function exportConfig() {
             <div v-if="advanced"><dt>训练后端</dt><dd>{{ form.backend }}</dd></div>
           </div>
           <p class="nb-note">数据由后端在节点本地准备与划分，原始样本不上传控制服务。</p>
-          <p v-if="form.dataset === 'cifar10'" class="nb-note">首次准备会下载并校验约 162 MB 的 CIFAR-10 文件，请等待完成。当前接入 RGB 线性模型，论文 CNN 链路尚未接通。</p>
+          <p v-if="form.dataset === 'cifar10'" class="nb-note">首次准备会下载并校验约 162 MB 的 CIFAR-10 文件，请等待完成。线性模型保留 RGB 池化输入；CNN 明文对照使用完整 RGB 原图。</p>
           <button
             type="button" class="nb-btn outline block"
             :disabled="!store.connected.value || store.preparing.value || store.deploying.value || store.hasActiveRun.value || store.submitting.value"
@@ -513,15 +624,17 @@ function exportConfig() {
                 <option value="parallel">并行</option>
               </select>
             </label>
-            <label class="nb-field">
+            <div class="nb-field">
               <label>证明方案</label>
-              <select v-model="form.proof_suite" :disabled="form.mode === 'plain'">
-                <option value="lego_norm_v1">LegoGroth16 范围与范数证明（实验性，可信设置）</option>
-              </select>
+              <p class="nb-readonly-value" data-testid="proof-suite-fixed">
+                <LabIcon name="lock" :size="14" />
+                {{ form.mode === 'plain' ? '不生成密码证明' : isCnn ? 'CNN 加密协议尚未支持' : proofSuiteName(form.proof_suite) }}
+              </p>
               <small v-if="form.mode === 'plain'">明文基线不生成证明，无需可信设置参数。</small>
-              <small v-else>实验性证明已有篡改测试，尚无独立安全审计。</small>
-            </label>
-            <label v-if="form.mode !== 'plain'" class="nb-field">
+              <small v-else-if="isCnn">CNN 加密协议尚未接通，当前不生成密码证明，也没有可用 CRS。</small>
+              <small v-else>新建任务固定使用该方案，不是可选项；实验性证明已有篡改测试，尚无独立安全审计。</small>
+            </div>
+            <label v-if="form.mode !== 'plain' && !isCnn" class="nb-field">
               <label>已安装的可信设置参数 <small>CRS</small></label>
               <select v-model="form.proof_crs_hash" :disabled="proofParametersLoading || !proofParametersAvailable || !matchingParameters.length">
                 <option :value="null">请选择匹配的 CRS</option>
@@ -544,26 +657,23 @@ function exportConfig() {
             </label>
             <label class="nb-field">
               <label>最低余弦相似度</label>
-              <input v-model.number="form.min_cosine" type="number" min="-1" max="1" step="0.01" required />
-              <small>鲁棒模式先拒绝低于此值的更新，再进行相似度筛选。</small>
+              <input v-model.number="form.min_cosine" type="number" min="-1" max="1" step="0.01" :disabled="!robustnessEnabled" required />
+              <small>仅鲁棒模式生效；先拒绝低于此值的模型，再进行聚类筛选。</small>
             </label>
             <label class="nb-field">
               <label>最大范数倍率</label>
-              <input v-model.number="form.max_norm_ratio" type="number" min="1" step="0.1" required />
-              <small>相对有效提交的 L2 范数中位数；默认 2 倍，可筛除同方向幅度放大。</small>
+              <input v-model.number="form.max_norm_ratio" type="number" min="1" step="0.1" :disabled="!robustnessEnabled" required />
+              <small>仅鲁棒模式生效；相对有效提交的 L2 范数中位数，默认 2 倍。</small>
+            </label>
+            <label class="nb-field">
+              <label>最小范数倍率</label>
+              <input v-model.number="form.min_norm_ratio" type="number" min="0" max="1" step="any" :disabled="!robustnessEnabled" placeholder="留空表示不启用" />
+              <small>仅鲁棒模式生效；相对 L2 范数中位数的正数下界，最多 1。论文未规定此门限，默认关闭；是否改善防御需实验验证，也可能误拒诚实模型。</small>
             </label>
             <label class="nb-field">
               <label>量化平方范数上限</label>
-              <input v-model.number="form.max_norm_squared" type="number" min="1" step="1" placeholder="留空表示仅使用倍率门限" />
-              <small>作用于已证明的量化平方范数；留空时无绝对上限。</small>
-            </label>
-            <label class="nb-field">
-              <label>接纳分组方式</label>
-              <select v-model="form.batch_strategy">
-                <option value="regroup">合格成员重新组队（默认）</option>
-                <option value="fixed">固定两人批次（论文对照）</option>
-              </select>
-              <small>重新组队保留任意数量的合格成员（至少两名）；固定批次可能连带排除诚实伙伴。固定两人批次在奇数人数时，末位客户端不参与聚合。</small>
+              <input v-model.number="form.max_norm_squared" type="number" min="1" step="1" :disabled="!robustnessEnabled" placeholder="留空表示仅使用倍率门限" />
+              <small>仅鲁棒模式生效；作用于已证明的量化平方范数，留空时无绝对上限。</small>
             </label>
             <label v-if="form.mode !== 'plain'" class="nb-field">
               <label>云聚合方式</label>
@@ -589,9 +699,9 @@ function exportConfig() {
             <label for="training-backend">训练后端 <small>BACKEND</small></label>
             <select id="training-backend" v-model="form.backend" :aria-invalid="Boolean(backendError)" aria-describedby="training-backend-note training-backend-reason">
               <option value="numpy" :disabled="!backendStatus.numpy.available">numpy（默认，CPU）{{ backendStatus.numpy.available ? '' : ' · 未就绪' }}</option>
-              <option value="torch" :disabled="!backendStatus.torch.available">torch（可选，CPU float64）{{ backendStatus.torch.available ? ' · 可用' : ' · 不可用' }}</option>
+              <option value="torch" :disabled="!backendStatus.torch.available">torch（可选，CPU {{ isCnn ? 'float32，CNN' : 'float64，线性' }}）{{ backendStatus.torch.available ? ' · 可用' : ' · 不可用' }}</option>
             </select>
-            <small id="training-backend-note">NumPy 为默认训练后端；torch 使用 CPU float64，需所有训练客户端具备 PyTorch。训练后端与上方密码计算 CPU/GPU 独立。</small>
+            <small id="training-backend-note">线性模型默认 NumPy，可选 Torch float64；CNN 需要明确选择 Torch float32，需所有训练客户端具备 PyTorch。此处使用 CPU 训练；上方 GPU 选项控制密码计算，二者独立。</small>
             <small id="training-backend-reason" :class="{ 'text-warn': !backendStatus.torch.available }" role="status">{{ backendStatus.torch.available ? '所有训练客户端已声明 torch 可用。' : `torch 不可用：${backendStatus.torch.reason}` }}<template v-if="!backendStatus.torch.available && backendStatus.torch.unsupportedNodes.length"> 未就绪节点：{{ backendStatus.torch.unsupportedNodes.join('、') }}。</template></small>
             <small v-if="backendError" class="text-err">{{ backendError }}；已保留所选后端，请明确选择可用后端后再运行。</small>
           </label>
@@ -640,18 +750,25 @@ function exportConfig() {
             <div><dt>边缘 / 云服务器</dt><dd>{{ form.authority_count }} / {{ form.aggregator_count }}</dd></div>
             <div><dt>边缘 / 云门限</dt><dd>{{ form.authority_threshold }} / {{ form.authority_count }} · {{ form.aggregator_threshold }} / {{ form.aggregator_count }}</dd></div>
             <div><dt>执行策略</dt><dd>{{ modeName(form.mode) }}</dd></div>
-            <div><dt>执行方式 / 证明</dt><dd>{{ form.execution }} / {{ form.mode === 'plain' ? '明文基线，无需证明' : 'LegoGroth16' }}</dd></div>
+            <div><dt>执行方式 / 证明</dt><dd>{{ form.execution }} / {{ form.mode === 'plain' ? '不生成证明' : isCnn ? 'CNN 加密协议尚未支持' : proofSuiteName(form.proof_suite) }}</dd></div>
             <div><dt>密码计算设备</dt><dd>{{ form.compute_device.toUpperCase() }}</dd></div>
-            <div><dt>接纳分组</dt><dd>{{ form.batch_strategy === 'regroup' ? '合格成员重新组队' : '固定两人批次' }}</dd></div>
-            <div v-if="form.mode !== 'plain'"><dt>可信设置摘要</dt><dd class="mono">{{ form.proof_crs_hash ? form.proof_crs_hash.slice(0, 16) + '…' : '尚未选择' }}</dd></div>
+            <div><dt>接纳分组</dt><dd>{{ form.batch_strategy === 'regroup' ? '合格成员重新组队' : `固定 ${form.batch_size} 人批次（σ=${form.batch_size}）` }}</dd></div>
+            <div v-if="form.mode !== 'plain'"><dt>可信设置摘要</dt><dd class="mono">{{ isCnn ? 'CNN 暂无可用 CRS' : form.proof_crs_hash ? form.proof_crs_hash.slice(0, 16) + '…' : '尚未选择' }}</dd></div>
             <div><dt>全局 / 本地轮数</dt><dd>{{ form.rounds }} / {{ form.local_epochs }}</dd></div>
             <div><dt>随机种子</dt><dd class="mono">{{ form.seed }}</dd></div>
             <div><dt>数据划分</dt><dd>{{ form.non_iid ? 'Non-IID' : 'IID' }}</dd></div>
             <div><dt>数据集 / 输入</dt><dd>{{ selectedDataset.name }} / {{ selectedDataset.channels }} 通道</dd></div>
             <div><dt>异常场景</dt><dd>{{ attackName(form.attack) }}</dd></div>
-            <div><dt>模型规模</dt><dd class="mono">{{ geometry.features }} 特征 / {{ geometry.dimension }} 坐标</dd></div>
+            <div v-if="form.attack === 'targeted_label_flip'"><dt>攻击目标类别</dt><dd>{{ form.attack_target_class }} · {{ attackClasses[form.attack_target_class] ?? '无效类别' }}</dd></div>
+            <div><dt>模型规模</dt><dd class="mono">{{ selectedArchitecture?.name ?? '线性模型' }} · {{ geometry.features }} 输入 / {{ geometry.dimension }} 参数</dd></div>
+            <div><dt>量化规格</dt><dd>{{ isCnn ? form.bits : 8 }} 位 / {{ isCnn ? form.scale : 128 }}</dd></div>
             <div><dt>样本上限</dt><dd>{{ form.train_limit }} / {{ form.test_limit }}</dd></div>
           </dl>
+          <details v-if="plannedBatches.length" style="margin-top:12px">
+            <summary>固定分组名单 · {{ plannedBatches.length }} 组</summary>
+            <p v-for="(group, index) in plannedBatches" :key="index" class="nb-note" style="overflow-wrap:anywhere">第 {{ index + 1 }} 组：{{ group.join('、') }}</p>
+            <p class="nb-note">按客户端编号生成，与攻击身份和在线状态无关；实验开始后保持不变。</p>
+          </details>
         </div>
       </div>
 
@@ -674,10 +791,10 @@ function exportConfig() {
             <span class="nb-dot" :class="participants.ready ? 'online' : 'pending'"></span>
             训练在线门槛 <strong>{{ participants.ready ? '满足' : '尚未满足' }}</strong>
           </div>
-          <p class="nb-note">在线客户端 {{ participants.clients.length }} / {{ form.client_count }}；{{ form.batch_strategy === 'fixed' ? '完整固定双人批次' : '合格成员重新组队' }}当前可成组 {{ participants.batchClients.length }} 人。</p>
+          <p class="nb-note">在线客户端 {{ participants.clients.length }} / {{ form.client_count }}；{{ form.batch_strategy === 'fixed' ? `完整固定 ${form.batch_size} 人批次` : '合格成员重新组队' }}当前可成组 {{ participants.batchClients.length }} 人。</p>
           <p v-if="form.mode === 'plain'" class="nb-note">明文基线不要求边缘和云在线，仍需至少一个有效客户端组。</p>
           <p v-else class="nb-note">建钥需要全部 {{ form.authority_count }} 个边缘在线，当前 {{ participants.onlineAuthorities.length }} 个；排除最高编号的 {{ form.offline_aggregators }} 个云后，可用云 {{ participants.clouds.length }} 个，至少需要 {{ form.aggregator_threshold }} 份结果。</p>
-          <p class="nb-note">以上为当前健康状态下的参与资格；启动时由后端复核，训练中仍需通过证明和成员筛选。</p>
+          <p class="nb-note">以上为当前健康状态下的参与资格；启动时由后端复核。<template v-if="form.mode === 'plain'">明文对照不生成证明或执行鲁棒筛选。</template><template v-else>训练中仍需通过证明及策略要求的成员筛选。</template></p>
           <div class="nb-checkline">
             <span class="nb-dot" :class="!store.connected.value || deviceError ? 'pending' : 'online'"></span>
             密码计算 <strong>{{ form.compute_device.toUpperCase() }}{{ !store.connected.value || deviceError ? ' 未就绪' : ' 已就绪' }}</strong>
@@ -717,6 +834,11 @@ function exportConfig() {
 .nb-topology-pending { margin-left: auto; padding-right: 9px; color: #b39363; font-size: 10px; }
 .nb-compute-devices .nb-mode-card:disabled { opacity: .65; }
 .nb-compute-devices .nb-mode-card:disabled:hover { border-color: var(--nb-line); background: var(--nb-surface); }
+/* State the cryptographic obligation of each mode; `optimized` must read as
+   "same cryptography as dgflow" rather than as an additional protection. */
+.nb-mode-protection { margin: 8px 0 0; font-size: 10px; line-height: 1.55; color: #4d6b96; padding-top: 8px; border-top: 1px dashed #dbe4ef; }
+.nb-mode-protection.same { color: #7c6a4e; }
+.nb-readonly-value { display: flex; align-items: center; gap: 7px; margin: 0; height: 49px; padding: 0 13px; border: 1px solid #dce4ee; border-radius: 9px; background: #f4f7fb; color: #3f5a80; font-size: 12px; font-weight: 500; }
 .nb-compute-state { margin-left: 6px; color: var(--nb-muted); font-size: 11px; font-weight: 400; }
 @media (max-width: 600px) {
   .nb-deploy-stage { width: 100%; }

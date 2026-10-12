@@ -116,7 +116,7 @@ def test_api_rejects_unavailable_torch_before_creating_task_or_dkg(tmp_path,monk
     app=control.create_control_app(tmp_path)
     monkeypatch.setattr(app.state.manager,'_run',lambda record:None)
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'malicious_clients':0,
+        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'batch_size':3,'malicious_clients':0,
                                              'proof_crs_hash':'ab'*32})
         assert response.status_code==409
         assert 'client3' in response.json()['detail']
@@ -140,7 +140,7 @@ def test_api_preserves_explicit_torch_backend_when_all_clients_support_it(tmp_pa
     app=control.create_control_app(tmp_path)
     monkeypatch.setattr(app.state.manager,'_run',lambda record:None)
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'malicious_clients':0,
+        response=client.post('/api/runs',json={'backend':'torch','client_count':3,'batch_size':3,'malicious_clients':0,
                                              'proof_crs_hash':'ab'*32})
         assert response.status_code==202
         record=client.get('/api/runs/'+response.json()['run_id']).json()
@@ -159,7 +159,7 @@ def test_numpy_submission_does_not_run_new_training_or_cuda_probes(tmp_path,monk
     monkeypatch.setattr(app.state.manager,'_run',lambda record:None)
     monkeypatch.setattr(gpu,'compute_capabilities',lambda:pytest.fail('NumPy CPU submission probed CUDA'))
     with TestClient(app) as client:
-        response=client.post('/api/runs',json={'mode':'plain','backend':'numpy','client_count':3,
+        response=client.post('/api/runs',json={'mode':'plain','backend':'numpy','client_count':3,'batch_size':3,
                                              'malicious_clients':0})
     assert response.status_code==202
     assert calls==[]

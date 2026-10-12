@@ -83,7 +83,7 @@ def test_run_count_defaults_and_malicious_count_bound(control_app,monkeypatch):
     with TestClient(app) as client:
         request={'proof_crs_hash':'ab'*32}
         assert client.post('/api/runs',json=request).status_code==202
-        assert client.post('/api/runs',json={**request,'client_count':3,'malicious_clients':3}).status_code==202
+        assert client.post('/api/runs',json={**request,'client_count':3,'malicious_clients':3,'batch_size':3}).status_code==202
         assert client.post('/api/runs',json={**request,'client_count':3,'malicious_clients':4}).status_code==422
         assert client.post('/api/runs',json={**request,'client_count':3.0}).status_code==422
     assert received[0]['client_count']==6

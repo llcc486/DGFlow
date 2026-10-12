@@ -80,12 +80,37 @@ def test_owned_round_shares_signed_cores_and_enforces_dynamic_thresholds(
             for forbidden in ('coordinator','aggregator1',next(a for a in authorities if a!=owner)):
                 identity=coordinator if forbidden=='coordinator' else workers[forbidden].identity
                 with pytest.raises(ValueError): identity.open(sealed[cid],'client-submission',roles.envelope_context(ctx),cid)
+                for message,issuer in zip(validation_keys[cid],edges):
+                    with pytest.raises(ValueError):
+                        identity.open(message,'owned-validation-key',roles.envelope_context(ctx),issuer.node_id)
+            # Batched and individual issuance both return opaque owner envelopes.
+            for issuer in edges:
+                message=issuer.execute('validation_keys',{'client_ids':[cid]})[cid]
+                signed=workers[owner].identity.open(message,'owned-validation-key',
+                    roles.envelope_context(ctx),issuer.node_id)['payload']
+                value=workers[owner].identity.verify_public(signed,'validation-key',issuer.node_id)
+                assert value['client_id']==cid and value['context_hash']==b.digest(ctx)
+                assert value['material']['authority_id']==roles.node_number(issuer.node_id,'authority')
         with pytest.raises(ValueError,match='another authority'):
             workers['authority2'].execute('verify_owned',{'packets':{'client1':sealed['client1']},
                                                         'validation_keys':{'client1':validation_keys['client1']}})
         with pytest.raises(ValueError,match='threshold'):
             workers['authority1'].execute('verify_owned',{'packets':{'client1':sealed['client1']},
                                                         'validation_keys':{'client1':validation_keys['client1'][:threshold-1]}})
+        owner=workers[topology['client_authorities']['client1']]
+        envelope=validation_keys['client1'][0]
+        signed=owner.identity.open(envelope,'owned-validation-key',roles.envelope_context(ctx),edges[0].node_id)['payload']
+        stale=edges[0].identity.seal(owner.node_id,'owned-validation-key',signed,'another-round')
+        wrong_client=deepcopy(signed['payload']); wrong_client['client_id']='client2'
+        wrong_client=edges[0].identity.seal(owner.node_id,'owned-validation-key',
+            edges[0].identity.sign_public('validation-key',wrong_client),roles.envelope_context(ctx))
+        substituted=edges[1].identity.seal(owner.node_id,'owned-validation-key',signed,roles.envelope_context(ctx))
+        tampered=envelope[:-1]+bytes([envelope[-1]^1])
+        for bad in (signed,stale,wrong_client,substituted,tampered,validation_keys['client1'][1]):
+            with pytest.raises(ValueError):
+                owner.execute('verify_owned',{'packets':{'client1':sealed['client1']},
+                    'validation_keys':{'client1':[bad,*validation_keys['client1'][1:]]}})
+            assert owner._owned_verification is None
         verdicts=[]; cores={}; verified=[]
         for edge in edges:
             owned=[cid for cid in clients if topology['client_authorities'][cid]==edge.node_id]

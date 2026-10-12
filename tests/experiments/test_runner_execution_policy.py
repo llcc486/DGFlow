@@ -33,7 +33,7 @@ def _partial_fixture(node,ctx,certificates):
 def _training_failure_run(tmp_path,monkeypatch,*,failed_clients,error_factory,
                           mode='encrypted',batched=True,execution='parallel',batched_keys=False,
                           cloud_strategy='all',cloud_count=3,cloud_threshold=2,cloud_errors=None,
-                          transform_partial=None,combine_error=None,finish_error=None,offline_clouds=()):
+                          transform_partial=None,combine_error=None,finish_error=None,offline_clouds=(),transform_decision=None):
     """Exercise scheduling and confirmations without processes or cryptography."""
     runtime=tmp_path/'runtime'; runtime.mkdir()
     members=[f'client{i}' for i in range(1,7)]
@@ -98,8 +98,10 @@ def _training_failure_run(tmp_path,monkeypatch,*,failed_clients,error_factory,
     def authorize(*args):
         verdicts=next(payload['verification_results'] for _,action,payload in calls if action=='authorize')
         submitted=sorted(cid for verdict in verdicts for cid in verdict['submissions'])
-        return {'members':members,'approved':list(submitted),'collateral':[],
-                'validations':[],'manifest_hash':'test-manifest'}
+        decision={'members':members,'approved':list(submitted),'collateral':[],
+                  'validations':[],'manifest_hash':'test-manifest','batch_size':2,
+                  'screening':runner.screening_settings(record['config'],defaults=True)}
+        return transform_decision(decision) if transform_decision else decision
     def combine(*args,**kwargs):
         with lock: calls.append(('coordinator','combine',args[1]))
         if combine_error: raise ValueError(combine_error)
@@ -123,6 +125,15 @@ def _training_failure_run(tmp_path,monkeypatch,*,failed_clients,error_factory,
                       'local_epochs':1,'backend':'numpy','grid':2}}
     runner.RunManager(runtime)._run(record)
     return record,calls
+
+
+@pytest.mark.parametrize('field,value',[('batch_size',3),('screening',{'batch_strategy':'regroup'})])
+def test_authorized_batch_settings_must_match_the_task_before_cloud_requests(tmp_path,monkeypatch,field,value):
+    record,calls=_training_failure_run(tmp_path,monkeypatch,failed_clients=set(),
+        error_factory=lambda node:ValueError('unused'),transform_decision=lambda decision:{**decision,field:value})
+    assert record['status']=='aborted'
+    assert '分组大小或筛选策略' in record['error']
+    assert not any(action in ('aggregate_key','aggregate_keys','partial','finish') for _,action,_ in calls)
 
 
 @pytest.mark.parametrize('execution',['serial','parallel'])
@@ -453,7 +464,8 @@ def test_runner_pins_proof_policy_and_keeps_all_confirmations(
     monkeypatch.setattr(runner.p,'combine',combine)
     monkeypatch.setattr(runner,'aggregate_verification',lambda *args,**kwargs:{'materials':[],'commitments':{}})
     monkeypatch.setattr(runner,'authorization',lambda *a:{'members':nodes[:6],'approved':nodes[:6],
-                        'collateral':[],'validations':[],'manifest_hash':'test-manifest'})
+                        'collateral':[],'validations':[],'manifest_hash':'test-manifest','batch_size':2,
+                        'screening':runner.screening_settings(record['config'],defaults=True)})
     record={'run_id':'policy-execution','status':'queued','current_round':0,
             'rounds':[],'events':[],'summary':{},'error':None,'evidence':{},
             'config':{'mode':mode,'execution':execution,'rpc_workers':2,'proof_suite':suite,'cloud_strategy':'all',

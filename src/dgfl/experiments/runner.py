@@ -26,8 +26,9 @@ from dgfl import system_info
 from dgfl.crypto import backend as b
 from dgfl.crypto import protocol as p
 from dgfl.deployment import cluster_topology
+from dgfl.experiments.attack_metrics import participation_metrics
 from dgfl.experiments.monitoring import RunNodeMonitor, clean_event, frozen_nodes, monitor_snapshot
-from dgfl.experiments.resources import check_wire_resources
+from dgfl.experiments.resources import check_wire_resources, model_configuration
 from dgfl.experiments.telemetry import LocalProcessMonitor
 from dgfl.experiments.tensorboard import TensorBoardLogs
 from dgfl.services.roles import (
@@ -42,12 +43,21 @@ from dgfl.services.roles import (
     node_number,
     submission_core,
 )
+from dgfl.training import model_adapter
+from dgfl.training.attacks import attack_clients, attack_settings
 from dgfl.training.data import load_mnist
 from dgfl.training.datasets import dataset_spec, feature_count, load_dataset, preprocessing_description
 from dgfl.training.model import evaluate, initial_model
 from dgfl.transport.client import RPCClient
 from dgfl.transport.security import atomic_json
-from dgfl.validation.policy import apply_batches, client_members, quantize, screening_settings
+from dgfl.validation.policy import (
+    apply_batches,
+    client_members,
+    fixed_batches,
+    quantize,
+    screening_settings,
+    validate_batch_configuration,
+)
 
 
 def utc(): return datetime.now(UTC).isoformat()
@@ -300,6 +310,7 @@ def _run_members(config,cluster):
     malicious=config.get('malicious_clients',0)
     if type(malicious) is not int or not 0<=malicious<=len(members):
         raise ValueError('恶意客户端数量必须为整数，且不能超过实验客户端数量')
+    attack_clients(config,members)
     return members
 
 
@@ -316,7 +327,7 @@ def require_dataset_support(nodes,dataset,participants):
         raise ValueError('以下参与节点尚未支持 CIFAR-10，请更新并重启：'+', '.join(sorted(unsupported)))
 
 
-def choose_participants(online,mode,excluded_clouds,*,batch_strategy='regroup',client_count=6,
+def choose_participants(online,mode,excluded_clouds,*,batch_strategy='regroup',batch_size=2,client_count=6,
                         authority_count=3,aggregator_count=3,authority_threshold=2,aggregator_threshold=2):
     from dgfl.topology import validate_topology
     validate_topology(client_count,authority_count,aggregator_count,authority_threshold,aggregator_threshold)
@@ -328,7 +339,8 @@ def choose_participants(online,mode,excluded_clouds,*,batch_strategy='regroup',c
     if mode!='plain':
         if not {f'authority{i}' for i in range(1,authority_count+1)}<=set(online): raise ValueError('本实现要求全部 DKG 节点参加建钥；不能启动新密钥周期')
         if len(clouds)<aggregator_threshold: raise ValueError(f'实际可用聚合节点不足 {aggregator_threshold}/{aggregator_count} 门限，未开始训练')
-    if not apply_batches(set(clients),client_count,strategy=batch_strategy): raise ValueError('没有至少两人的合格在线客户端组')
+    if not apply_batches(set(clients),client_count,strategy=batch_strategy,batch_size=batch_size):
+        raise ValueError(f'没有完整在线的 {batch_size} 人固定组' if batch_strategy=='fixed' else '没有至少两人的合格在线客户端组')
     return clients,clouds
 
 
@@ -429,12 +441,20 @@ class RunManager:
             self._save(record)
 
     def start(self,config):
-        config=dict(config)
+        config={key:value for key,value in config.items()
+                if key not in ('model_name','model_descriptor','bits','scale') or value is not None}
+        attack_settings(config)
         config.setdefault('proof_suite','lego_norm_v1')
         if config['proof_suite']!='lego_norm_v1':
             raise ValueError('新实验仅支持 LegoGroth16（lego_norm_v1）证明方案')
         config.setdefault('grid',8)
         config.setdefault('dataset','mnist')
+        descriptor=model_configuration(config)
+        if descriptor is not None:
+            config['model_name']=descriptor['model_name']
+            config['model_descriptor']=descriptor
+            config.setdefault('bits',8)
+            config.setdefault('scale',128)
         config['cloud_strategy']=cloud_strategy_settings(config)
         if config.get('client_count') is not None:
             config['client_count']=len(client_members(config['client_count']))
@@ -450,12 +470,14 @@ class RunManager:
                 raise ValueError(capability['reason'])
         config['compute_device']=compute_device
         config.update(screening_settings(config,defaults=True))
+        config.setdefault('batch_size',2)
         execution,workers=execution_settings(config)
         with self.lock:
             if self.active is not None: raise ValueError('已有任务正在运行')
             if not (self.runtime/'cluster.json').exists(): raise ValueError('请先执行 dgflow init 和 dgflow start')
             cluster=json.loads((self.runtime/'cluster.json').read_text('utf8'))
             members = _run_members(config,cluster)
+            validate_batch_configuration(len(members),config['batch_size'],config['batch_strategy'])
             resource_checks=check_wire_resources(config)
             authorities=[f'authority{i}' for i in range(1,config['authority_count']+1)]
             backend = config.get('backend', 'numpy')
@@ -504,7 +526,8 @@ class RunManager:
                 if not available(): raise ValueError('当前已加载原生扩展不支持 Lego；请安装匹配构建后重启服务')
                 try:
                     crs_evidence=Registry(self.runtime).describe(config['proof_crs_hash'],
-                        10*(feature_count(config['dataset'],config['grid'])+1),8)
+                        10*(feature_count(config['dataset'],config['grid'])+1) if descriptor is None else descriptor['dimension'],
+                        8 if descriptor is None else config.get('bits',8))
                 except OSError as exc:
                     raise ValueError('未安装匹配的 Lego 证明参数，任务未创建') from exc
             elif config.pop('proof_crs_hash',None) is not None:
@@ -514,7 +537,8 @@ class RunManager:
                     'rounds':[],'events':[],'error':None,'summary':{},'evidence':{
                         'data':dataset_spec(config['dataset'])['name']+' public replay',
                         'dataset':config['dataset'],
-                        'preprocessing':preprocessing_description(config['dataset'],config['grid']),
+                        'preprocessing':(descriptor if descriptor is not None else
+                                         preprocessing_description(config['dataset'],config['grid'])),
                         'crypto_backend':'BLS12-381 / py-arkworks-bls12381 wrapper + optional dgfl-native (locked dependencies)',
                         'proof':proof_description(suite) if config['mode']!='plain' else 'none (plain baseline)',
                         'wire_format':'binary-v2: raw curve points, chunked above 24 MiB, hash domain revised',
@@ -528,6 +552,7 @@ class RunManager:
                                           (('proof_suite','lego_norm_v1'),('verification','deterministic'),
                                            ('verification_workers',1),('verification_threads',2),('proof_block_size',128))},
                         'implementation':implementation_evidence()}}
+            if descriptor is not None: record['evidence']['model_descriptor']=descriptor
             record['evidence']['node_snapshot']=frozen_nodes(cluster,config)
             if crs_evidence is not None:
                 record['evidence']['proof_parameters']=crs_evidence
@@ -589,6 +614,7 @@ class RunManager:
                 except Exception as exc: monitoring_failure('sample_observer',exc)
 
         try:
+            descriptor=model_configuration(cfg)
             try:
                 monitor=LocalProcessMonitor(self.runtime)
                 monitor.interval_seconds=5
@@ -608,6 +634,12 @@ class RunManager:
             if machine_marker.exists(): local_machine=json.loads(machine_marker.read_text('utf8'))['machine']
             record['evidence']['monitor_local_machine']=local_machine
             members=_run_members(cfg,cluster)
+            attack_ids=set(attack_clients(cfg,members))
+            record['evidence']['attack_simulation']={
+                'attack':cfg.get('attack','none'),
+                'client_ids':[cid for cid in members if cid in attack_ids],
+                'assignment':'legacy_prefix' if cfg.get('attack_client_ids') is None else 'explicit',
+                'usage':'simulation injection and posthoc statistics only; never a screening input'}
             cfg.setdefault('grid',8)
             cfg.setdefault('dataset','mnist')
             requested_strategy=cloud_strategy_settings(cfg)
@@ -711,8 +743,14 @@ class RunManager:
                                                     authorities=dict(zip(authorities,gpu_roles)),
                                                     accelerated_operations=coordinator_gpu['accelerated_operations'])
             screening=screening_settings(cfg,defaults=True)
+            batch_size=cfg.get('batch_size',2)
+            record['evidence']['batching']={
+                'strategy':screening['batch_strategy'],'batch_size':batch_size,
+                'groups':fixed_batches(len(members),batch_size=batch_size) if screening['batch_strategy']=='fixed' else [],
+            }
             active_clients,active_clouds=choose_participants(online,cfg['mode'],cfg['offline_aggregators'],
-                batch_strategy=screening['batch_strategy'],**{name:topology[name] for name in TOPOLOGY_FIELDS-{'client_authorities'}})
+                batch_strategy=screening['batch_strategy'],batch_size=batch_size,
+                **{name:topology[name] for name in TOPOLOGY_FIELDS-{'client_authorities'}})
             required=set(active_clients)
             if cfg['mode']!='plain':
                 required.update(authorities)
@@ -732,19 +770,20 @@ class RunManager:
                     raise ValueError('以下节点已加载的原生扩展不支持 Lego，请安装并重启：'+', '.join(unsupported))
             record['evidence']['initial_nodes']=self.last_nodes
             event('data','各客户端从本机公开数据缓存建立独立分区；原始样本不经节点 RPC 上传')
-            scale,bits=128,8
+            scale,bits=(128,8) if descriptor is None else (cfg.get('scale',128),cfg.get('bits',8))
             grid=cfg.get('grid',8)
-            features=feature_count(cfg['dataset'],grid)
-            dimension=features*10+10
+            features=feature_count(cfg['dataset'],grid) if descriptor is None else None
+            dimension=features*10+10 if descriptor is None else descriptor['dimension']
             policy={'mode':cfg['mode'],'scale':scale,'bits':bits,'dimension':dimension,
                     'dataset':cfg['dataset'],
-                    'members':list(members),'batch_size':2,
+                    'members':list(members),'batch_size':batch_size,
                     'proof_suite':cfg.get('proof_suite','legacy'),
                     'verification':cfg.get('verification','deterministic'),
                     'verification_workers':cfg.get('verification_workers',1),
                     'verification_threads':cfg.get('verification_threads',2),
                     'compute_device':cfg.get('compute_device','cpu'),
                     'proof_block_size':cfg.get('proof_block_size',128),**screening,**topology}
+            if descriptor is not None: policy['model_descriptor']=descriptor
             record['evidence']['screening']=screening
             if policy['proof_suite']=='lego_norm_v1' and cfg['mode']!='plain':
                 from dgfl.crypto.lego_registry import Registry, available
@@ -759,13 +798,20 @@ class RunManager:
                       'non_iid':cfg['non_iid'],'policy':policy}
             partitions=many([(cid,'prepare_data',data_cfg) for cid in active_clients])
             record['evidence']['partitions']=dict(zip(active_clients,partitions))
-            if cfg['dataset']=='mnist':
+            if descriptor is not None:
+                _,_,tx,ty=model_adapter.load_dataset(descriptor,self.runtime.parent/'data',cfg['train_limit'],cfg['test_limit'])
+            elif cfg['dataset']=='mnist':
                 # Retain this adapter for existing callers and offline test fixtures.
                 _,_,tx,ty=load_mnist(self.runtime.parent/'data'/'mnist',cfg['train_limit'],cfg['test_limit'],grid=grid)
             else:
                 _,_,tx,ty=load_dataset(self.runtime.parent/'data',cfg['dataset'],cfg['train_limit'],cfg['test_limit'],grid=grid)
-            reference=quantize(initial_model(cfg['seed'],features=features),scale,bits)
-            initial=evaluate(np.asarray(reference)/scale,tx,ty,features=features)
+            if descriptor is None:
+                reference=quantize(initial_model(cfg['seed'],features=features),scale,bits)
+                initial=evaluate(np.asarray(reference)/scale,tx,ty,features=features)
+            else:
+                model_options={'backend':cfg.get('backend','numpy'),'device':cfg.get('training_device','cpu')}
+                reference=quantize(model_adapter.initial_model(descriptor,cfg['seed'],**model_options),scale,bits)
+                initial=model_adapter.evaluate(descriptor,np.asarray(reference,dtype=descriptor['input_dtype'])/scale,tx,ty,**model_options)
             record['initial_metrics']=initial
             self._sync_tensorboard(record); self._save(record)
             # The paper amortises AuthSetup: the authorities are set up once and
@@ -780,6 +826,7 @@ class RunManager:
                 times={}
                 ctx={'task_id':record['run_id'],'round_id':round_id,'key_epoch':epoch,'model_hash':b.digest(reference),
                      'bits':bits,'scale':scale,'dimension':dimension,'dataset':cfg['dataset'],**topology}
+                if descriptor is not None: ctx['model_descriptor']=descriptor
                 if policy['proof_suite']=='lego_norm_v1' and cfg['mode']!='plain':
                     ctx.update(proof_suite=policy['proof_suite'],proof_crs_hash=policy['proof_crs_hash'])
                 elif policy['proof_suite']!='legacy' and cfg['mode']!='plain':
@@ -817,7 +864,6 @@ class RunManager:
                             {'client_id':cid,'key_messages':messages}) for cid,messages in key_messages.items()])
                         key_messages=dict(zip(key_messages,forwarded))
                     times['dkg_s']=time.perf_counter()-t
-                attack_ids={f'client{i}' for i in range(1,cfg['malicious_clients']+1)} if cfg['attack']!='none' else set()
                 dropped=attack_ids if cfg['attack']=='dropout' else set()
                 participants=[c for c in active_clients if c not in dropped]
                 t=time.perf_counter(); event('training','客户端本地训练、量化；安全模式生成密文与范围/范数证明',round_id)
@@ -826,7 +872,8 @@ class RunManager:
                     args={'context':ctx,'reference':reference,'mode':cfg['mode'],'local_epochs':cfg['local_epochs'],
                           'seed':cfg['seed']+round_id-1,'backend':cfg.get('backend','numpy'),
                           'attack':cfg['attack'] if cid in attack_ids else 'none','key_messages':key_messages[cid],
-                          'policy':policy}
+                          'attack_target_class':cfg.get('attack_target_class',0),'policy':policy}
+                    if descriptor is not None: args['training_device']=cfg.get('training_device','cpu')
                     jobs.append((cid,'train',args))
                 training_failures = {}
                 raw_results=optional(jobs,'client_unavailable',round_id,failures=training_failures)
@@ -838,19 +885,22 @@ class RunManager:
                 times['encryption_wall_sum_s']=sum(v['encrypt_s'] for v in results)
                 times['proof_wall_sum_s']=sum(v['proof_s'] for v in results)
                 self._check_stop()
-                if not apply_batches(set(replies), len(members), strategy=screening['batch_strategy']):
+                if not apply_batches(set(replies),len(members),strategy=screening['batch_strategy'],batch_size=batch_size):
                     detail = '；'.join(f'{cid}：{training_failures[cid]}' for cid in members if cid in training_failures)
                     cause = ('本轮未收到任何客户端训练提交' if not replies
-                             else '本轮客户端提交不足以组成至少两人的有效参与组')
+                             else (f'本轮客户端提交不足以组成完整的 {batch_size} 人固定组'
+                                   if screening['batch_strategy']=='fixed' else '本轮客户端提交不足以组成至少两人的有效参与组'))
                     raise ValueError(cause + ('；' + detail if detail else '，请检查客户端状态与掉线配置'))
                 proof_verification_metrics=None
                 combine_verification_metrics=None
                 if cfg['mode']=='plain':
-                    approved=apply_batches(set(replies),len(members),strategy=screening['batch_strategy'])
+                    approved=apply_batches(set(replies),len(members),strategy=screening['batch_strategy'],batch_size=batch_size)
                     collateral=sorted(set(replies)-set(approved))
                     validations=[{'client_id':cid,'proof_valid':None,'score':None,
-                                  'decision':'accepted' if cid in approved else 'rejected',
-                                  'reason':'明文基线，不执行密码证明与异常筛选'} for cid in members]
+                                  'decision':'accepted' if cid in approved else 'collateral' if cid in collateral else 'rejected',
+                                  'reason':('明文基线，不执行密码证明与异常筛选' if cid in approved else
+                                            '固定批次中其他成员缺席' if cid in collateral else '客户端未在本轮提交')}
+                                 for cid in members]
                     if not approved: raise ValueError('无完整参与批次，本轮中止')
                     total=np.sum([replies[c]['plain_model'] for c in approved],axis=0).astype(int).tolist()
                 else:
@@ -889,6 +939,8 @@ class RunManager:
                     decision=authorization(rpc.identity,certs,ctx)
                     if decision.get('members')!=members:
                         raise ValueError('授权签名中的客户端成员与实验部署人数不一致')
+                    if decision.get('batch_size')!=batch_size or decision.get('screening')!=screening:
+                        raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致')
                     approved=decision['approved']; collateral=decision['collateral']; validations=decision['validations']
                     times['authorization_s']=time.perf_counter()-authorization_start
                     times['validation_s']=time.perf_counter()-t
@@ -1019,15 +1071,22 @@ class RunManager:
                 reference=quantize(np.asarray(total)/(len(approved)*scale),scale,bits)
                 if cfg['mode']!='plain' and any(c['reference']!=reference for c in confirmations):
                     raise ValueError('下一轮模型与独立节点计算结果不一致')
-                metrics=evaluate(np.asarray(reference)/scale,tx,ty,features=features)
-                honest=set(key_messages)-attack_ids
+                # Score the attack success rate the paper reports, but only for the
+                # attack it is defined over; other rounds keep the plain metrics.
+                target_class=cfg.get('attack_target_class',0) if cfg['attack']=='targeted_label_flip' else None
+                if descriptor is None:
+                    metrics=evaluate(np.asarray(reference)/scale,tx,ty,features=features,target_class=target_class)
+                else:
+                    metrics=model_adapter.evaluate(descriptor,np.asarray(reference,dtype=descriptor['input_dtype'])/scale,tx,ty,
+                                                   target_class=target_class,**model_options)
+                attack_observations=participation_metrics(key_messages,replies,approved,attack_ids,
+                                                          collateral=collateral,validations=validations)
                 row={'round':round_id,**metrics,'accepted_clients':approved,'rejected_clients':sorted(set(key_messages)-set(approved)),
                      'collateral_clients':collateral,'duration_s':time.perf_counter()-round_start,'bytes_sent':rpc.bytes_sent-bytes_before,
                      'stage_times':times,'controller_cpu_s':time.process_time()-round_cpu_start,
                      'validations':validations,'model_hash':b.digest(reference),
                      'client_failures': dict(training_failures),
-                     'attack_accepted':len(set(approved)&attack_ids),'attack_submitted':len(attack_ids & set(replies)),
-                     'honest_rejected':len(honest-set(approved)),'honest_total':len(honest),
+                     **attack_observations,
                      'reference_norm_squared':sum(x*x for x in reference)}
                 client_metrics={}
                 for cid,reply in replies.items():
@@ -1122,6 +1181,12 @@ class RunManager:
                 record['summary']={'accuracy':record['rounds'][-1]['accuracy'] if record['rounds'] else None,
                                    'elapsed_s':elapsed,'controller_cpu_s':time.process_time()-cpu_start,
                                    'bytes_sent':rpc.bytes_sent if rpc else 0,'completed_rounds':len(record['rounds'])}
+                if record['rounds']:
+                    last=record['rounds'][-1]
+                    for field in ('loss','attack_success_rate','attack_success_count','attack_success_denominator',
+                                  'attack_eligible_samples','attack_eligible_success_rate','attack_target_class',
+                                  'attacker_acceptance_rate','honest_exclusion_rate'):
+                        if field in last: record['summary'][field]=last[field]
                 record['events'].append({'time':utc(),'stage':'finished',
                     'message':failure or '全部配置轮次已完成','round':record['current_round']})
                 try:
