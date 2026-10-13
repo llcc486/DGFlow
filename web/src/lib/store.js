@@ -29,6 +29,13 @@ const submitting = ref(false)
 const deploying = ref(false)
 const stopping = ref(false)
 const stopRequestedId = ref('')
+const recovery = ref(null)
+const recovering = ref(false)
+const registration = ref(null)
+const registrationMachine = ref(null)
+const registrationLoading = ref(false)
+/** One idempotency key per selected run: repeating the request reuses the execution. */
+const resumeKeys = new Map()
 
 /** Full records keyed by run id — reused by the comparison view.
  *  Reactive so views that read from it re-render when a record arrives. */
@@ -37,6 +44,9 @@ const runCache = reactive(new Map())
 let timer = null
 let pollController = null
 let actionController = null
+let registrationController = null
+let registrationRequest = 0
+let recoveryRequest = 0
 let stopped = false
 let pollCount = 0
 let listLoaded = false
@@ -59,6 +69,85 @@ function defaultRunId(activeRunId) {
     if (!latest || time > latestTime) { latest = run; latestTime = time }
   }
   return latest?.run_id || ''
+}
+
+function releaseRecovery() {
+  // Leaving recovery material on screen after the selection changed would offer a
+  // resume action for a run that is no longer selected.
+  recovery.value = null
+  recoveryRequest += 1
+}
+
+async function loadRecovery(runId, signal) {
+  if (!runId) { releaseRecovery(); return }
+  if (runId !== selectedRunId.value) return
+  const request = ++recoveryRequest
+  const isCurrent = () => request === recoveryRequest && selectedRunId.value === runId && !signal?.aborted
+  try {
+    const result = await api.getRecovery(runId, signal)
+    if (isCurrent()) recovery.value = result
+  } catch (error) {
+    if (error.name === 'AbortError' || !isCurrent()) return
+    // A missing recovery reading is reported, never rendered as "resumable".
+    recovery.value = { run_id: runId, resumable: false, checkpoint: null,
+      reason: `无法读取恢复信息：${errorText(error)}` }
+  }
+}
+
+async function loadRegistration(machine = registrationMachine.value) {
+  if (registrationMachine.value !== (machine || null)) registration.value = null
+  registrationMachine.value = machine || null
+  registrationController?.abort()
+  const controller = new AbortController()
+  registrationController = controller
+  const request = ++registrationRequest
+  const isCurrent = () => request === registrationRequest && !controller.signal.aborted
+  registrationLoading.value = true
+  const timeout = window.setTimeout(() => controller.abort(), 10000)
+  try {
+    const result = await api.getRegistration(registrationMachine.value, controller.signal)
+    if (isCurrent()) registration.value = result
+  } catch (error) {
+    if (request !== registrationRequest || stopped) return
+    registration.value = { nodes: {}, pending: [], identity_scheme: null,
+      reason: error.name === 'AbortError' ? '读取登记状态超时，请重试。' : `无法读取登记状态：${errorText(error)}` }
+  } finally {
+    clearTimeout(timeout)
+    if (request === registrationRequest) registrationLoading.value = false
+  }
+}
+
+async function resumeRun() {
+  const run = currentRun.value
+  if (!run || run.run_id !== selectedRunId.value || recovering.value || submitting.value
+    || deploying.value || preparing.value || hasActiveRun.value || !connected.value
+    || recovery.value?.run_id !== run.run_id || !recovery.value?.resumable) return
+  recovering.value = true
+  operationError.value = ''
+  notification.value = ''
+  actionController = new AbortController()
+  try {
+    // The key is stable per run, so a repeated click returns the execution that
+    // already exists instead of creating a second continuation.
+    if (!resumeKeys.has(run.run_id)) {
+      resumeKeys.set(run.run_id, `ui-${run.run_id}-${Date.now().toString(36)}`)
+    }
+    const created = await api.resumeRun(run.run_id, resumeKeys.get(run.run_id), actionController.signal)
+    if (!created.run_id) throw new Error('后端未返回恢复执行编号，请刷新实验列表确认任务状态。')
+    notification.value = created.reused
+      ? `已存在该恢复执行：${created.run_id}`
+      : `已创建恢复执行 ${created.run_id}，从第 ${created.start_round} 轮继续。`
+    if (isActiveRun({ status: created.status || 'queued' })) {
+      status.value = { ...status.value, active_run_id: created.run_id }
+    }
+    await refreshRuns(actionController.signal)
+    chooseRun(created.run_id)
+    await loadRecovery(created.run_id, actionController.signal)
+  } catch (error) {
+    if (error.name !== 'AbortError') operationError.value = `创建恢复执行失败：${errorText(error)}`
+  } finally {
+    recovering.value = false
+  }
 }
 
 async function refreshRuns(signal) {
@@ -95,6 +184,10 @@ async function poll() {
           loadingRun.value = false
           runError.value = ''
           if (previous && previous !== run.status) await refreshRuns(signal)
+          // Recovery is part of the selected run's state, so it is refreshed with
+          // it rather than fetched once and left to go stale.
+          if (!isActiveRun(run)) await loadRecovery(requestedId, signal)
+          else releaseRecovery()
         }
       } catch (error) {
         if (error.name === 'AbortError') throw error
@@ -134,6 +227,8 @@ function stop() {
   timer = null
   pollController?.abort()
   actionController?.abort()
+  registrationController?.abort()
+  recoveryRequest += 1
 }
 
 function chooseRun(id) {
@@ -142,6 +237,9 @@ function chooseRun(id) {
   currentRun.value = id ? runCache.get(id) || null : null
   loadingRun.value = Boolean(id)
   runError.value = ''
+  // Recovery state belongs to one run, so it is cleared with the selection and
+  // reloaded by the poll for the newly selected run.
+  releaseRecovery()
 }
 
 function clearMessages() {
@@ -246,9 +344,7 @@ async function startRun(config) {
     const result = await api.startRun(config, actionController.signal)
     if (!result.run_id) throw new Error('后端未返回实验编号，请刷新实验列表确认任务状态。')
     status.value = { ...status.value, active_run_id: result.run_id }
-    selectedRunId.value = result.run_id
-    currentRun.value = null
-    loadingRun.value = true
+    chooseRun(result.run_id)
     stopRequestedId.value = ''
     await refreshRuns()
     return result.run_id
@@ -282,6 +378,9 @@ export const consoleStore = {
   runs, listError, selectedRunId, inspectionRound, currentRun, loadingRun, runError,
   lastUpdated, operationError, notification,
   preparing, selectedDataset, submitting, deploying, stopping, stopRequestedId,
+  recovery, recovering,
+  registration, registrationMachine, registrationLoading,
   hasActiveRun, datasetReady, nodes, runCache,
-  start, stop, chooseRun, refreshRuns, refreshStatus, deployNodes, prepareData, startRun, stopRun, clearMessages,
+  start, stop, chooseRun, refreshRuns, refreshStatus, deployNodes, prepareData, startRun, stopRun,
+  resumeRun, loadRecovery, loadRegistration, clearMessages,
 }

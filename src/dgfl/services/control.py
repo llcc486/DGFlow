@@ -32,8 +32,8 @@ from dgfl.deployment import (
     start_nodes,
     validate_machine,
 )
-from dgfl.experiments.monitor_series import MonitorSeries
 from dgfl.experiments.metadata import normalize_text
+from dgfl.experiments.monitor_series import MonitorSeries
 from dgfl.experiments.runner import RunManager
 from dgfl.services.node import training_backends
 from dgfl.services.tensorboard import EmbeddedTensorBoard
@@ -47,6 +47,68 @@ DEPLOYMENT_SCHEMA_VERSION = 2
 GPU_AUTOMATIC_REFRESH_SECONDS = 30
 GPU_AUTOMATIC_RETRY_SECONDS = 1
 GPU_AUTOMATIC_RETRY_ROUNDS = 15
+
+#: Fields a downloadable run record may carry.
+#:
+#: An allowlist rather than a denylist: the record is written by the runner, and a
+#: denylist would silently start exporting any secret a future field happens to
+#: hold. Per-round rows are filtered by the same rule one level down. Restricted
+#: functional-decryption material is never part of a run record, so it cannot
+#: appear here; this list exists so that stays true when the record grows.
+EXPORT_RECORD_FIELDS = (
+    'run_id', 'name', 'description', 'status', 'config', 'created_at', 'current_round', 'rounds', 'events', 'error',
+    'summary', 'evidence', 'initial_metrics',
+    'logical_experiment_id', 'execution_attempt_id', 'parent_run_id', 'start_round',
+    'resumed_from', 'checkpoints', 'stop',
+)
+#: Per-round fields a downloadable record may carry.
+EXPORT_ROUND_FIELDS = (
+    'round', 'accuracy', 'loss', 'samples', 'attack_success_rate', 'attack_success_count',
+    'attack_success_denominator', 'attack_eligible_samples', 'attack_eligible_success_rate',
+    'attack_target_class', 'duration_s', 'bytes_sent', 'stage_times', 'controller_cpu_s',
+    'validations', 'model_hash', 'protocol_evidence', 'crypto_context', 'client_failures',
+    'reference_norm_squared', 'accepted_clients', 'rejected_clients', 'collateral_clients',
+    'attack_configured', 'attack_accepted', 'attack_submitted', 'attack_not_submitted',
+    'attack_validation_rejected', 'attack_collateral', 'honest_total', 'honest_submitted',
+    'honest_rejected', 'honest_not_submitted', 'honest_validation_rejected', 'honest_collateral',
+    'attacker_acceptance_rate', 'honest_exclusion_rate', 'metrics_eval_s',
+    'monitoring_overhead', 'client_training_metrics', 'cloud_selection',
+    'proof_verification_metrics', 'proof_generation_metrics', 'combine_metrics',
+    # The screening decision record: centres, sizes, dispersions, separation and the
+    # thresholds applied. Public observations about the rule, not secret material.
+    'screening_decision', 'screening_counts',
+)
+#: Per-client validation fields a downloadable record may carry.
+EXPORT_VALIDATION_FIELDS = (
+    'client_id', 'proof_valid', 'score', 'decision', 'reason', 'rejection_reason',
+    'proof_suite', 'proof_crs_hash', 'norm_squared', 'proof_hash', 'packet_hash',
+    'exit_stage',
+)
+
+
+def _whitelist(mapping, fields):
+    return {key: mapping[key] for key in fields if key in mapping}
+
+
+def export_view(record):
+    """Return the downloadable view of a run record.
+
+    The record itself is untouched: this returns a filtered copy, so the control
+    plane keeps whatever it needs to operate while a download carries only the
+    fields declared here.
+    """
+    view = _whitelist(record, EXPORT_RECORD_FIELDS)
+    if isinstance(view.get('rounds'), list):
+        view['rounds'] = []
+        for row in record['rounds']:
+            if not isinstance(row, dict):
+                continue
+            entry = _whitelist(row, EXPORT_ROUND_FIELDS)
+            if isinstance(entry.get('validations'), list):
+                entry['validations'] = [_whitelist(item, EXPORT_VALIDATION_FIELDS)
+                                        for item in entry['validations'] if isinstance(item, dict)]
+            view['rounds'].append(entry)
+    return view
 
 
 def _origin(value: str):
@@ -73,6 +135,22 @@ def _declared_body_allowed(lengths:list[str]):
     digits=lengths[0].lstrip('0') or '0'
     # Avoid unbounded integer parsing of malformed or extremely long headers.
     return len(digits)<=len(str(CONTROL_BODY_LIMIT)) and int(digits)<=CONTROL_BODY_LIMIT
+
+
+class ControlHostMiddleware(TrustedHostMiddleware):
+    """Preserve the host allowlist while parsing bracketed IPv6 correctly."""
+
+    async def __call__(self,scope:Scope,receive:Receive,send:Send):
+        if scope['type'] in ('http','websocket'):
+            hosts=Headers(scope=scope).getlist('host')
+            if hosts and hosts[0].startswith('['):
+                parsed=_origin(f"http://{hosts[0]}")
+                if len(hosts)==1 and parsed and f'[{parsed[1]}]' in self.allowed_hosts:
+                    await self.app(scope,receive,send)
+                else:
+                    await Response('Invalid host header',status_code=400)(scope,receive,send)
+                return
+        await super().__call__(scope,receive,send)
 
 
 class ControlSafetyMiddleware:
@@ -183,6 +261,19 @@ class ArchivedRunConfig(BaseModel):
     batch_strategy:Literal['fixed','regroup']='regroup'
     # Privacy-group size, independent of local SGD's mini-batch size.
     batch_size:int=Field(2,ge=2,le=100,strict=True)
+    # Screening rule and its clustering parameters.
+    #
+    # These decide which clients an honest round drops, and they used to be
+    # constants inside the rule, which meant the signed authorization manifest did
+    # not cover them: replacing the whole rule while leaving the five thresholds
+    # above unchanged produced an identical manifest hash. Declaring them here puts
+    # them into the manifest, so a change to the decision procedure is a change to
+    # the signed policy.
+    screening_rule:Literal['legacy_v1']='legacy_v1'
+    cluster_center_gap:float=Field(0.45,gt=0,le=2,allow_inf_nan=False,strict=True)
+    cluster_low_center_max:float=Field(0.25,ge=-1,le=1,allow_inf_nan=False,strict=True)
+    cluster_iterations:int=Field(32,ge=1,le=4096,strict=True)
+    cluster_tolerance:float=Field(1e-12,gt=0,le=1e-3,allow_inf_nan=False,strict=True)
 
     @field_validator('name','description',mode='before')
     @classmethod
@@ -243,6 +334,22 @@ class RunConfig(ArchivedRunConfig):
         return self
 
 
+class ResumeRequest(BaseModel):
+    """A resume request is bound to a checkpoint and made idempotent by this key.
+
+    Repeating the same key returns the execution already created for it, so a
+    double click or a retried request cannot start a second continuation.
+    """
+    model_config=ConfigDict(extra='forbid')
+    idempotency_key:str|None=Field(default=None,max_length=80)
+
+    @model_validator(mode='after')
+    def validate_key(self):
+        if self.idempotency_key is not None and re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',self.idempotency_key) is None:
+            raise ValueError('幂等标识只能包含字母、数字、下划线、点和连字符')
+        return self
+
+
 class DataConfig(BaseModel):
     model_config=ConfigDict(extra='forbid')
     dataset:Literal['mnist','cifar10']='mnist'
@@ -293,6 +400,20 @@ class DeploymentStart(DeploymentConfig):
     machine:MachineName|None=None
 
 
+def _registration_commands(node, state):
+    """The commands this node's machine needs next, for the deployment page.
+
+    A node reports the commands for the state it is actually in, so the page shows
+    one step rather than a list an operator has to interpret.
+    """
+    if state['state'] == 'pending':
+        return [f'python -m dgfl.cli identity-init --node {node} --host <本机地址> --deployment <部署标识>',
+                '把生成的 registration-requests/<节点>.json 交给平台执行 register-accept']
+    if state['state'] == 'registered':
+        return [f'python -m dgfl.cli register-check --node {node}   # 安装本机配置包后核对']
+    return [f'python -m dgfl.cli start --machine {state["machine"]}']
+
+
 def create_control_app(runtime, *, auto_prepare_compute=True):
     runtime=Path(runtime).resolve(); manager=RunManager(runtime)
     tensorboard=EmbeddedTensorBoard(manager.tensorboard,run_labels=manager.tensorboard_run_labels)
@@ -320,7 +441,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     app.state.manager=manager
     app.state.tensorboard=tensorboard
     app.add_middleware(ControlSafetyMiddleware)
-    app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
+    app.add_middleware(ControlHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
     monitor={'time':0.,'nodes':[]}; monitor_lock=threading.Lock(); prepare_lock=threading.Lock()
     monitor_series = MonitorSeries(runtime)
     compute_lock=threading.Lock()
@@ -777,6 +898,59 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         except OSError as exc:
             raise HTTPException(503, '监控历史暂时无法读取，请稍后重试') from exc
 
+    @app.get('/api/registration/status')
+    def registration_status(machine:str|None=None):
+        """Pending / registered / startable per node, and the per-machine commands.
+
+        Reported for this runtime: the platform sees which requests it accepted, and
+        a machine sees which of its own nodes can start. Neither is inferred from the
+        other, so the page never claims a node is ready on a machine that has not
+        installed its package.
+        """
+        from dgfl.deployment import pending_registration, trust_environment
+        if machine is not None and machine not in MACHINE_GROUPS:
+            raise HTTPException(422, '机器编号无效')
+        try:
+            status=pending_registration(runtime,machine=machine)
+        except (OSError,ValueError) as exc:
+            raise HTTPException(409,str(exc)) from exc
+        status['trust_environment']=trust_environment(runtime)
+        status['commands']={name:_registration_commands(name,status['nodes'][name])
+                            for name in sorted(status['nodes'])}
+        return status
+
+    @app.get('/api/runs/{run_id}/checkpoints')
+    def checkpoints(run_id:str):
+        """Checkpoint summaries. Never returns the model vector or any material."""
+        try: return manager.checkpoints(run_id)
+        except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+        except (ValueError,OSError) as exc: raise HTTPException(409,'检查点无法读取：'+str(exc)) from exc
+
+    @app.get('/api/runs/{run_id}/recovery')
+    def recovery(run_id:str):
+        """The latest checkpoint, whether the run can continue, and what blocks it."""
+        try: return manager.recovery_status(run_id)
+        except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    @app.post('/api/runs/{run_id}/resume')
+    def resume(run_id:str,request:ResumeRequest|None=None):
+        """Verify the checkpoint and node state, then create the continuating run.
+
+        The original execution is terminated and kept as history; the continuation
+        is a separate execution with its own key epoch. Repeating the same
+        idempotency key returns the execution already created for it.
+        """
+        body=request or ResumeRequest()
+        with manager.lock:
+            if prepare_lock.locked():
+                raise HTTPException(409,'数据正在准备，请等待完成后再恢复实验')
+            with compute_lock:
+                if compute_preparation['state']=='initializing':
+                    raise HTTPException(409,'GPU 后端正在初始化，请等待完成后再恢复实验')
+            try: return manager.resume(run_id,idempotency_key=body.idempotency_key)
+            except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+            except ValueError as exc: raise HTTPException(409,str(exc)) from exc
+
     @app.post('/api/runs/{run_id}/stop')
     def stop(run_id:str):
         try: return manager.stop(run_id)
@@ -786,7 +960,8 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def export(run_id:str):
         try: record=manager.snapshot(run_id)
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
-        return JSONResponse(record,headers={'Content-Disposition':f'attachment; filename="run-{run_id}.json"'})
+        return JSONResponse(export_view(record),
+                            headers={'Content-Disposition':f'attachment; filename="run-{run_id}.json"'})
 
     @app.get('/api/tensorboard/status')
     def tensorboard_status():
@@ -807,10 +982,15 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             raise HTTPException(404,f'机器 {machine} 在此部署中没有节点')
         staging=runtime/('.bundle-'+secrets.token_hex(8))
         try:
-            exports=bundle_cluster(source,staging,machine=machine)
+            from dgfl.deployment import IDENTITY_SCHEME_REGISTERED, identity_scheme, registration_bundle
+
+            if identity_scheme(source)==IDENTITY_SCHEME_REGISTERED:
+                root=Path(registration_bundle(source,machine,staging)['output'])
+            else:
+                exports=bundle_cluster(source,staging,machine=machine)
+                root=Path(exports[machine])
             buffer=io.BytesIO()
             with zipfile.ZipFile(buffer,'w',zipfile.ZIP_DEFLATED) as archive:
-                root=Path(exports[machine])
                 for path in sorted(root.rglob('*')):
                     if path.is_file():
                         archive.write(path,Path(f'dgflow-{machine}')/path.relative_to(root))

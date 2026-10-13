@@ -17,7 +17,7 @@ function component(path, dependencies = {}) {
   const source = readFileSync(new URL(`../src/${path}.vue`, import.meta.url), 'utf8')
   const compiled = compileScript(parse(source).descriptor, { id: path, inlineTemplate: true }).content
   const bindings = { ...vue, ...format, ...datasets, ...experiments, bestAccuracy, LabIcon: stub, StatusBadge: stub,
-    MetricCard: stub, EmptyState: stub, PageHead: shell, ...dependencies }
+    MetricCard: stub, EmptyState: stub, PageHead: shell, RecoveryPanel: stub, ...dependencies }
   const executable = compiled.replace(/^import \{ ([^\r\n]*) \} from [^\r\n]*\r?\n/gm, (_, imports) => {
     for (const item of imports.split(',')) {
       const [original, alias = original] = item.trim().split(/\s+as\s+/)
@@ -39,7 +39,8 @@ function store(runs = [record()]) {
   const calls = []
   return { calls, runs: vue.ref(runs), selectedRunId: vue.ref(runs[0]?.run_id || ''), currentRun: vue.ref(runs[0]),
     runCache: vue.reactive(new Map()), connected: vue.ref(true), listError: vue.ref(''), stopping: vue.ref(false),
-    stopRequestedId: vue.ref(''), chooseRun: runId => calls.push(runId), stopRun() {} }
+    stopRequestedId: vue.ref(''), recovery: vue.ref(null), recovering: vue.ref(false), hasActiveRun: vue.ref(false),
+    chooseRun: runId => calls.push(runId), stopRun() {} }
 }
 function findVNode(node, type) {
   if (!node || typeof node !== 'object') return null

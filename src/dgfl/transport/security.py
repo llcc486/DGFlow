@@ -253,9 +253,33 @@ class Identity:
         if private['id']!=node_id: raise ValueError('node identity mismatch')
         self.signing=ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private['signing_private']))
         self.exchange=x25519.X25519PrivateKey.from_private_bytes(bytes.fromhex(private['exchange_private']))
-        self.registry=json.loads((self.root/'registry.json').read_text('utf8'))
+        registry=json.loads((self.root/'registry.json').read_text('utf8'))
+        # Early registration packages used a "nodes" wrapper; keep them readable
+        # alongside the flat map used by all existing centralised deployments.
+        if isinstance(registry,dict) and set(registry)=={'nodes'}:
+            registry=registry['nodes']
+        if not isinstance(registry,dict) or node_id not in registry:
+            raise ValueError('identity registry has no local node')
+        signed_path=self.root/'registration-registry.json'
+        if signed_path.exists():
+            from dgfl import registration
+            signed=json.loads(signed_path.read_text('utf8'))
+            authority=(self.root/'ca.pem').read_text('ascii')
+            registration.check_local_identity(self.root,signed,node_id,
+                                              authority_certificate=authority)
+            expected=registration.transport_registry(signed,authority_certificate=authority)
+            if (set(registry)!=set(expected) or
+                    any(not isinstance(registry[name],dict) or
+                        any(registry[name].get(field)!=value for field,value in entry.items())
+                        for name,entry in expected.items())):
+                raise ValueError('transport registry does not match signed registration')
+        elif private.get('registry_version') is not None:
+            raise ValueError('registered identity requires a signed registration registry')
+        self.registry=registry
         if self.registry[node_id]['signing_public']!=_raw_public(self.signing):
             raise ValueError('registry/identity mismatch')
+        if self.registry[node_id]['exchange_public']!=_raw_public(self.exchange):
+            raise ValueError('registry/exchange identity mismatch')
 
     def _shared(self,peer):
         raw=self.exchange.exchange(x25519.X25519PublicKey.from_public_bytes(bytes.fromhex(self.registry[peer]['exchange_public'])))

@@ -87,8 +87,15 @@ def build_round(*, dimension=DEFAULT_DIMENSION, bits=DEFAULT_BITS, clients=None,
         public_keys[cid] = key['public']
         validation_keys[cid] = [node.validation_key(cid, reference) for node in nodes]
 
-    material = vm.build(1, ctx, reference, submissions, public_keys, validation_keys, threshold)
-    return {'material': material, 'context': ctx, 'reference': reference,
+    # The playground exercises the authorization path, because the tamper it
+    # demonstrates (a mutated norm or reference) has to be caught by the relation
+    # that consumes the function keys. The two layers are assembled separately and
+    # bound by digest, exactly as a real round does it.
+    material = vm.build(1, ctx, reference, submissions, public_keys)
+    restricted = vm.build_restricted(1, ctx, validation_keys,
+                                     proof_material_digest=vm.digest_of(material),
+                                     authority_threshold=threshold)
+    return {'material': material, 'restricted': restricted, 'context': ctx, 'reference': reference,
             'clients': clients, 'values': values, 'threshold': threshold,
             'suite': suite, 'parameters': parameters}
 
@@ -166,6 +173,26 @@ def run(*, mutations=MUTATIONS, dimension=DEFAULT_DIMENSION, bits=DEFAULT_BITS,
     built = build_round(dimension=dimension, bits=bits, suite=suite,
                         parameters=parameters, prover=prover)
     material = built['material']
+    restricted = built['restricted']
+
+    def check(document):
+        """Verify the authorization layer, falling back to the proof layer.
+
+        A mutation can break the digest binding between the two layers before any
+        relation runs. When that happens the honest report is the proof-layer
+        verdict, which still names the relation that failed, so the fallback does
+        not hide a refusal.
+        """
+        client_id = sorted(document['clients'])[0]
+        try:
+            return vm.verify_authorization(document, restricted, client_id,
+                                           parameters_factory=_factory(parameters))
+        except ValueError as exc:
+            if 'does not belong' not in str(exc) and 'different round' not in str(exc):
+                raise
+            return vm.authorization_not_verified(document, client_id,
+                                                 parameters_factory=_factory(parameters))
+
     results = []
 
     # Baseline: the untampered record must verify, or nothing below means anything.
@@ -173,7 +200,8 @@ def run(*, mutations=MUTATIONS, dimension=DEFAULT_DIMENSION, bits=DEFAULT_BITS,
     baseline_detail = []
     for cid in sorted(material['clients']):
         try:
-            outcome = vm.verify_client(material, cid, parameters_factory=_factory(parameters))
+            outcome = vm.verify_authorization(material, restricted, cid,
+                                              parameters_factory=_factory(parameters))
             baseline_ok = baseline_ok and outcome['proof_valid']
             baseline_detail.append({'client_id': cid, 'proof_valid': outcome['proof_valid'],
                                     'inner_product': outcome['inner_product']})
@@ -191,7 +219,8 @@ def run(*, mutations=MUTATIONS, dimension=DEFAULT_DIMENSION, bits=DEFAULT_BITS,
         clients = []
         for cid in sorted(document['clients']):
             try:
-                outcome = vm.verify_client(document, cid, parameters_factory=_factory(parameters))
+                outcome = check(document) if cid == sorted(document['clients'])[0] else \
+                    vm.authorization_not_verified(document, cid, parameters_factory=_factory(parameters))
                 clients.append({'client_id': cid, 'proof_valid': outcome['proof_valid'],
                                 'inner_product': outcome['inner_product']})
                 if not outcome['proof_valid']:

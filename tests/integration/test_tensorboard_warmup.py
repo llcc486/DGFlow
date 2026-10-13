@@ -5,10 +5,11 @@ runtime. It used to happen inside whichever request arrived first, so the first
 page load after each service start stalled. `warm()` moves that walk to service
 startup, where the console lifespan runs before the server accepts connections.
 """
-from fastapi import FastAPI
-from starlette.testclient import TestClient
 import threading
 import time
+
+from fastapi import FastAPI
+from starlette.testclient import TestClient
 
 from dgfl.experiments.tensorboard import TensorBoardLogs
 from dgfl.services.tensorboard import EmbeddedTensorBoard

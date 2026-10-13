@@ -370,6 +370,7 @@ function monitorDependencies(overrides = {}) {
     EmptyState: component('components/EmptyState', { LabIcon }),
     TensorBoardPanel: stub('tensorboard'), NodeMonitorPanel: stub('nodes'),
     MonitorTrainingPanel: stub('training'), MonitorExecutionPanel: stub('execution'),
+    RecoveryPanel: component('components/RecoveryPanel', { LabIcon }),
     MonitorResourcePanel: stub('resources'), MonitorEntityDrawer: stub('drawer'),
     useNodeMonitor: () => ({ snapshot: vue.ref(null), busy: vue.ref(false), error: vue.ref(''), updatedAt: vue.ref(''), refresh() {} }),
     document: { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} },
@@ -388,8 +389,47 @@ function resetMonitorStore() {
   store.runError.value = ''
   store.listError.value = ''
   store.operationError.value = ''
+  store.recovery.value = null
+  store.recovering.value = false
+  store.status.value = null
   if (store.inspectionRound) store.inspectionRound.value = null
 }
+
+test('monitor retains the recovery action alongside native metrics and hides recovery from a different run', async () => {
+  const Monitor = component('views/Monitor', monitorDependencies())
+  const originalResume = store.resumeRun
+  let resumes = 0
+  store.resumeRun = () => { resumes += 1 }
+  resetMonitorStore()
+  store.connected.value = true
+  store.initialLoading.value = false
+  store.chooseRun('historical')
+  store.currentRun.value = { run_id: 'historical', name: '已停止的实验', status: 'stopped',
+    config: { dataset: 'mnist', rounds: 5 }, rounds: [] }
+  store.recovery.value = { run_id: 'historical', resumable: true, start_round: 3,
+    checkpoint: { round: 2, sha256: 'ab'.repeat(32), model_hash: 'cd'.repeat(32) } }
+  const workspace = mountWorkspace(Monitor)
+  try {
+    const button = workspace.find(node => node.props?.['data-testid'] === 'resume-button')
+    assert.ok(button)
+    assert.equal(button.props.disabled, false)
+    button.props.onClick()
+    assert.equal(resumes, 1)
+    assert.ok(workspace.find(node => node.props?.['data-panel'] === 'training'))
+    assert.ok(workspace.find(node => node.props?.['data-panel'] === 'nodes'))
+
+    store.status.value = { active_run_id: 'another-run' }
+    await vue.nextTick()
+    assert.equal(workspace.find(node => node.props?.['data-testid'] === 'resume-button').props.disabled, true)
+    store.recovery.value = { ...store.recovery.value, run_id: 'other-run' }
+    await vue.nextTick()
+    assert.equal(workspace.find(node => node.props?.['data-testid'] === 'recovery-panel'), undefined)
+  } finally {
+    workspace.app.unmount()
+    store.resumeRun = originalResume
+    resetMonitorStore()
+  }
+})
 
 // A small Vue host lets these tests exercise tab clicks and component lifetime
 // without substituting the real workspace template or introducing a DOM library.

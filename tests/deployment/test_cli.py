@@ -2,6 +2,8 @@ import importlib
 import json
 import ssl
 import sys
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -65,6 +67,53 @@ def test_help_can_load_without_control_service(monkeypatch):
     with pytest.raises(SystemExit) as result:
         cli().main(['--help'])
     assert result.value.code == 0
+
+
+@pytest.mark.parametrize(('outcome','expected_code'), [('completed',0), ('failed',1)])
+def test_resume_cli_waits_for_the_background_execution(tmp_path,monkeypatch,capsys,outcome,expected_code):
+    from dgfl.experiments import runner
+
+    finished=threading.Event()
+
+    class Manager:
+        def __init__(self,runtime):
+            self.active=None
+
+        def recovery_status(self,run_id):
+            pytest.fail('a retry must resolve idempotency before parent recovery preflight')
+
+        def resume(self,run_id,**kwargs):
+            self.active='continuation'
+
+            def execute():
+                time.sleep(.05)
+                finished.set()
+                self.active=None
+
+            threading.Thread(target=execute,daemon=True).start()
+            return {'run_id':'continuation','reused':False,'checkpoint_round':1,'start_round':2}
+
+        def snapshot(self,run_id,**kwargs):
+            assert finished.is_set()
+            return {'status':outcome}
+
+    monkeypatch.setattr(runner,'RunManager',Manager)
+    assert cli().main(['resume','--runtime',str(tmp_path),'--run','parent','--json'])==expected_code
+    assert finished.is_set()
+    assert json.loads(capsys.readouterr().out)['status']==outcome
+
+
+@pytest.mark.parametrize('check',[False,True])
+def test_resume_cannot_construct_a_competing_manager(tmp_path,monkeypatch,check):
+    c=cli()
+    from dgfl.experiments import runner
+
+    monkeypatch.setattr(runner,'RunManager',lambda *args:pytest.fail('live records were opened'))
+    argv=['resume','--runtime',str(tmp_path),'--run','parent']
+    if check:
+        argv.append('--check')
+    with c._control_process_lock(tmp_path):
+        assert c.main(argv)==1
 
 
 def test_cli_initializes_odd_count_and_rejects_out_of_range_without_keys(tmp_path):

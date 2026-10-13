@@ -67,6 +67,16 @@ PEM_CONTENT = re.compile(r"(?m)^\s*-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|(?:X509 |
 PEM_METADATA = re.compile(r"-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|(?:X509 |TRUSTED )?CERTIFICATE)-----")
 SECRET_FIELD = re.compile(r'''(?im)(?:^\s*|[,{]\s*)["']?(?:private[_-]?key|secret[_-]?key|client[_-]?secret|identity[_-]?secret)["']?\s*[:=]\s*(?!null\b|None\b|["']{2}(?:\s|,|$))\S+''')
 WINDOWS_ABSOLUTE = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:[\\/][^\s\"'<>]+")
+# A drive root plus one synthetic directory name (the shape the frontend monitor
+# fixtures use for their resource samples) names no directory on the packaging
+# machine, so it cannot be a leaked development path. The exemption is an exact
+# allowlist of one complete path, and an entry stops applying as soon as the
+# candidate carries a second separator, so a real nested path that merely
+# extends an exempt prefix is still reported.
+WINDOWS_DRIVE_EXEMPT = frozenset({'c:/runtime'})
+# Trailing source punctuation a fixture value can pick up from the surrounding
+# code, since the path regex runs to the next whitespace or quote.
+TRAILING_PUNCTUATION = re.compile(r"[])}';\",/]+$")
 PERSONAL_POSIX = re.compile(r"(?<![A-Za-z0-9])/(?:Users|home|workspace|workspaces)/[^\s\"'<>]+")
 IDENTIFYING_FIELD = re.compile(r"(?im)^\s*(?:[-*]\s*)?(?:\*\*)?(?:作者|姓名|学校|院校|学院|指导教师|指导老师|参赛队员|队员姓名|学生姓名|学号|团队成员|author|authors|student(?: name)?|school|university|institution|supervisor)(?:\*\*)?\s*[:：=]\s*\S+")
 IDENTIFYING_TABLE = re.compile(r"(?im)^\s*\|\s*(?:作者|姓名|学校|院校|学院|指导教师|参赛队员|学号|author|school|university|institution)\s*\|\s*[^\s|]")
@@ -164,12 +174,47 @@ def _own_document(relative: str) -> bool:
     return relative == "README.md" or (relative.startswith("docs/submission/") and path.suffix.lower() in {".md", ".txt", ".html", ".tex", ".png", ".pdf"})
 
 
+def _refined_windows_match(match) -> bool:
+    """True for a drive path that names a real directory, not an exempt fixture."""
+    # The regex runs to the next whitespace or quote, so a fixture value can
+    # carry trailing source punctuation such as the `)` closing an assertion.
+    # Stripping is only ever reached by a candidate that the exact allowlist
+    # accepts, so it cannot widen the exemption beyond the listed entries.
+    folded = TRAILING_PUNCTUATION.sub('', match.group(0).replace('\\/', '/'))
+    if folded.lower() not in WINDOWS_DRIVE_EXEMPT:
+        return True
+    # An exempt entry names no real directory only while it stays one component.
+    # A second separator means this is a genuine nested path that happened to
+    # extend an exempt entry, so it is still reported.
+    return folded.count('/') != 1
+
+
+def _path_patterns_removed(text: str) -> str:
+    """Drop the drive paths the refinement rejected so streaming cannot re-scan them."""
+    return WINDOWS_ABSOLUTE.sub(lambda match: '' if not _refined_windows_match(match) else match.group(0), text)
+
+
+def _development_path_matches(text: str, root_spellings: tuple[str, ...]) -> list[str]:
+    """Windows/POSIX absolute paths that name a real development directory.
+
+    A drive root plus one synthetic directory name is a frontend fixture value,
+    not a directory that exists on a development machine. Every observed leaked
+    development path carries a second separator (a personal folder, a temporary
+    file, or the checkout itself), so the refinement keeps the guard intact while
+    it stops rejecting fixture text.
+    """
+    found = [match.group(0) for match in WINDOWS_ABSOLUTE.finditer(text) if _refined_windows_match(match)]
+    found.extend(match.group(0) for match in PERSONAL_POSIX.finditer(text))
+    found.extend(value for value in root_spellings if value in text)
+    return found
+
+
 def _scan_text(text: str, relative: str, root_spellings: tuple[str, ...], *, metadata=False) -> None:
     if PEM_CONTENT.search(text) or (metadata and PEM_METADATA.search(text)):
         raise ValueError(f"Sensitive private key or certificate content: {relative}")
     if (metadata or PurePosixPath(relative).suffix.lower() in STRUCTURED_SUFFIXES) and SECRET_FIELD.search(text):
         raise ValueError(f"Sensitive serialized private/secret key: {relative}")
-    if WINDOWS_ABSOLUTE.search(text) or PERSONAL_POSIX.search(text) or any(value in text for value in root_spellings):
+    if _development_path_matches(text, root_spellings):
         raise ValueError(f"Absolute development path in file: {relative}")
     if _own_document(relative) and any(pattern.search(text) for pattern in
                                        (IDENTIFYING_FIELD, IDENTIFYING_TABLE, IDENTIFYING_TEX, IDENTIFYING_HTML)):
@@ -332,7 +377,9 @@ def _write_member(archive: zipfile.ZipFile, relative: str, path: Path, root: Pat
                     decoder = codecs.getincrementaldecoder(encoding)(errors="strict")
                 text = tail + decoder.decode(chunk)
                 _scan_text(text, relative, root_spellings)
-                tail = text[-8192:]
+                # Retain text with the refined (fixture-only) drive paths removed
+                # so a later chunk cannot re-report a match this pass allowed.
+                tail = _path_patterns_removed(text)[-8192:]
             digest.update(chunk)
             size += len(chunk)
             target.write(chunk)

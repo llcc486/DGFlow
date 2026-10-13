@@ -131,6 +131,7 @@ def test_metadata_does_not_add_null_fields_to_legacy_suite_declarations():
 
 def test_tensorboard_catalog_labels_preserve_native_ids_and_scalar_reads(tmp_path):
     from fastapi import FastAPI
+
     from dgfl.experiments.tensorboard import TensorBoardLogs
     from dgfl.services.tensorboard import EmbeddedTensorBoard
 

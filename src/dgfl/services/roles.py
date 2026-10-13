@@ -15,19 +15,31 @@ import numpy as np
 from dgfl.crypto import backend as b
 from dgfl.crypto import protocol as p
 from dgfl.deployment import cluster_topology
-from dgfl.topology import client_authorities, validate_topology
+from dgfl.topology import (
+    AUTHORIZATION_CONSISTENCY_FIELD,
+    MAX_AUTHORIZATION_DECISIONS,
+    authorization_consistency_threshold,
+    client_authorities,
+    validate_topology,
+)
 from dgfl.transport.security import atomic_bytes, atomic_json, parse_frame, read_bytes
 from dgfl.validation.policy import (
+    EXIT_STAGES,
     SCREENING_DEFAULTS,
+    SCREENING_VERSION,
     apply_batches,
     client_members,
     cosine,
     quantize,
-    screen,
+    screen_decided,
     screening_settings,
 )
 
 AUTHORITIES=['authority1','authority2','authority3']
+#: How many key-lifecycle records one node keeps. Each accepted epoch writes one and
+#: they are held for the node's lifetime, so the count is bounded rather than left to
+#: grow with the number of epochs a coordinator asks for.
+MAX_KEY_EPOCHS=256
 _LOG=logging.getLogger(__name__)
 TOPOLOGY_FIELDS={'client_count','authority_count','aggregator_count','authority_threshold',
                  'aggregator_threshold','client_authorities'}
@@ -50,6 +62,14 @@ def pinned_topology(value):
         raise ValueError('pinned client ownership mapping is required')
     topology=validate_topology(**{name:value[name] for name in TOPOLOGY_FIELDS-{'client_authorities'}})
     topology['client_authorities']=client_authorities(topology['client_count'],topology['authority_count'],value['client_authorities'])
+    # The consistency threshold is carried alongside the pinned topology rather than
+    # inside `TOPOLOGY_FIELDS`, so a task pinned before this key existed still matches
+    # its own signature and keeps the strict default. It is resolved and range-checked
+    # here so an out-of-range value fails at pinning time, not mid-round.
+    if AUTHORIZATION_CONSISTENCY_FIELD in value:
+        topology[AUTHORIZATION_CONSISTENCY_FIELD]=authorization_consistency_threshold(
+            {AUTHORIZATION_CONSISTENCY_FIELD:value[AUTHORIZATION_CONSISTENCY_FIELD]},
+            topology['authority_count'])
     return topology
 
 
@@ -58,6 +78,10 @@ def role_topology(value):
         **validate_topology(client_count=len(value.get('members',[])) or 6,authority_count=3,aggregator_count=3,
                             authority_threshold=2,aggregator_threshold=2),
         'client_authorities':{},
+        # An unpinned context still carries the consistency threshold when it states
+        # one; absent, the resolver defaults to every authority, which is the strict
+        # behaviour this code had unconditionally before the key existed.
+        AUTHORIZATION_CONSISTENCY_FIELD:authorization_consistency_threshold(value,3),
     }
 
 
@@ -276,10 +300,17 @@ def _training_bounds(value,mode=None):
 
 
 def _policy(value):
-    """Validate the complete immutable policy supported by these role workers."""
+    """Validate the complete immutable policy supported by these role workers.
+
+    The allowlist is built from the declared parameter sets rather than written out,
+    so a new screening parameter is accepted here as soon as it is declared. The
+    rule's own name is allowed alongside them: it is not a threshold but it decides
+    which thresholds apply, so it belongs in the policy an edge signs.
+    """
     fields={'mode','scale','bits','dimension','members','batch_size'}
-    if (not isinstance(value,dict) or not fields<=set(value)
-            or set(value)-fields-set(_PROOF_DEFAULTS)-set(SCREENING_DEFAULTS)-{'proof_crs_hash','dataset','model_descriptor'}-TOPOLOGY_FIELDS):
+    optional=(set(_PROOF_DEFAULTS) | set(SCREENING_DEFAULTS) | {'screening_rule'}
+              | {'proof_crs_hash','dataset','model_descriptor'} | TOPOLOGY_FIELDS)
+    if not isinstance(value,dict) or not fields<=set(value) or set(value)-fields-optional:
         raise ValueError('complete task policy is required')
     if value['mode'] not in ('plain','encrypted','dgflow','optimized'):
         raise ValueError('invalid task policy mode')
@@ -322,24 +353,39 @@ def envelope_context(ctx):
 
 def _context(ctx):
     fields={'task_id','round_id','key_epoch','model_hash','bits','scale','dimension'}
+    # Proof-suite fields. Kept separate from the authorization consistency threshold
+    # below, because these three are what the proof-suite rules discriminate on: a
+    # legacy context must omit them and a compact one must pin them.
     optional={'proof_suite','proof_block_size','proof_crs_hash'}
     data_fields={'dataset','model_descriptor'}
-    if not isinstance(ctx,dict) or not fields<=set(ctx) or set(ctx)-fields-optional-data_fields-TOPOLOGY_FIELDS:
+    # The threshold travels with the round context rather than as a separate argument,
+    # because a decision binds `b.digest(ctx)`: putting it here is what makes the
+    # threshold part of the signed record, so an edge cannot be checked against one
+    # value while having signed another. It is not a proof-suite field, so it is
+    # excluded from the checks that discriminate between suites.
+    allowed=fields|optional|data_fields|TOPOLOGY_FIELDS|{AUTHORIZATION_CONSISTENCY_FIELD}
+    if not isinstance(ctx,dict) or not fields<=set(ctx) or set(ctx)-allowed:
         raise ValueError('invalid round context')
+    if AUTHORIZATION_CONSISTENCY_FIELD in ctx:
+        # Range-checked here so an out-of-range value fails at round entry rather than
+        # mid-authorization. The unpinned legacy path has no declared count, so the
+        # authority list length is used.
+        authorization_consistency_threshold(ctx,len(authority_nodes(ctx)))
     _safe_id(ctx['task_id']); _safe_id(ctx['key_epoch']); _training_bounds(ctx)
     descriptor=_model_descriptor(ctx)
     if descriptor is None and 'dataset' in ctx:
         _model_geometry(ctx['dimension'],ctx['dataset'])
-    if descriptor is not None and descriptor['model_name']!='linear' and set(ctx)&optional:
+    proof_fields=set(ctx)&optional
+    if descriptor is not None and descriptor['model_name']!='linear' and proof_fields:
         raise ValueError('plain CNN context cannot contain cryptographic proof fields')
     pinned_topology(ctx)
     suite,_=p.proof_settings(ctx)
-    if suite=='legacy' and set(ctx)&optional:
+    if suite=='legacy' and proof_fields:
         raise ValueError('legacy round context must omit compact proof fields')
     if suite==_LEGO_SUITE:
-        if not {'proof_suite','proof_crs_hash'}<=set(ctx) or 'proof_block_size' in ctx:
+        if not {'proof_suite','proof_crs_hash'}<=proof_fields or 'proof_block_size' in ctx:
             raise ValueError('Lego round context must pin suite and CRS without a block size')
-    elif suite!='legacy' and (not {'proof_suite','proof_block_size'}<=set(ctx) or 'proof_crs_hash' in ctx):
+    elif suite!='legacy' and (not {'proof_suite','proof_block_size'}<=proof_fields or 'proof_crs_hash' in ctx):
         raise ValueError('compact round context must pin proof suite and block size')
     if (type(ctx['round_id']) is not int or ctx['round_id']<1
             or type(ctx['scale']) is not int or ctx['scale']<=0
@@ -352,14 +398,49 @@ def _context(ctx):
 
 
 def authorization(identity,certificates,ctx):
+    """Accept one authorization decision, after separating two thresholds.
+
+    `authority_threshold` bounds the key material: a subset of edges can hold enough
+    shares to proceed, which is what makes the deployment survive a machine being
+    down. Confirming that a decision is the same on every edge is a different
+    question, and it was being answered by that smaller number. With two of three
+    edges, two colluding edges could sign a decision the third never saw, and this
+    function accepted it because it only ever compared the certificates it was given.
+
+    The two are now separate. `authority_consistency_threshold` decides how many
+    distinct authorities must have signed the same decision, and it defaults to every
+    authority. A conflicting decision from any single authority is refused, because a
+    round in which two different approved sets were signed has no single answer.
+
+    The certificate count is checked against the *key* threshold and the distinct
+    signer count against the *consistency* threshold, so neither check can be
+    satisfied by the other's number.
+    """
     topology=role_topology(ctx); authorities=authority_nodes(ctx)
-    decisions=[]; senders=[]
+    consistency=authorization_consistency_threshold(topology,topology['authority_count'])
+    decisions=[]; senders=[]; distinct={}
     for cert in certificates:
         sender=cert['sender']
         if sender not in authorities or sender in senders: raise ValueError('duplicate or unknown authorization signer')
-        senders.append(sender); decisions.append(identity.verify_public(cert,'authorization',sender))
-    if len(decisions)<topology['authority_threshold'] or any(v!=decisions[0] for v in decisions):
-        raise ValueError('authorization quorum not met or conflicting decisions')
+        senders.append(sender)
+        verified=identity.verify_public(cert,'authorization',sender)
+        decisions.append(verified)
+        # Exact equality of the whole signed decision, not of a subset of fields: a
+        # field the comparison forgot would be a field two edges could disagree on
+        # without anyone noticing.
+        distinct.setdefault(b.digest(verified),[]).append(sender)
+    if len(distinct)>MAX_AUTHORIZATION_DECISIONS:
+        # Name the split so an operator can see which edges disagree, rather than
+        # being told only that the round failed.
+        groups='；'.join(f"{','.join(sorted(signers))} 签了一份决定"
+                         for signers in distinct.values())
+        raise ValueError(f'授权决定出现分歧：{groups}；一轮只能有一个被签署的决定')
+    if len(senders)<topology['authority_threshold']:
+        raise ValueError('authorization quorum not met')
+    if len(senders)<consistency:
+        raise ValueError(
+            f'授权一致性未达门限：需要 {consistency} 个边缘签署同一决定，实际 {len(senders)} 个；'
+            '该门限与密钥门限分开，默认要求全部边缘')
     decision=decisions[0]
     if decision['context_hash']!=b.digest(ctx): raise ValueError('authorization context mismatch')
     if pinned_topology(decision)!=pinned_topology(ctx):
@@ -479,6 +560,42 @@ class RoleWorker:
             self._proof_registry=Registry(self.runtime)
         return self._proof_registry
 
+    def _check_epoch_capacity(self):
+        """Refuse a new key epoch once this node holds its bounded number.
+
+        Each accepted epoch writes one `epochs/<digest>.json` record held for the
+        node's lifetime, and the epoch identifier comes from the coordinator. Without
+        a bound the directory grows without limit, and every later lifecycle query
+        scans it afile at a time. The bound is a fixed constant rather than a
+        configuration knob, because the value that matters is "bounded", and an
+        operator who needs more epochs needs a new task, not a larger directory.
+        """
+        folder=self.folder/'epochs'
+        if not folder.exists():
+            return 0
+        try:
+            held=sum(1 for entry in folder.iterdir() if entry.is_file())
+        except OSError as exc:
+            raise ValueError('无法统计密钥周期记录；请检查运行目录可读性') from exc
+        if held>=MAX_KEY_EPOCHS:
+            raise ValueError(
+                f'本节点已保留 {held} 个密钥周期记录，达到上限 {MAX_KEY_EPOCHS}；'
+                '请新建任务而不是继续在同一节点上轮换密钥周期')
+        return held
+
+    def key_lifecycle(self):
+        """Read-only view of the key epochs this node holds, newest name first.
+
+        Reports the count against the bound so a lifecycle question is answered
+        without scanning the directory twice or listing unbounded output.
+        """
+        folder=self.folder/'epochs'
+        names=sorted((entry.name for entry in folder.iterdir() if entry.is_file()),
+                     reverse=True) if folder.exists() else []
+        return {'held':len(names),'limit':MAX_KEY_EPOCHS,
+                'remaining':max(0,MAX_KEY_EPOCHS-len(names)),
+                'records':names[:MAX_KEY_EPOCHS]}
+
     def execute(self,action,payload):
         if action=='prepare_compute':
             if (not self.node_id.startswith('authority') or not isinstance(payload,dict)
@@ -591,31 +708,56 @@ class RoleWorker:
         return self.identity.sign_public('client-verification',self._owned_verification)
 
     def _own_verification_material(self,packets,published_keys):
-        """Persist the public material this owner alone can open, when opted in.
+        """Persist the two material layers this owner alone can open.
 
         Only the assigned owner ever holds a submitted packet in the clear, so it
         is the only actor able to write material an independent verifier can
-        replay. Persistence is off unless the operator sets the flag, and a
-        failure here is reported rather than allowed to change the round's
-        cryptographic outcome.
+        replay. The shareable proof layer and the restricted function-key layer
+        are written to separate trees, so a later export of the run record cannot
+        pick up the keys by accident. Persistence is off unless the operator sets
+        the flags, and a failure here is reported rather than allowed to change
+        the round's cryptographic outcome.
         """
         from dgfl import verification_materials as vm
         if not vm.persistence_enabled():
             return
         try:
-            material=vm.build(self.ctx['round_id'],self.ctx,self.reference,packets,
-                              {cid:self.auth.public_keys(cid) for cid in packets},
-                              published_keys,role_topology(self.policy)['authority_threshold'])
+            round_id=self.ctx['round_id']
+            public=vm.build(round_id,self.ctx,self.reference,packets,
+                            {cid:self.auth.public_keys(cid) for cid in packets})
             folder=self.folder/'verification-materials'
             # The key epoch is task level, so the file name carries its digest to
             # keep two epochs of the same round number apart.
-            name=f"round-{int(self.ctx['round_id'])}-{b.digest(self.ctx['key_epoch'])[:12]}.bin"
-            vm.write(folder/name,material)
-            self._material_note=f"verification material written to {name}"
+            epoch_digest=b.digest(self.ctx['key_epoch'])[:12]
+            name=f"round-{int(round_id)}-{epoch_digest}.bin"
+            vm.write(folder/name,public)
+            note=f"verification material written to {name}"
+            note+=self._write_restricted_material(vm,round_id,public,published_keys,epoch_digest)
+            self._material_note=note
         except (ValueError,OSError) as exc:
             # Never fail a verified round because a diagnostic artefact could not
             # be written; the signed verdict already stands.
             self._material_note=f'verification material not written: {exc}'
+
+    def _write_restricted_material(self,vm,round_id,public,published_keys,epoch_digest):
+        """Persist the restricted layer when the operator opted in.
+
+        Returns a short description of what happened. The keys never share a
+        directory with the shareable layer, and the file is created with
+        owner-only permissions before any bytes are written.
+        """
+        restricted_document=vm.build_restricted(
+            round_id,self.ctx,published_keys,proof_material_digest=vm.digest_of(public),
+            authority_threshold=role_topology(self.policy)['authority_threshold'])
+        root=self.folder/'restricted-materials'
+        if not vm.restricted_persistence_enabled():
+            return (f'；受限材料未落盘（{vm.RESTRICTED_ENVIRONMENT_FLAG} 未开启）；'
+                    '该轮内积只能在本机重新计算')
+        try:
+            vm.write_restricted(root/f'round-{int(round_id)}-{epoch_digest}.bin',restricted_document)
+        except (ValueError,OSError) as exc:
+            return f'；受限材料未落盘：{exc}'
+        return '；受限材料写入本机受保护目录（不随实验导出）'
 
     def _authorize_shared(self,payload):
         """Trust authenticated owner verdicts, then independently apply screening.
@@ -694,26 +836,63 @@ class RoleWorker:
                                 'norm_squared':core['norm_squared'] if core is not None else None,
                                 'proof_hash':proof_hash,
                                 'packet_hash':b.digest(submission_core(core)) if core is not None else None})
-        screening=screening_settings(self.policy); rejection_reasons={}
-        if self.mode=='encrypted': candidates=valid_clients
-        else: candidates,rejection_reasons=screen(scores,{cid:packets[cid]['norm_squared'] for cid in scores},screening)
+        # The signed policy states the rule and its parameters, which decide every
+        # outcome, plus whichever gate thresholds the task stated. It deliberately
+        # does not invent gate thresholds the task left unspecified: an omitted gate
+        # is disabled, and materialising it here would change what the rule rejects.
+        screening=screening_settings(self.policy)
+        rejection_reasons={}; stages={}; clustering=None
+        counts=dict.fromkeys(EXIT_STAGES,0)
+        if self.mode=='encrypted':
+            candidates=valid_clients
+            # Encrypted runs keep their historical meaning: screening is not applied,
+            # so the decision record states that rather than reporting empty counts
+            # that would look like "nothing was removed by the rule".
+            clustering={'rule':None,'version':SCREENING_VERSION,'applied':False,
+                        'reason':'encrypted_mode_skips_screening'}
+            counts['accepted']=len(candidates)
+        else:
+            decision=screen_decided(scores,{cid:packets[cid]['norm_squared'] for cid in scores},screening)
+            candidates=decision['chosen']; rejection_reasons=decision['reasons']
+            stages=decision['stages']; clustering=decision['clustering']
+            counts=dict(decision['counts'])
+            for cid in list(packets):
+                if cid not in scores:
+                    # The client submitted but its owner verdict is missing, so no
+                    # score exists and the rule never saw it.
+                    counts['proof_failed']=counts.get('proof_failed',0)+1
+                    stages[cid]='proof_failed'
         strategy=screening.get('batch_strategy','fixed')
         approved=apply_batches(candidates,self.clients,strategy=strategy,batch_size=self.policy['batch_size'])
         collateral=sorted(candidates-set(approved))
+        for cid in collateral:
+            stages[cid]='batch_collateral'
+        counts['batch_collateral']=len(collateral)
+        # "Accepted" counts what the batch rule actually released, not what survived
+        # screening: a candidate whose fixed batch is incomplete is not accepted, and
+        # reporting it as such would overstate participation.
+        counts['accepted']=len(approved)
         for row in validations:
             cid=row['client_id']
-            if cid in approved: row.update(decision='accepted',reason='通过并纳入聚合')
-            elif cid in collateral: row.update(decision='collateral',reason=(
+            if cid in approved: row.update(decision='accepted',reason='通过并纳入聚合',exit_stage='accepted')
+            elif cid in collateral: row.update(decision='collateral',exit_stage='batch_collateral',reason=(
                 '固定批次中其他成员未通过或缺席' if strategy=='fixed' else '合格成员不足两人，不能发布单人聚合'))
-            elif cid in scores: row.update(decision='rejected',reason=rejection_reasons[cid])
-            else: row['decision']='rejected'
+            elif cid in scores: row.update(decision='rejected',exit_stage=stages.get(cid,'cluster_gate'),
+                                           reason=rejection_reasons[cid])
+            else: row.update(decision='rejected',exit_stage=stages.get(cid,'proof_failed'))
         manifest={'context_hash':b.digest(self.ctx),'members':list(self.policy['members']),'approved':approved,
                   'packet_hashes':{cid:b.digest(submission_core(packets[cid])) for cid in approved},
                   'batch_size':self.policy['batch_size']}
         if screening: manifest['screening']=screening
         topology=pinned_topology(self.policy)
         if topology is not None: manifest.update(topology)
-        self.approval={**manifest,'manifest_hash':b.digest(manifest),'validations':validations,'collateral':collateral}
+        # The decision record travels with the signed authorization, so a later
+        # reader sees the centres, sizes, dispersions, separation, the thresholds
+        # actually applied and the stage each client exited at — not only who was
+        # accepted. It is inside the manifest, so it is covered by the signature.
+        self.approval={**manifest,'manifest_hash':b.digest(manifest),
+                       'screening_decision':clustering,'screening_counts':counts,
+                       'validations':validations,'collateral':collateral}
         self._approved_packets={cid:packets[cid] for cid in approved}
         return self.identity.sign_public('authorization',self.approval)
 
@@ -742,8 +921,7 @@ class RoleWorker:
             offset,d=p._bounds(ctx)
             if len(reference)!=d or any(type(x) is not int or not -offset<=x<offset for x in reference) or b.digest(reference)!=ctx['model_hash']:
                 raise ValueError('reference model hash or range mismatch')
-            epoch_path=self.folder/'epochs'/(b.digest(ctx['key_epoch'])+'.json')
-            # The key epoch is task-level, so later rounds reuse the participant
+            epoch_path=self.folder/'epochs'/(b.digest(ctx['key_epoch'])+'.json')            # The key epoch is task-level, so later rounds reuse the participant
             # built on the first one instead of rebuilding it. Reuse keys on the
             # participant's own epoch, so a genuinely new epoch still initialises
             # and the replay guard below still fires for it.
@@ -754,14 +932,47 @@ class RoleWorker:
                 raise ValueError('key epoch already pinned to a different task topology')
             if epoch_path.exists() and not reuse:
                 raise ValueError('epoch already initialized; query cached request or create a new task')
+            # Bound how many key-lifecycle records one node keeps. Each accepted new
+            # epoch writes one, and an epoch is a coordinator-supplied string, so
+            # without a bound a caller could fill a node's disk and make every later
+            # lifecycle query scan an unbounded directory. The refusal is typed and
+            # says what to do, rather than failing later on a full disk.
+            if not epoch_path.exists():
+                self._check_epoch_capacity()
             previous=self.task_state.get(ctx['task_id'])
             if previous and previous.get('policy')!=policy:
+                # This is where a changed client set is refused: `policy` carries
+                # `members`, so a task whose population grew is a policy mismatch and
+                # not an append. Dynamic join would have to replace this check, and the
+                # questions that decision has to answer are recorded in the staged plan
+                # under G (key epoch for the joiner, context binding, batch meaning,
+                # cross-round comparison).
                 raise ValueError('task policy already fixed; create a new task')
             if previous and previous.get('status')!='ready':
                 raise ValueError('round already started; retry cached request or create a new task')
             if previous and (ctx['round_id']!=previous['next_round'] or reference!=previous['reference'] or mode!=previous['mode']):
                 raise ValueError('round/model fork rejected')
-            if not previous and ctx['round_id']!=1: raise ValueError('task must start at round one')
+            if not previous and ctx['round_id']!=1:
+                # A fresh task may skip round one only when this authority has
+                # durably confirmed the exact parent state. The coordinator's
+                # checkpoint alone cannot bypass the local no-fork guard.
+                recovery=payload.get('recovery')
+                if (not isinstance(recovery,dict)
+                        or set(recovery)!={'parent_task_id','checkpoint_round','checkpoint_sha256'}
+                        or not isinstance(recovery['parent_task_id'],str)
+                        or recovery['parent_task_id']==ctx['task_id']
+                        or type(recovery['checkpoint_round']) is not int
+                        or recovery['checkpoint_round']!=ctx['round_id']-1
+                        or not isinstance(recovery['checkpoint_sha256'],str)
+                        or len(recovery['checkpoint_sha256'])!=64
+                        or any(char not in '0123456789abcdef' for char in recovery['checkpoint_sha256'])):
+                    raise ValueError('task must start at round one or carry verified recovery state')
+                parent=self.task_state.get(recovery['parent_task_id'])
+                if (not parent or parent.get('status')!='ready'
+                        or parent.get('next_round')!=ctx['round_id']
+                        or parent.get('reference')!=reference
+                        or parent.get('mode')!=mode or parent.get('policy')!=policy):
+                    raise ValueError('recovery parent round/model/policy is not locally confirmed')
             public_job=None; parameters_evidence=None
             if settings['proof_suite']==_LEGO_SUITE:
                 # Validate local pinned public parameters before committing any

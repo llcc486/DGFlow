@@ -298,8 +298,12 @@ def _parameter_material(runtime):
             continue
         if not folder.is_dir() or re.fullmatch('[0-9a-f]{64}', folder.name) is None:
             raise ValueError('unexpected file or directory in installed public Lego parameters')
-        if {path.name for path in folder.iterdir()} != {'manifest.json', 'vk.bin', 'pk.bin'}:
-            raise ValueError('public Lego parameter folders must contain only manifest.json, vk.bin and pk.bin')
+        # The signed provenance credential belongs here: it is public, and a parameter
+        # set without it could not be attributed by whoever installs it.
+        if {path.name for path in folder.iterdir()} != {'manifest.json', 'vk.bin', 'pk.bin',
+                                                        'provenance.json'}:
+            raise ValueError('public Lego parameter folders must contain only manifest.json, '
+                             'vk.bin, pk.bin and the provenance credential')
         for path in folder.iterdir():
             base._no_links(path)
         path = folder/'manifest.json'
@@ -322,7 +326,8 @@ def _allowed(name, native_info, parameters):
     if name in {native_info['wheel'], native_info['source_receipt']}:
         return True
     if name in {'parameters/proof-parameters/'+record['crs_hash']+'/'+filename
-                for record in parameters for filename in ('manifest.json', 'vk.bin', 'pk.bin')}:
+                for record in parameters
+                for filename in ('manifest.json', 'vk.bin', 'pk.bin', 'provenance.json')}:
         return True
     if name.startswith('wheelhouse/') and len(name.split('/')) == 2 and name.endswith('.whl'):
         return True
@@ -522,7 +527,7 @@ def prepare_full_offline(root=ROOT, output=None, *, wheelhouse=None, native_whee
                 source_folder = base._safe_file(parameters_runtime, 'proof-parameters/'+record['crs_hash'])
                 destination = staging/'parameters/proof-parameters'/record['crs_hash']
                 destination.mkdir(parents=True)
-                for filename in ('manifest.json', 'vk.bin', 'pk.bin'):
+                for filename in ('manifest.json', 'vk.bin', 'pk.bin', 'provenance.json'):
                     shutil.copyfile(source_folder/filename, destination/filename)
         raw = staging/'data/mnist/raw'
         raw.mkdir(parents=True)

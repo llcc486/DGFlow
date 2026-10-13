@@ -30,7 +30,7 @@ from dgfl.deployment import cluster_topology
 from dgfl.experiments.attack_metrics import participation_metrics
 from dgfl.experiments.metadata import display_name, normalize_metadata, record_metadata
 from dgfl.experiments.monitoring import RunNodeMonitor, clean_event, frozen_nodes, monitor_snapshot
-from dgfl.experiments.resources import check_wire_resources, model_configuration
+from dgfl.experiments.resources import check_wire_resources, model_configuration, resource_layers
 from dgfl.experiments.telemetry import LocalProcessMonitor
 from dgfl.experiments.tensorboard import TensorBoardLogs
 from dgfl.services.roles import (
@@ -45,6 +45,7 @@ from dgfl.services.roles import (
     node_number,
     submission_core,
 )
+from dgfl.topology import authorization_consistency_threshold
 from dgfl.training import model_adapter
 from dgfl.training.attacks import attack_clients, attack_settings
 from dgfl.training.data import load_mnist
@@ -60,6 +61,7 @@ from dgfl.validation.policy import (
     screening_settings,
     validate_batch_configuration,
 )
+from dgfl.versioning import version_declaration
 
 
 def utc(): return datetime.now(UTC).isoformat()
@@ -215,6 +217,34 @@ def training_failure_reason(node, action, exc):
     return '训练请求或响应校验失败（' + type(exc).__name__ + '），请检查客户端日志'
 
 
+def require_participant_versions(replies, nodes, *, action='训练', strict=False):
+    """Refuse to start a round when a participant cannot speak this protocol.
+
+    `replies` maps node name to that participant's `health` reply, or None when
+    it could not be reached. The check runs before the first round so a
+    deployment built from mixed revisions produces one readable error listing the
+    offenders, instead of a round that fails part-way through for an unrelated
+    looking reason.
+
+    A declared-but-unsupported version is always refused. An undeclared version is
+    refused only under `strict`; see :func:`dgfl.versioning.require_participants`
+    for why the two cases are different. Every role this project starts declares
+    its version, so the declared check covers a real deployment either way.
+    """
+    from dgfl.versioning import require_participants
+    declarations = {}
+    for name in nodes:
+        reply = replies.get(name)
+        if not isinstance(reply, dict):
+            declarations[name] = None
+            continue
+        capabilities = reply.get('capabilities')
+        declarations[name] = ({'protocol_version': reply.get('protocol_version')}
+                              if 'protocol_version' in reply
+                              else (capabilities if isinstance(capabilities, dict) else None))
+    return require_participants(declarations, action=action, strict=strict)
+
+
 def require_client_training_backend(nodes, backend, clients):
     """Torch runs at the clients; the coordinator does not need its dependency."""
     if backend == 'numpy':
@@ -350,6 +380,19 @@ class RunManager:
     def __init__(self,runtime):
         self.runtime=Path(runtime).resolve(); self.runtime.mkdir(parents=True,exist_ok=True)
         self.lock=threading.RLock(); self.active=None; self.stop_event=threading.Event(); self.records={}
+        # Stop bookkeeping: when the request arrived, which stage honoured it, and
+        # which stage the run is in now. Kept separately from the event so the
+        # difference between "stop requested" and "computation stopped" is reportable.
+        self.stop_requested_at=None
+        self.stop_requested_stage=None
+        self.stop_honoured_stage=None
+        self.current_stage=None
+        # Persistence cost, accumulated over the run: how many whole-document writes
+        # happened and how long they took. A round's stage times do not include this,
+        # because saves happen inside the stages that trigger them.
+        self.save_count=0
+        self.save_seconds=0.0
+        self.save_last_seconds=0.0
         self.last_nodes=[]
         self._monitors={}
         self._node_monitors={}
@@ -433,7 +476,16 @@ class RunManager:
                 if measured:
                     row['monitoring_overhead']=dict(measured)
                     row['metrics_eval_s']=measured.get('metrics_eval_s')
+        # Every save rewrites the whole result document, and the document grows as
+        # rounds complete, so the cost per save rises over a run. The count and total
+        # are recorded so the round's persistence overhead is a measurement in the
+        # result rather than something a reader has to infer from the round duration.
+        started=time.perf_counter()
         atomic_json(self.runtime/'results'/record['run_id']/'result.json',record)
+        elapsed=time.perf_counter()-started
+        self.save_count+=1
+        self.save_seconds+=elapsed
+        self.save_last_seconds=elapsed
 
     def _failure_detail(self,exc):
         return f'{type(exc).__name__}: {exc}'.replace(str(self.runtime.parent),'[workspace]')[:600]
@@ -442,14 +494,112 @@ class RunManager:
         with self.lock:
             return {run_id:display_name(record) for run_id,record in self.records.items()}
 
+    def _round_plan(self,cfg,policy,batch_size,topology,descriptor):
+        """The immutable per-round plan a checkpoint records.
+
+        These are the values a resume has to keep fixed for the continuation to be
+        the same experiment: how the data was split, the seed derivation, the fixed
+        batches and client ownership, the screening policy, and the thresholds.
+        """
+        members=client_members(topology['client_count'])
+        return {'model_descriptor':descriptor,
+                'dataset':cfg.get('dataset'),
+                'grid':cfg.get('grid'),
+                'seed':cfg.get('seed'),
+                'local_epochs':cfg.get('local_epochs'),
+                'batch_size':batch_size,
+                'batch_strategy':policy.get('batch_strategy'),
+                'client_count':topology['client_count'],
+                'client_authorities':dict(topology['client_authorities']),
+                'batches':(fixed_batches(len(members),batch_size=batch_size)
+                           if policy.get('batch_strategy')=='fixed' else []),
+                'screening':{name:policy[name] for name in
+                             ('min_cosine','max_norm_squared','max_norm_ratio','min_norm_ratio',
+                              'batch_strategy') if name in policy},
+                'authority_threshold':topology['authority_threshold'],
+                'aggregator_threshold':topology['aggregator_threshold'],
+                # Frozen with the rest of the plan: a continuation that used a
+                # different confirmation threshold would not be the same experiment,
+                # and the threshold is what decides how many edges had to agree.
+                'authorization_consistency_threshold':authorization_consistency_threshold(
+                    cfg,topology['authority_count']),
+                'mode':cfg.get('mode'),
+                'bits':cfg.get('bits'),'scale':cfg.get('scale'),
+                'proof_suite':policy.get('proof_suite'),
+                'proof_crs_hash':policy.get('proof_crs_hash')}
+
+    def _commit_round_checkpoint(self,record,round_id,reference,ctx,manifest_hash,epoch,
+                                 confirmation_rows,authority_threshold,policy,batch_size,
+                                 topology,descriptor):
+        """Persist the round's checkpoint and its commit certificate.
+
+        Called with the run lock held, after the round's row is saved and before
+        the round is announced. A failure here is reported on the record rather
+        than raised: the round's cryptographic outcome is already fixed, and the
+        run should continue while an operator can see that the checkpoint is
+        missing. A missing checkpoint means the run is not resumable, which
+        `resume_plan` reports instead of guessing.
+        """
+        from dgfl.experiments import checkpoint as cp
+        try:
+            results=self.runtime/'results'
+            previous=cp.latest(results,record['run_id'])
+            plan=self._round_plan(record['config'],policy,batch_size,topology,descriptor)
+            document=cp.build(round_id=round_id,reference=reference,context=ctx,
+                              config=record['config'],plan=plan,key_epoch=epoch,
+                              authorization_manifest_hash=manifest_hash,previous=previous)
+            written=cp.write(cp.checkpoint_path(results,record['run_id'],round_id),document)
+            # A plain baseline has no authority confirmations. Persist its
+            # checkpoint without inventing a secure commit certificate.
+            if record['config']['mode']!='plain':
+                certificate=cp.commit_certificate(round_id=round_id,
+                                                  checkpoint_sha256=written['sha256'],
+                                                  confirmations=confirmation_rows,
+                                                  threshold=int(authority_threshold))
+                if not certificate['valid']:
+                    raise ValueError('round commit confirmation threshold not met')
+                cp.write_certificate(results,record['run_id'],certificate)
+            record.setdefault('checkpoints',[]).append(
+                {'round':round_id,'sha256':written['sha256'],'bytes':written['bytes'],
+                 'model_hash':document['model_hash'],
+                 'context_hash':document['context_hash'],
+                 'authorization_manifest_hash':manifest_hash,
+                 'previous_checkpoint_sha256':document['previous_checkpoint_sha256'],
+                 'directory_fsynced':written['directory_fsynced']})
+            record['evidence'].setdefault('checkpoints',{})['latest_round']=round_id
+            self._save(record)
+            return written
+        except (OSError,ValueError) as exc:
+            detail=self._failure_detail(exc)
+            record.setdefault('evidence',{}).setdefault('checkpoints',{})['error']=detail
+            record['events'].append({'time':utc(),'stage':'checkpoint',
+                                     'message':f'第 {round_id} 轮检查点未写入：{detail}；'
+                                               '该执行不能从本轮恢复', 'round':round_id})
+            try:
+                self._save(record)
+            except OSError:
+                # The run record itself is unwritable, so the report of the missing
+                # checkpoint cannot be persisted either. The round outcome stands.
+                return None
+            return None
+
     def _emit(self,record,stage,message,round_id=0):
         with self.lock:
             record['events'].append({'time':utc(),'stage':stage,'message':message,'round':round_id})
             self._save(record)
 
-    def start(self,config):
+    def start(self,config,*,resume_from=None,parent_run_id=None,logical_experiment_id=None):
+        """Create and queue one execution.
+
+        `resume_from` continues a previous execution from a checkpoint. It carries
+        the checkpoint's global model and the round to start at, which are recorded
+        on the new execution rather than re-derived, so the continuation provably
+        begins from the checkpoint a reader can inspect.
+        """
         config={key:value for key,value in normalize_metadata(config).items()
                 if key not in ('model_name','model_descriptor','bits','scale') or value is not None}
+        if resume_from:
+            config['resume_from']=dict(resume_from)
         attack_settings(config)
         config.setdefault('proof_suite','lego_norm_v1')
         if config['proof_suite']!='lego_norm_v1':
@@ -556,10 +706,25 @@ class RunManager:
                         'execution':{'requested':config.get('execution','auto'),'resolved':execution,'rpc_workers':workers},
                         'cloud_strategy':{'requested':config['cloud_strategy'],'resolved':None},
                         'wire_resources':resource_checks,
+                        'versions':version_declaration(),
                         'proof_settings':{name:config.get(name,default) for name,default in
                                           (('proof_suite','lego_norm_v1'),('verification','deterministic'),
                                            ('verification_workers',1),('verification_threads',2),('proof_block_size',128))},
                         'implementation':implementation_evidence()}}
+            # Execution identity. A resumed run is a new execution of the same
+            # logical experiment: it keeps the logical id, names the execution it
+            # continues, and gets a fresh key epoch of its own.
+            execution_attempt_id=uuid.uuid4().hex
+            record['logical_experiment_id']=logical_experiment_id or run_id
+            record['parent_run_id']=parent_run_id
+            record['execution_attempt_id']=execution_attempt_id
+            if resume_from:
+                record['start_round']=int(resume_from['start_round'])
+                record['resumed_from']={'parent_run_id':parent_run_id,
+                                        'checkpoint_round':int(resume_from['checkpoint_round']),
+                                        'checkpoint_sha256':resume_from['checkpoint_sha256'],
+                                        'start_round':int(resume_from['start_round']),
+                                        'idempotency_key':resume_from.get('idempotency_key')}
             if descriptor is not None: record['evidence']['model_descriptor']=descriptor
             record['evidence']['node_snapshot']=frozen_nodes(cluster,config)
             if crs_evidence is not None:
@@ -571,6 +736,12 @@ class RunManager:
             except Exception as exc:
                 raise ValueError('任务初始记录无法保存，任务未启动：'+self._failure_detail(exc)) from exc
             self.records[run_id]=record; self.active=run_id; self.stop_event.clear()
+            # The stop bookkeeping belongs to the run, not to the manager: a previous
+            # run's request must not be able to end this one.
+            self.stop_requested_at=None
+            self.stop_requested_stage=None
+            self.stop_honoured_stage=None
+            self.current_stage=None
             try:
                 threading.Thread(target=self._run,args=(record,),daemon=True,name='dgflow-experiment').start()
             except Exception as exc:
@@ -590,20 +761,159 @@ class RunManager:
                 raise ValueError(record['error']) from exc
             return {'run_id':run_id,'name':record['name'],'description':record['description'],'status':'queued'}
 
-    def stop(self,run_id):
+    def checkpoints(self,run_id):
+        """Public summaries of a run's checkpoints, without any model vector."""
+        from dgfl.experiments import checkpoint as cp
         with self.lock:
-            if self.active!=run_id: raise ValueError('该任务未在运行')
-            self.stop_event.set(); self.records[run_id]['status']='stopping'; self._save(self.records[run_id])
-        return {'status':'stopping'}
+            if run_id not in self.records: raise KeyError(run_id)
+        summaries=cp.summaries(self.runtime/'results',run_id)
+        for entry in summaries:
+            entry.pop('path',None)
+        return {'run_id':run_id,'checkpoints':summaries,
+                'latest_round':(summaries[-1]['round'] if summaries else None)}
+
+    def recovery_status(self,run_id):
+        """Whether a run can be resumed, from where, and what blocks it.
+
+        `resume_plan` reports a missing checkpoint as a missing checkpoint rather
+        than inferring resumability from a stored accuracy or model digest.
+        """
+        from dgfl.experiments import checkpoint as cp
+        with self.lock:
+            if run_id not in self.records: raise KeyError(run_id)
+            record=self.records[run_id]
+            running=self.active is not None
+        plan=cp.resume_plan(self.runtime/'results',run_id,config=dict(record.get('config') or {}))
+        plan.pop('model',None)
+        plan['run_id']=run_id
+        plan['status']=record.get('status')
+        plan['resumed_by']=[other['run_id'] for other in self.records.values()
+                            if other.get('parent_run_id')==run_id]
+        if plan['resumable'] and running:
+            plan['resumable']=False
+            plan['reason']='已有任务正在运行；请先等待其结束或停止，再创建恢复执行'
+        plan['key_epoch']='新执行使用新的密钥周期与新的密码随机数'
+        plan['late_responses']='旧执行被明确终止并隔离；其迟到响应因上下文摘要不同不会被新执行接受'
+        return plan
+
+    def resume(self,run_id,*,idempotency_key=None):
+        """Create a new execution that continues `run_id` from its last checkpoint.
+
+        The original execution is terminated and kept as history; the continuation
+        is a separate execution of the same logical experiment with its own key
+        epoch. Repeating the same request returns the execution already created for
+        that idempotency key instead of starting a second one.
+        """
+        from dgfl.experiments import checkpoint as cp
+        with self.lock:
+            if run_id not in self.records: raise KeyError(run_id)
+            parent=self.records[run_id]
+            # Idempotency is checked before the busy check: a repeated request for a
+            # continuation that already exists returns it, including while that
+            # continuation is still running. Otherwise a retried or double-clicked
+            # request would be refused for the very execution it created, and the
+            # caller would have no way to learn the run it is waiting for.
+            if idempotency_key:
+                for other in self.records.values():
+                    resumed=(other.get('resumed_from') or {})
+                    if (other.get('parent_run_id')==run_id
+                            and resumed.get('idempotency_key')==idempotency_key
+                            and other.get('status') in ('queued','running','stopping','completed',
+                                                        'failed','aborted','stopped')):
+                        return {'run_id':other['run_id'],'status':other['status'],
+                                'reused':True,'parent_run_id':run_id,
+                                'checkpoint_round':resumed.get('checkpoint_round'),
+                                'start_round':resumed.get('start_round')}
+            if self.active is not None:
+                raise ValueError('已有任务正在运行；请等待其结束或停止后再创建恢复执行')
+            plan=cp.resume_plan(self.runtime/'results',run_id,config=dict(parent.get('config') or {}))
+            if not plan['resumable']:
+                raise ValueError(plan.get('reason') or '该执行不可恢复')
+            if parent.get('status') in ('queued','running','stopping'):
+                # Terminate the old execution so its late responses cannot enter the
+                # new one. It stays in the record list as history.
+                self.stop_event.set()
+                parent['status']='aborted'
+                parent['error']='已被恢复执行取代；旧执行明确终止并隔离'
+                parent.setdefault('events',[]).append(
+                    {'time':utc(),'stage':'superseded',
+                     'message':'创建恢复执行，旧执行终止并隔离','round':0})
+                self._save(parent)
+            checkpoint={'run_id':run_id,'parent_run_id':run_id,
+                        'start_round':plan['start_round'],'model':plan['model'],
+                        'checkpoint_round':plan['checkpoint']['round'],
+                        'checkpoint_sha256':plan['checkpoint']['sha256'],
+                        'idempotency_key':idempotency_key}
+            config={key:value for key,value in parent.get('config',{}).items()
+                    if key not in ('resume_from',)}
+            config['rounds']=max(int(parent.get('config',{}).get('rounds',1)),plan['start_round'])
+        created=self.start(config,resume_from=checkpoint,parent_run_id=run_id,
+                           logical_experiment_id=parent.get('logical_experiment_id') or run_id)
+        with self.lock:
+            created_record=self.records[created['run_id']]
+            created_record['resumed_from']=dict(created_record.get('resumed_from') or {},
+                                                idempotency_key=idempotency_key)
+            self._save(created_record)
+        return {'run_id':created['run_id'],'status':created['status'],'reused':False,
+                'parent_run_id':run_id,'logical_experiment_id':
+                    self.records[created['run_id']].get('logical_experiment_id'),
+                'checkpoint_round':plan['checkpoint']['round'],
+                'checkpoint_sha256':plan['checkpoint']['sha256'],
+                'start_round':plan['start_round'],
+                'key_epoch_rotation_required':True}
+
+    def stop(self,run_id):
+        """Record that a stop was requested.
+
+        "Requested" is not "stopped". The request is checked at safe points, so the
+        computation continues until the next one; reporting the terminal status here
+        would tell an operator the round had ended while it was still running. The
+        request time is kept so the wait can be measured and published.
+        """
+        with self.lock:
+            if self.active!=run_id:
+                existing=self.records.get(run_id)
+                if existing is not None and existing.get('status') in ('stopped','aborted','failed','completed'):
+                    # Repeating a stop for a run that already ended is not an error:
+                    # the request did what it asked for.
+                    return {'status':existing['status'],'already_finished':True}
+                raise ValueError('该任务未在运行')
+            if not self.stop_event.is_set():
+                self.stop_requested_at=time.time()
+                self.stop_requested_stage=self.current_stage
+                self.stop_event.set()
+            self.records[run_id]['status']='stopping'
+            self._save(self.records[run_id])
+        return {'status':'stopping','requested_at':self.stop_requested_at,
+                'note':'已记录停止请求；计算将在下一个安全点结束'}
+
+    @property
+    def stop_latency_s(self):
+        """Seconds from the stop request to the computation actually ending."""
+        return None if self.stop_requested_at is None else time.time()-self.stop_requested_at
+
+    def _begin_stage(self,name):
+        """Name the stage a stop request would interrupt, for the record."""
+        self.current_stage=name
 
     def _check_stop(self):
-        if self.stop_event.is_set(): raise InterruptedError('用户停止任务；已完成的密码调用会安全结束')
+        if self.stop_event.is_set():
+            # The stage is recorded where the request is honoured, not where it was
+            # made: an operator asking "how long did that take, and what was it doing"
+            # needs the point of interruption.
+            self.stop_honoured_stage=self.current_stage
+            raise InterruptedError(
+                f'用户停止任务；在第 {self.current_stage or "未标明"} 阶段的安全点结束，'
+                '已完成的密码调用会安全结束')
 
     def _run(self,record):
         rpc=None; executor=None; start=time.perf_counter(); cpu_start=time.process_time(); cfg=record['config']
         gpu_device=None; gpu_before=None
         monitor=None; node_monitor=None; monitoring_stage='construct'
         outcome='completed'; failure=None
+        # A resume carries the checkpoint's model and starting round in the record
+        # itself, so the loop below does not re-derive either.
+        resume_from=cfg.get('resume_from')
 
         def monitoring_failure(stage,exc):
             # Sensor, callback and optional log failures are observability
@@ -653,6 +963,11 @@ class RunManager:
             requested_strategy=cloud_strategy_settings(cfg)
             cfg['cloud_strategy']=requested_strategy
             record['evidence']['wire_resources']=check_wire_resources(cfg)
+            # The per-machine host budget and the runtime controls are recorded beside
+            # the wire limit, each labelled with its own layer. The wire layer answers
+            # "will this message fit"; it never answered "will this machine survive the
+            # round", and the record previously showed only the first.
+            record['evidence']['resource_layers']=resource_layers(cfg)
             record['evidence']['cloud_strategy']={'requested':requested_strategy,'resolved':None}
             topology={name:cfg[name] for name in TOPOLOGY_FIELDS}
             authorities=[f'authority{i}' for i in range(1,cfg['authority_count']+1)]
@@ -687,15 +1002,25 @@ class RunManager:
                         return None
                 return executor.map(one,jobs)
             event('health','检查节点身份与双向 TLS 连接')
+            health_replies={}
             def health(node):
                 capabilities={}
                 try:
                     reply=rpc.call(node,'health',retries=0,timeout=3); state='online'
                     capabilities=reply.get('capabilities',{}) if isinstance(reply,dict) else {}
+                    health_replies[node]=reply
                 except (httpx.HTTPError,ValueError): state='offline'
                 return {'id':node,'role':''.join(c for c in node if not c.isdigit()),'status':state,
                         'host':cluster['nodes'][node]['url'],'capabilities':capabilities}
             self.last_nodes=executor.map(health,cluster['nodes'],always_parallel=True)
+            # A version mismatch is a configuration error, not a runtime failure:
+            # report it before the first round rather than after partial work.
+            online_nodes=[row['id'] for row in self.last_nodes if row['status']=='online']
+            version_check=require_participant_versions(
+                {name:health_replies.get(name) for name in online_nodes},online_nodes,
+                strict=bool(cfg.get('require_declared_protocol_version')))
+            if version_check['undeclared']:
+                record['evidence']['protocol_version_undeclared']=version_check['undeclared']
             telemetry_nodes={row['id'] for row in self.last_nodes if row['capabilities'].get('node_telemetry') is True}
             if telemetry_nodes:
                 try:
@@ -756,6 +1081,13 @@ class RunManager:
                 'strategy':screening['batch_strategy'],'batch_size':batch_size,
                 'groups':fixed_batches(len(members),batch_size=batch_size) if screening['batch_strategy']=='fixed' else [],
             }
+            # The screening rule and its thresholds are recorded as the policy that
+            # will be signed for every round, so a change to the decision procedure
+            # is visible in the record rather than only in the source.
+            record['evidence']['screening']={key:screening[key] for key in
+                ('min_cosine','max_norm_squared','max_norm_ratio','min_norm_ratio',
+                 'batch_strategy','screening_rule','cluster_center_gap','cluster_low_center_max',
+                 'cluster_iterations','cluster_tolerance') if key in screening}
             active_clients,active_clouds=choose_participants(online,cfg['mode'],cfg['offline_aggregators'],
                 batch_strategy=screening['batch_strategy'],batch_size=batch_size,
                 **{name:topology[name] for name in TOPOLOGY_FIELDS-{'client_authorities'}})
@@ -798,7 +1130,19 @@ class RunManager:
                 if not available(): raise ValueError('当前原生扩展缺少 Lego 能力')
                 policy.pop('proof_block_size')
                 policy['proof_crs_hash']=cfg['proof_crs_hash']
-                record['evidence']['proof_parameters']=Registry(self.runtime).describe(cfg['proof_crs_hash'],dimension,bits)
+                registry=Registry(self.runtime)
+                record['evidence']['proof_parameters']=registry.describe(cfg['proof_crs_hash'],dimension,bits)
+                # What could be established about where this parameter set came from.
+                # `authentic: None` means the origin was not checked, which is a
+                # different statement from "checked and acceptable", and it is recorded
+                # rather than left for a reader to infer from the absence of a field.
+                # Read defensively: a replaced registry (an offline test double, a
+                # future implementation) must not turn a missing report into a failure.
+                provenance=getattr(registry,'provenance',None)
+                record['evidence']['proof_parameter_provenance']=(
+                    provenance if isinstance(provenance,dict) else
+                    {'checked':False,'authentic':None,
+                     'reason':'未记录来源校验结果'})
             record['evidence']['proof_settings']={name:policy[name] for name in
                                                  ('proof_suite','verification','verification_workers','proof_block_size','proof_crs_hash') if name in policy}
             record['evidence']['proof']=proof_description(policy['proof_suite']) if cfg['mode']!='plain' else 'none (plain baseline)'
@@ -832,11 +1176,50 @@ class RunManager:
             # later rounds of the same task-level key epoch, so it is carried
             # across rounds rather than recomputed per round.
             dkg_transcript_hash=None
-            for round_id in range(1,cfg['rounds']+1):
+            # --- recovery -------------------------------------------------------
+            # A resumed execution starts from the global round a checkpoint
+            # records. The model is read from that checkpoint rather than
+            # recomputed, and the key epoch above is a NEW one: DKG shares are
+            # erased at finalize and a restarted edge cannot reuse an epoch, so
+            # continuing the old epoch is not possible. This is a protocol
+            # constraint, not a simplification.
+            start_round=1; resumed_from=None
+            if resume_from:
+                start_round=int(resume_from['start_round'])
+                reference=list(resume_from['model'])
+                resumed_from={'run_id':resume_from['run_id'],
+                              'checkpoint_round':int(resume_from['checkpoint_round']),
+                              'checkpoint_sha256':resume_from['checkpoint_sha256'],
+                              'parent_run_id':resume_from.get('parent_run_id'),
+                              'start_round':start_round,
+                              # Preserved so a repeated request still matches this
+                              # execution after the run thread has rewritten it.
+                              'idempotency_key':resume_from.get('idempotency_key'),
+                              'key_epoch_rotation_required':True}
+                record['resumed_from']=deepcopy(resumed_from)
+                record['evidence']['recovery']={
+                    'parent_run_id':resumed_from.get('parent_run_id'),
+                    'checkpoint_round':resumed_from['checkpoint_round'],
+                    'checkpoint_sha256':resumed_from['checkpoint_sha256'],
+                    'start_round':start_round,
+                    'model_hash':b.digest(reference),
+                    'key_epoch_rotation':('新密钥周期；DKG 份额在 finalize 后即被擦除，恢复必然重跑仪式'),
+                    'late_responses':'旧执行的迟到响应因其上下文摘要不同而不会被本执行接受'}
+                event('recovery',f'从第 {resumed_from["checkpoint_round"]} 轮检查点恢复，'
+                                 f'继续第 {start_round} 轮；新密钥周期',start_round)
+                self._save(record)
+            for round_id in range(start_round,cfg['rounds']+1):
+                self._begin_stage('round_start')
                 self._check_stop(); record['current_round']=round_id; round_start=time.perf_counter(); round_cpu_start=time.process_time(); bytes_before=rpc.bytes_sent
                 record['current_validations']=[]; record['current_validations_round']=round_id
                 record['current_cloud_selection']=None
                 times={}
+                # Filled in by the confirmation step on a secure round; a plain
+                # round has nothing to confirm and commits an empty list.
+                confirmation_rows=[]
+                # Filled in by the authorization step on a screened round; a plain
+                # round has no signed decision to take them from.
+                screening_decision=None; screening_counts=None
                 ctx={'task_id':record['run_id'],'round_id':round_id,'key_epoch':epoch,'model_hash':b.digest(reference),
                      'bits':bits,'scale':scale,'dimension':dimension,'dataset':cfg['dataset'],**topology}
                 if descriptor is not None: ctx['model_descriptor']=descriptor
@@ -862,6 +1245,10 @@ class RunManager:
                 def evidence_checkpoint(stage, **updates):
                     protocol_evidence.update(updates,active_stage=stage)
                     protocol_evidence['updated_at']=datetime.now(UTC).isoformat()
+                    # Also name the stage for the stop path: a stop request honoured
+                    # while this stage runs is reported against it, so "how long did
+                    # the stop take, and what was it doing" has an answer.
+                    self._begin_stage(stage)
                     with self.lock:
                         record['current_protocol_evidence']=deepcopy(protocol_evidence)
                         self._save(record)
@@ -871,6 +1258,10 @@ class RunManager:
                 if cfg['mode']!='plain':
                     t=time.perf_counter(); event('dkg','密钥节点共同建钥，核对同一公开转录',round_id)
                     begin={'context':ctx,'reference':reference,'clients':len(members),'mode':cfg['mode'],'policy':policy}
+                    if resume_from and round_id==start_round:
+                        begin['recovery']={'parent_task_id':resume_from['run_id'],
+                                           'checkpoint_round':resume_from['checkpoint_round'],
+                                           'checkpoint_sha256':resume_from['checkpoint_sha256']}
                     commits=many([(a,'begin',begin) for a in authorities])
                     if not dkg_ready:
                         acks=many([(a,'transcript',{'commitments':commits}) for a in authorities])
@@ -908,6 +1299,7 @@ class RunManager:
                 dropped=attack_ids if cfg['attack']=='dropout' else set()
                 participants=[c for c in active_clients if c not in dropped]
                 t=time.perf_counter(); event('training','客户端本地训练、量化；安全模式生成密文与范围/范数证明',round_id)
+                self._begin_stage('training')
                 jobs=[]
                 for cid in participants:
                     args={'context':ctx,'reference':reference,'mode':cfg['mode'],'local_epochs':cfg['local_epochs'],
@@ -925,6 +1317,7 @@ class RunManager:
                 times['training_wall_sum_s']=sum(v['training_s'] for v in results)
                 times['encryption_wall_sum_s']=sum(v['encrypt_s'] for v in results)
                 times['proof_wall_sum_s']=sum(v['proof_s'] for v in results)
+                self._begin_stage('proof_verification')
                 self._check_stop()
                 protocol_evidence['context']['dkg_transcript_hash']=dkg_transcript_hash
                 evidence_checkpoint('submission',submission={
@@ -995,9 +1388,28 @@ class RunManager:
                     decision=authorization(rpc.identity,certs,ctx)
                     if decision.get('members')!=members:
                         raise ValueError('授权签名中的客户端成员与实验部署人数不一致')
-                    if decision.get('batch_size')!=batch_size or decision.get('screening')!=screening:
+                    if decision.get('batch_size')!=batch_size:
                         raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致')
+                    # The signed policy must state the rule and its parameters, and
+                    # must agree with this task wherever both state a value. A gate
+                    # the task left unspecified is absent from both sides, so the
+                    # comparison does not invent one.
+                    signed_screening=decision.get('screening') or {}
+                    for key,value in signed_screening.items():
+                        if key in screening and value!=screening[key]:
+                            raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致'
+                                             f'（{key}）')
+                    for key in ('screening_rule','cluster_center_gap','cluster_low_center_max',
+                                'cluster_iterations','cluster_tolerance'):
+                        if signed_screening.get(key)!=screening.get(key):
+                            raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致'
+                                             f'（{key}）')
                     approved=decision['approved']; collateral=decision['collateral']; validations=decision['validations']
+                    # The signed decision carries the screening record: both centres,
+                    # both cluster sizes, their dispersions, the separation, the
+                    # thresholds applied and how many clients each stage removed.
+                    screening_decision=decision.get('screening_decision')
+                    screening_counts=decision.get('screening_counts')
                     authorized_manifest_hash=decision.get('manifest_hash')
                     evidence_checkpoint('aggregation',authorization={
                         'checked':True,'context_hash':decision.get('context_hash'),
@@ -1005,7 +1417,8 @@ class RunManager:
                         'signers':[cert['sender'] for cert in certs],
                         'required_signers':cfg['authority_threshold'],
                         'approved_clients':list(approved),'packet_hashes':dict(decision.get('packet_hashes',{})),
-                        'batch_size':batch_size,'batch_strategy':screening['batch_strategy']})
+                        'batch_size':batch_size,'batch_strategy':screening['batch_strategy'],
+                        'screening_decision':screening_decision,'screening_counts':screening_counts})
                     times['authorization_s']=time.perf_counter()-authorization_start
                     times['validation_s']=time.perf_counter()-t
                     if policy['proof_suite']=='lego_norm_v1':
@@ -1030,6 +1443,7 @@ class RunManager:
                     if len(active_clouds)<cfg['aggregator_threshold']:
                         raise ValueError(f"聚合节点不足 {cfg['aggregator_threshold']}/{cfg['aggregator_count']} 门限，未发布新模型")
                     t=time.perf_counter(); event('aggregation',f"{len(approved)} 个客户端获准；等待至少 {cfg['aggregator_threshold']} 份聚合结果",round_id)
+                    self._begin_stage('threshold_aggregation')
                     packets={cid:submission_core(packets[cid]) for cid in approved}
                     times['aggregate_key_s']=0.; times['partial_decryption_s']=0.
                     cloud_selection={'requested_strategy':requested_strategy}
@@ -1108,6 +1522,7 @@ class RunManager:
                         # A bad selected cloud must fail full local math before
                         # any stateful finish is dispatched. Each edge then still
                         # performs its own unchanged independent full combine.
+                        self._begin_stage('confirmation')
                         self._check_stop()
                         total=coordinator_combine()
                         confirmations=many(finish_jobs)
@@ -1168,6 +1583,13 @@ class RunManager:
                      'collateral_clients':collateral,'duration_s':time.perf_counter()-round_start,'bytes_sent':rpc.bytes_sent-bytes_before,
                      'stage_times':times,'controller_cpu_s':time.process_time()-round_cpu_start,
                      'validations':validations,'model_hash':b.digest(reference),
+                     # The decision record for this round: what the screening rule
+                     # measured and which stage removed each client. Kept beside the
+                     # metrics so a reader can see why a client was dropped without
+                     # re-deriving the rule, and so a later threshold change can be
+                     # compared against the rounds it replaces.
+                     'screening_decision':screening_decision,
+                     'screening_counts':screening_counts,
                      'protocol_evidence':deepcopy(protocol_evidence),
                      # Public cryptographic identifiers for this round: the bytes
                      # that identify what was proven and what was authorized.
@@ -1218,10 +1640,30 @@ class RunManager:
                         row['proof_generation_metrics'][cid]=timing
                 with self.lock:
                     record['rounds'].append(row); self._save(record)
+                # The round's outcome is complete in memory at this point. Commit
+                # it durably before announcing it, so "the interface says complete"
+                # and "the checkpoint is on disk" are the same fact: a process that
+                # dies after this line leaves a resumable run, and one that dies
+                # before it leaves the previous checkpoint untouched.
+                with self.lock:
+                    self._commit_round_checkpoint(
+                        record,round_id,reference,ctx,authorized_manifest_hash,epoch,
+                        confirmation_rows if cfg['mode']!='plain' else [],
+                        topology['authority_threshold'],
+                        policy,batch_size,topology,descriptor)
                 event('completed_round',f'第 {round_id} 轮完成，测试准确率 {metrics["accuracy"]:.2%}',round_id)
                 self._sync_tensorboard(record)
         except InterruptedError as exc:
-            outcome='aborted'; failure=str(exc)
+            # A stop request and a stopped computation are two different facts, and
+            # both are recorded: when the request arrived, which stage honoured it,
+            # and how long the run continued after the request.
+            outcome='stopped'; failure=str(exc)
+            record['stop']={'requested':self.stop_requested_at is not None,
+                            'requested_at':self.stop_requested_at,
+                            'requested_stage':self.stop_requested_stage,
+                            'honoured_stage':self.stop_honoured_stage,
+                            'latency_s':self.stop_latency_s,
+                            'rounds_completed':len(record['rounds'])}
         except Exception as exc:
             outcome='aborted' if isinstance(exc,ValueError) else 'failed'
             failure=str(exc).replace(str(self.runtime.parent),'[workspace]')[:600]
@@ -1278,7 +1720,14 @@ class RunManager:
                 record['status']=outcome; record['error']=failure
                 record['summary']={'accuracy':record['rounds'][-1]['accuracy'] if record['rounds'] else None,
                                    'elapsed_s':elapsed,'controller_cpu_s':time.process_time()-cpu_start,
-                                   'bytes_sent':rpc.bytes_sent if rpc else 0,'completed_rounds':len(record['rounds'])}
+                                   'bytes_sent':rpc.bytes_sent if rpc else 0,'completed_rounds':len(record['rounds']),
+                                   # Persistence overhead: the whole result document is
+                                   # rewritten on every save, so this is a real fraction
+                                   # of a long run and is reported rather than hidden
+                                   # inside the round durations.
+                                   'persistence':{'saves':self.save_count,
+                                                  'total_s':self.save_seconds,
+                                                  'last_s':self.save_last_seconds}}
                 if record['rounds']:
                     last=record['rounds'][-1]
                     for field in ('loss','attack_success_rate','attack_success_count','attack_success_denominator',

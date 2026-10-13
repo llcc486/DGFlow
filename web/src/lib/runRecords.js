@@ -1,7 +1,7 @@
 import { runDataset } from './datasets.js'
 
 /** Finished records must contain the same complete result as their list entry. */
-const FINISHED = new Set(['completed', 'aborted', 'failed'])
+const FINISHED = new Set(['completed', 'aborted', 'stopped', 'failed'])
 
 export const isFinishedRun = run => FINISHED.has(run?.status)
 

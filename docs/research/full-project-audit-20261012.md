@@ -229,10 +229,10 @@ Submission packaging failed: Absolute development path in file: web/tests/monito
 
 | 文件 | 泄漏内容 |
 |---|---|
-| `docs/research/evidence/attack-architecture-review-20261012.json:162,174` | `"hostname": "DESKTOP-GT1VP52"`（= 本机 `$env:COMPUTERNAME`，真实主机名） |
+| `docs/research/evidence/attack-architecture-review-20261012.json:162,174` | `"hostname": "<local-hostname>"`（= 本机 `$env:COMPUTERNAME`，真实主机名） |
 | `docs/research/evidence/native-acceptance.json` | `"working_directory": "D:/Desktop/全国密码技术竞赛/Project/DGFlow-source-671a850"` |
-| `docs/research/evidence/integrity-audit-20261007.json` | `"working_directory": "D:\\Desktop\\…\\web"`，以及 `C:\\Users\\eeeee\\AppData\\Local\\Temp\\pytest-of-eeeee\\pytest-185\\…`（**Windows 用户名**，出现 4 次） |
-| `docs/research/evidence/combine-optimization-20261004/test-summary.json`、`docs/submission/evidence/test-summary.json` | `C:\\Users\\eeeee\\AppData\\Local\\Temp\\pytest-of-eeeee\\…` |
+| `docs/research/evidence/integrity-audit-20261007.json` | `"working_directory": "D:\\Desktop\\…\\web"`，以及 `C:\\Users\\<user>\\AppData\\Local\\Temp\\pytest-of-<user>\\pytest-185\\…`（**Windows 用户名**，出现 4 次） |
+| `docs/research/evidence/combine-optimization-20261004/test-summary.json`、`docs/submission/evidence/test-summary.json` | `C:\\Users\\<user>\\AppData\\Local\\Temp\\pytest-of-<user>\\…` |
 
 注意最后一行：**`docs/submission/evidence/test-summary.json` 本身也含用户名**，而它在 `docs/submission` 白名单内 —— 也就是说 `package_submission.py` 那条路径虽然正则扫描通过（它只查 `[A-Za-z]:[\\/]…` 形式的单反斜杠路径，而 JSON 里是转义后的 `C:\\Users\\…`），**用户名依然会随包出厂**。`submission-notes.md:13` 要求「代码注释、截图与运行记录保持匿名」，这条需要修。
 

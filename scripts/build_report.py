@@ -116,10 +116,9 @@ def evidence_section(folder):
     faults=json.loads((folder/'faults'/'index.json').read_text('utf8'))
     if faults.get('status')!='passed' or faults.get('restoration',{}).get('status')!='restored':
         raise ValueError('fault suite or node restoration did not pass')
-    fault_labels={'one_aggregator_down':'停止一个聚合节点','two_aggregators_down':'停止两个聚合节点','one_client_down':'停止一个客户端'}
     for item in faults['cases']:
         r=json.loads((folder/'faults'/item['run_id']/'result.json').read_text('utf8'))
-        lines.append(f'| {fault_labels[item["name"]]} | {len(r["rounds"])} | {r["status"]} | {item["observation"]} |')
+        lines.append(f'| {fault_case_label(item["name"])} | {len(r["rounds"])} | {r["status"]} | {item["observation"]} |')
     tests=json.loads((folder/'test-summary.json').read_text('utf8'))
     lines+=['',f'最终自动化验收：{tests["passed"]} 项通过，{tests["skipped"]} 项跳过，{tests["failed"]} 项失败。'
             +tests.get('skip_explanation',''),
@@ -127,6 +126,23 @@ def evidence_section(folder):
             '随后修复证据导出的恢复与未完成轮统计，以及未返回攻击客户端的提交数口径；'
             '这些修正不改变密码计算或模型训练。原始记录内源码指纹未被覆盖，逐文件版本差异及历史计数核对见 release-provenance.json。']
     return '\n'.join(lines)
+
+
+# Case names are part of the fault-evidence schema: v1 named the stopped roles,
+# v2 names the property under test. Committed evidence keeps whichever names it
+# was produced with, so both vocabularies are labelled rather than one being
+# renamed. `run_fault_checks.py` writes the v2 names.
+FAULT_CASE_LABELS={'one_aggregator_down':'停止一个聚合节点','two_aggregators_down':'停止两个聚合节点',
+                   'one_client_down':'停止一个客户端',
+                   'cloud_threshold_met':'缺席云数仍满足门限','cloud_threshold_below':'缺席云数低于门限'}
+
+
+def fault_case_label(name):
+    """Report label for one fault case name; unknown names fail with the name."""
+    try:
+        return FAULT_CASE_LABELS[name]
+    except KeyError as exc:
+        raise ValueError('unlabelled fault case in fault evidence: '+str(name)) from exc
 
 
 def render_pdf(source,output,font):

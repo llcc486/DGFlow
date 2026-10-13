@@ -6,6 +6,7 @@ import json
 import os
 import ssl
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -25,6 +26,38 @@ from dgfl.deployment import (
     validate_machine,
 )
 from dgfl.topology import TOPOLOGY_FIELDS, validate_topology
+
+
+def _verification_arguments(command, *, include_restricted):
+    """Shared arguments for the verification commands.
+
+    `--restricted-dir` is offered only where function keys are legitimately read,
+    so the proof-only command cannot be pointed at them by accident.
+    """
+    command.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    command.add_argument('--run', required=True, help='Run id whose material should be verified')
+    command.add_argument('--client', help='Verify only this client; default is every client in the round')
+    command.add_argument('--round', type=int, help='Round to verify; default is the highest recorded round')
+    command.add_argument('--materials-dir', type=Path,
+                         help='Directory holding round-<n>.bin proof material; defaults to the run directory')
+    if include_restricted:
+        command.add_argument('--restricted-dir', type=Path,
+                             help='Directory holding restricted function-key material; absent means the '
+                                  'inner product is reported as not re-verified')
+    command.add_argument('--json', action='store_true', help='Emit the full result as JSON')
+
+
+def _authenticity_arguments(command):
+    """Arguments for the provenance check, which needs the trusted registry."""
+    command.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME,
+                         help='Runtime whose trusted identity registry anchors the check')
+    command.add_argument('--run', required=True, help='Run id whose material should be checked')
+    command.add_argument('--round', type=int, help='Round to check; default is the highest recorded round')
+    command.add_argument('--materials-dir', type=Path, help='Directory holding round-<n>.bin material')
+    command.add_argument('--expect', nargs='+', metavar='FIELD=VALUE',
+                         help='Context or topology fields the reader pins, e.g. task_id=abc round_id=1')
+    command.add_argument('--transcript-hash', help='Confirmed DKG transcript digest for the key epoch')
+    command.add_argument('--json', action='store_true', help='Emit the full report as JSON')
 
 
 def _parser():
@@ -52,15 +85,66 @@ def _parser():
             command.add_argument('--data-dir', type=Path, default=DEFAULT_DATA)
         if name == 'bundle':
             command.add_argument('--output', required=True, type=Path)
-    verify = commands.add_parser('verify-submission',
-                                 help='Independently re-run the published checks for one recorded submission')
-    verify.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
-    verify.add_argument('--run', required=True, help='Run id whose material should be verified')
-    verify.add_argument('--client', help='Verify only this client; default is every client in the round')
-    verify.add_argument('--round', type=int, help='Round to verify; default is the highest recorded round')
-    verify.add_argument('--materials-dir', type=Path,
-                        help='Directory holding round-<n>.bin material; defaults to the run directory')
-    verify.add_argument('--json', action='store_true', help='Emit the full result as JSON')
+    # Proof re-verification and authorized inner-product re-verification are
+    # separate commands because they need different material: the proof layer is
+    # shareable, the function keys are restricted. One command cannot honestly
+    # report both, because it may hold only one of them.
+    proof = commands.add_parser('verify-proof',
+                                help='Re-verify the shareable proof relations for one recorded submission')
+    _verification_arguments(proof, include_restricted=False)
+    authorize = commands.add_parser('verify-authorization',
+                                    help='Recompute the authorized inner product, which needs the function keys')
+    _verification_arguments(authorize, include_restricted=True)
+    legacy = commands.add_parser('verify-submission',
+                                 help='Re-verify a historical record; reads whichever layer the file carries')
+    _verification_arguments(legacy, include_restricted=True)
+    authenticity = commands.add_parser(
+        'verify-material-origin',
+        help='Check material provenance against the trusted registry and the pinned experiment context')
+    _authenticity_arguments(authenticity)
+    resume = commands.add_parser('resume',
+                                 help='Continue a run from its latest completed-round checkpoint')
+    resume.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    resume.add_argument('--run', required=True, help='Run id to continue')
+    resume.add_argument('--key', help='Idempotency key: repeating it returns the same continuation')
+    resume.add_argument('--check', action='store_true',
+                        help='Only report whether the run can be continued, and why not')
+    resume.add_argument('--json', action='store_true', help='Emit the result as JSON')
+    # --- registration-based identity ------------------------------------------
+    # Each of these runs on the machine the material belongs to, except
+    # `register-accept`, which is the only command that needs the signing authority.
+    identity_init = commands.add_parser(
+        'identity-init',
+        help='Generate this machine\'s node keys locally and write a registration request')
+    identity_init.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    identity_init.add_argument('--node', required=True)
+    identity_init.add_argument('--host', required=True, help='Address this node will be reachable at')
+    identity_init.add_argument('--deployment', required=True, help='Deployment identifier')
+    identity_init.add_argument('--validity-seconds', type=int, default=3600,
+                               help='Registration request lifetime (60 to 604800 seconds, default 3600)')
+    identity_init.add_argument('--json', action='store_true')
+    register_accept = commands.add_parser(
+        'register-accept',
+        help='Verify one machine\'s request against the intended topology and issue its public material')
+    register_accept.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    register_accept.add_argument('--request', required=True, type=Path)
+    register_accept.add_argument('--authority', required=True, type=Path,
+                                 help='Signing environment, kept outside every runtime directory')
+    register_accept.add_argument('--allow-reissue', action='store_true',
+                                 help='Permit registering a node that already has an entry (key rotation)')
+    register_accept.add_argument('--json', action='store_true')
+    register_check = commands.add_parser(
+        'register-check',
+        help='Confirm before startup that local private keys match the registered public keys')
+    register_check.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    register_check.add_argument('--node', required=True)
+    register_check.add_argument('--json', action='store_true')
+    register_status = commands.add_parser(
+        'register-status',
+        help='Report which nodes are pending, registered or ready to start')
+    register_status.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    register_status.add_argument('--machine', help='Limit the report to one machine group')
+    register_status.add_argument('--json', action='store_true')
     tamper = commands.add_parser('tamper-check',
                                  help='Isolated tamper playground: real crypto, four forgeries, real refusal reasons')
     tamper.add_argument('--mutations', nargs='+', choices=('norm', 'ciphertext', 'reference', 'replay'),
@@ -151,15 +235,8 @@ def _serve(runtime, host, port, *, _before_serve=None):
                     marker.unlink(missing_ok=True)
 
 
-def _verify_submission(arguments):
-    """Re-run the published checks from stored public material.
-
-    This is deliberately independent of the control service and of the UI: it
-    reads the recorded public material, re-executes the same public verification
-    code, and prints each relation. Nothing here trusts a stored boolean.
-    """
-    from dgfl import verification_materials as vm
-
+def _select_material(arguments, vm):
+    """Locate and load the proof material for the requested round."""
     runtime = Path(arguments.runtime).resolve()
     material_root = (arguments.materials_dir or runtime/'results'/arguments.run/vm.SUBDIRECTORY)
     rounds = sorted((path for path in material_root.glob(vm.MATERIAL_GLOB)
@@ -180,37 +257,108 @@ def _verify_submission(arguments):
     # disagrees with the name it was stored under.
     if vm.parse_round_number(path) != material['round']:
         raise ValueError(f'材料文件名的轮次与其内容不一致：{path}')
+    return runtime, path, material
 
-    parameters_factory = None
-    if material['suite'] == 'lego_norm_v1':
-        from dgfl.crypto.lego_registry import Registry, available, public_parameters
-        if not available():
-            raise ValueError('当前原生扩展缺少 Lego 能力，无法独立复核该提交')
-        registry = Registry(runtime)
-        ctx = material['context']
-        # The verifier takes its parameters from the installed trusted setup, not
-        # from the material file: a materials document must not be able to
-        # substitute its own verification key.
-        envelope = registry.public_job(ctx['proof_crs_hash'], ctx['dimension'], ctx['bits'])
 
-        def parameters_factory(*, crs_hash, dimension, bits, _envelope=envelope):
-            if crs_hash != ctx['proof_crs_hash'] or dimension != ctx['dimension'] or bits != ctx['bits']:
-                raise ValueError('材料携带的电路参数与上下文不一致')
-            return public_parameters(_envelope)
+def _trusted_parameters(runtime, material):
+    """Resolve the installed trusted parameters, never the material's own copy."""
+    if material['suite'] != 'lego_norm_v1':
+        return None
+    from dgfl.crypto.lego_registry import Registry, available, public_parameters
+    if not available():
+        raise ValueError('当前原生扩展缺少 Lego 能力，无法独立复核该提交')
+    registry = Registry(runtime)
+    ctx = material['context']
+    # The verifier takes its parameters from the installed trusted setup, not from
+    # the material file: a materials document must not be able to substitute its
+    # own verification key.
+    envelope = registry.public_job(ctx['proof_crs_hash'], ctx['dimension'], ctx['bits'])
+
+    def parameters_factory(*, crs_hash, dimension, bits, _envelope=envelope):
+        if crs_hash != ctx['proof_crs_hash'] or dimension != ctx['dimension'] or bits != ctx['bits']:
+            raise ValueError('材料携带的电路参数与上下文不一致')
+        return public_parameters(_envelope)
+
+    return parameters_factory
+
+
+def _restricted_for(arguments, vm, material):
+    """Load restricted function-key material for this round, or return None.
+
+    Absence is a normal outcome, not an error: the shareable layer is meant to be
+    usable on its own, and the caller reports the inner product as not re-verified.
+    """
+    if getattr(arguments, 'restricted_dir', None) is None:
+        return None
+    root = Path(arguments.restricted_dir).resolve()
+    round_id = int(material['round'])
+    # Owners persist one file per key epoch; older material uses round-N.bin.
+    # Match the public-document digest so another epoch's keys cannot be selected
+    # merely because its round number is the same.
+    candidates = sorted(root.glob(f'round-{round_id}-*.bin'))
+    legacy = root/f'round-{round_id}.bin'
+    if legacy.exists():
+        candidates.insert(0, legacy)
+    expected = vm.digest_of(material)
+    for path in candidates:
+        restricted = vm.load_restricted(path)
+        if int(restricted['round']) != round_id:
+            raise ValueError('受限材料记录的是另一轮')
+        if restricted['proof_material_digest'] == expected:
+            return restricted
+    if candidates:
+        raise ValueError('受限材料与公开证明材料摘要不一致')
+    return None
+
+
+def _verify_submission(arguments):
+    """Re-run the published checks from stored material.
+
+    Deliberately independent of the control service and of the UI: it reads the
+    recorded material, re-executes the same public verification code, and prints
+    each relation. Nothing here trusts a stored boolean.
+
+    `verify-proof` re-verifies only the shareable layer. `verify-authorization`
+    additionally recomputes the authorized inner product, which needs the
+    restricted function keys; when they are absent it says the inner product was
+    not re-verified instead of counting it as a pass.
+    """
+    from dgfl import verification_materials as vm
+
+    runtime, path, material = _select_material(arguments, vm)
+    # A historical combined document carries its function keys inline. Classify
+    # it once, before anything is split, and treat those keys as restricted.
+    legacy_combined = vm.is_legacy_combined(material)
+    inline_restricted = None
+    if legacy_combined:
+        material, inline_restricted = vm.split_legacy_combined(material)
+    parameters_factory = _trusted_parameters(runtime, material)
+    restricted = _restricted_for(arguments, vm, material) or inline_restricted
+    command = getattr(arguments, 'command', 'verify-submission')
+    want_authorization = command in ('verify-authorization', 'verify-submission')
 
     clients = [arguments.client] if arguments.client else sorted(material['clients'])
     results = []
     for client_id in clients:
         try:
-            results.append(vm.verify_client(material, client_id, parameters_factory=parameters_factory))
+            if want_authorization and restricted is not None:
+                results.append(vm.verify_authorization(material, restricted, client_id,
+                                                       parameters_factory=parameters_factory))
+            else:
+                results.append(vm.authorization_not_verified(material, client_id,
+                                                              parameters_factory=parameters_factory))
         except ValueError as exc:
             results.append({'client_id': client_id, 'suite': material['suite'],
                             'proof_valid': False, 'error': str(exc), 'relations': []})
 
     failed = [item for item in results if not item.get('proof_valid')]
+    unchecked = [item for item in results
+                 if item.get('proof_valid') and item.get('inner_product_verified') is False]
     if arguments.json:
         print(json.dumps({'material': str(path), 'round': material['round'],
-                          'suite': material['suite'], 'clients': results}, ensure_ascii=False, indent=2))
+                          'suite': material['suite'],
+                          'inner_product_verified': not unchecked and bool(results),
+                          'clients': results}, ensure_ascii=False, indent=2))
     else:
         print(f'材料文件：{path}')
         print(f'轮次：{material["round"]}　证明方案：{material["suite"]}　'
@@ -223,12 +371,195 @@ def _verify_submission(arguments):
                 print(f'  拒绝原因：{item["error"]}')
             for relation in item.get('relations', []):
                 mark = '✓' if relation.get('ok') else '✗'
+                # The claim is printed beside the relation's name, so a reader of a
+                # report can see what was checked without reading the source.
+                claim = f"：{relation['claim']}" if relation.get('claim') else ''
                 detail = f'（{relation["detail"]}）' if relation.get('detail') else ''
-                print(f'  {mark} {relation["relation"]}{detail}')
+                print(f'  {mark} {relation["relation"]}{claim}{detail}')
             if item.get('inner_product') is not None:
                 print(f'  授权内积 = {item["inner_product"]}　余弦 = {item["cosine"]:.9f}')
         print(f'\n合计 {len(results)} 个客户端：通过 {len(results)-len(failed)}，未通过 {len(failed)}')
-    return {'results': results, 'failed': len(failed), 'material': str(path)}
+        if unchecked:
+            print(f'其中 {len(unchecked)} 个客户端的内积未复核（缺少受限功能解密材料）；'
+                  '未复核不计为通过，请用 --restricted-dir 指定受限材料目录。')
+    return {'results': results, 'failed': len(failed), 'unchecked_inner_product': len(unchecked),
+            'material': str(path)}
+
+
+def _parse_expectations(values):
+    """Read `FIELD=VALUE` pins, coercing to the type the context already holds."""
+    import ast
+    expectations = {}
+    for item in values or ():
+        if '=' not in item:
+            raise ValueError(f'--expect 需要 FIELD=VALUE 形式：{item}')
+        field, _, raw = item.partition('=')
+        field = field.strip()
+        if not field:
+            raise ValueError(f'--expect 缺少字段名：{item}')
+        try:
+            expectations[field] = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            expectations[field] = raw
+    return expectations
+
+
+def _verify_material_origin(arguments):
+    """Check provenance, which a file digest alone cannot establish.
+
+    A digest proves the bytes did not change. It says nothing about who wrote them
+    or whether the values in them were ever published by the deployment. This
+    command compares the material against the trusted identity registry and the
+    experiment context the reader pins.
+    """
+    from dgfl import material_authenticity as ma
+    from dgfl import verification_materials as vm
+
+    _, path, material = _select_material(arguments, vm)
+    registry = ma.load_trusted_registry(Path(arguments.runtime).resolve())
+    report = ma.verify_authenticity(material, registry=registry,
+                                    expected=_parse_expectations(arguments.expect),
+                                    transcript_hash=arguments.transcript_hash)
+    if arguments.json:
+        print(json.dumps({'material': str(path), **report}, ensure_ascii=False, indent=2))
+    else:
+        print(f'材料文件：{path}')
+        print(ma.render(report))
+    return report
+
+
+def _resume(arguments):
+    """Continue a run from its latest completed-round checkpoint.
+
+    This drives the same `RunManager` the control service uses, so the CLI is not a
+    second implementation of recovery: it produces the same new execution record,
+    the same key-epoch rotation, and the same refusal reasons.
+    """
+    runtime = Path(arguments.runtime).resolve()
+    # A second manager must never rewrite the live controller's run records or
+    # execute concurrently with it. Hold ownership until the CLI worker exits.
+    with _control_process_lock(runtime), runtime_lifecycle_lock(runtime):
+        if running_control(runtime):
+            raise RuntimeError('控制服务正在运行，请通过监控页面恢复实验')
+        return _resume_owned(arguments, runtime)
+
+
+def _resume_owned(arguments, runtime):
+    from dgfl.experiments.runner import RunManager
+
+    manager = RunManager(runtime)
+    try:
+        if arguments.check:
+            payload = manager.recovery_status(arguments.run)
+        else:
+            # RunManager resolves idempotency before inspecting the parent again.
+            payload = manager.resume(arguments.run, idempotency_key=arguments.key)
+            # This command owns the manager and its daemon worker. Keep the process
+            # alive until the worker has saved its final state and released the run.
+            while manager.active == payload['run_id']:
+                time.sleep(.1)
+            payload['status'] = manager.snapshot(payload['run_id'], include_history=False)['status']
+    except KeyError as exc:
+        raise ValueError(f'任务不存在：{arguments.run}') from exc
+    if arguments.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    elif payload.get('reused') is not None:
+        state = '复用已创建的恢复执行' if payload['reused'] else '新建'
+        print(f"恢复执行：{payload['run_id']}（{state}）")
+        print(f"从第 {payload['checkpoint_round']} 轮检查点继续第 {payload['start_round']} 轮")
+    elif payload.get('resumable'):
+        checkpoint = payload.get('checkpoint') or {}
+        print(f"可恢复：最近检查点为第 {checkpoint.get('round')} 轮"
+              f"（摘要 {checkpoint.get('sha256')}），将从第 {payload['start_round']} 轮继续")
+        print(payload.get('key_epoch_reason', ''))
+    else:
+        print(f"不可恢复：{payload.get('reason')}")
+    return 1 if payload.get('resumable') is False or payload.get('status') in ('failed', 'aborted') else 0
+
+
+def _identity_init(arguments):
+    """Generate this machine's keys and write the registration request.
+
+    Two commands rather than one, because they run on different machines and at
+    different times: this one only ever touches this machine's own directory.
+    """
+    from dgfl import registration as reg
+    runtime = Path(arguments.runtime).resolve()
+    created = reg.create_local_identity(runtime/'keys', arguments.node, host=arguments.host)
+    request = reg.build_request(runtime/'keys', arguments.node, host=arguments.host,
+                                deployment_id=arguments.deployment,
+                                validity_seconds=arguments.validity_seconds)
+    request_path = runtime/'registration-requests'/f"{arguments.node}.json"
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    request_path.write_text(json.dumps(request, ensure_ascii=False, sort_keys=True, indent=2) + '\n',
+                            encoding='utf8')
+    result = {**created, 'request': str(request_path), 'deployment_id': arguments.deployment,
+              'expires_at': request['expires_at'], 'challenge': request['challenge'],
+              'note': '私钥留在本机；只有公开材料随请求离开本机'}
+    if arguments.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"已生成本机身份：{created['identity']}")
+        print(f"登记请求：{request_path}")
+        print('私钥留在本机；请把该请求文件交给平台签发，再取回本机配置包。')
+    return result
+
+
+def _register_accept(arguments):
+    """Verify one request and issue its public registration material."""
+    from dgfl.deployment import issue_registration
+    request = json.loads(Path(arguments.request).read_text('utf8'))
+    issued = issue_registration(Path(arguments.runtime).resolve(), request,
+                                authority=Path(arguments.authority).resolve(),
+                                allow_reissue=arguments.allow_reissue)
+    if arguments.json:
+        print(json.dumps(issued, ensure_ascii=False, indent=2))
+    else:
+        entry = issued['entry']
+        print(f"已登记 {entry['node']}（角色 {entry['role']}，地址 {entry['host']}）")
+        print(f"身份登记版本：{entry['registry_version']}")
+        print('签发的材料只含公共信息；请为本机生成配置包后取回。')
+    return issued
+
+
+def _register_check(arguments):
+    """Confirm that this machine's private keys match its registered public keys."""
+    from dgfl import registration as reg
+    runtime = Path(arguments.runtime).resolve()
+    keys = runtime/'keys'
+    registry_path = keys/'registration-registry.json'
+    if not registry_path.exists():
+        raise ValueError('本机运行目录没有登记的公共身份表；请先取回本机配置包')
+    registry = json.loads(registry_path.read_text('utf8'))
+    entry = reg.check_local_identity(keys, registry, arguments.node)
+    result = {'node': arguments.node, 'available': True, 'role': entry['role'],
+              'host': entry['host'], 'registry_version': entry['registry_version'],
+              'detail': '本机私钥与登记公钥一致，可以启动'}
+    if arguments.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"{arguments.node}：本机私钥与登记公钥一致（角色 {entry['role']}），可以启动")
+    return result
+
+
+def _register_status(arguments):
+    """Report the three registration states for the deployment's nodes."""
+    from dgfl.deployment import pending_registration
+    status = pending_registration(Path(arguments.runtime).resolve(), machine=arguments.machine)
+    if arguments.machine and not status['nodes']:
+        raise ValueError(f'机器 {arguments.machine} 在此部署中没有节点')
+    if arguments.json:
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+    else:
+        print(f"信任环境：{status['trust_environment']}"
+              + ('（本机集中初始化）' if not status['individually_registered']
+                 else '（各机器自行生成并登记）'))
+        for name, item in sorted(status['nodes'].items()):
+            state = {'pending': '待登记', 'registered': '已登记', 'startable': '可启动'}[item['state']]
+            print(f"  {name}（机器 {item['machine']}）：{state}")
+        if status['pending']:
+            print('待登记节点：' + '、'.join(status['pending']))
+    return status
 
 
 def _tamper_check(arguments):
@@ -311,9 +642,28 @@ def main(argv=None):
                 print(json.dumps(start_nodes(runtime, arguments.machine, **topology), indent=2))
             _serve(runtime, arguments.host, arguments.port, _before_serve=prepare_demo)
             return 0
-        elif command == 'verify-submission':
+        elif command in ('verify-proof', 'verify-authorization', 'verify-submission'):
             result = _verify_submission(arguments)
+            # A failed proof must not exit successfully, and --json already
+            # printed the result, so it must not be printed twice.
             return 1 if result['failed'] else 0
+        elif command == 'verify-material-origin':
+            result = _verify_material_origin(arguments)
+            return 0 if result['authentic'] else 1
+        elif command == 'resume':
+            return _resume(arguments)
+        elif command == 'identity-init':
+            _identity_init(arguments)
+            return 0
+        elif command == 'register-accept':
+            _register_accept(arguments)
+            return 0
+        elif command == 'register-check':
+            _register_check(arguments)
+            return 0
+        elif command == 'register-status':
+            _register_status(arguments)
+            return 0
         elif command == 'tamper-check':
             return _tamper_check(arguments)
         elif command == 'prepare-data':

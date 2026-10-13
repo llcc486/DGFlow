@@ -9,7 +9,9 @@ export function createComparison(store, getRun, maximum = 4) {
   const loading = ref({})
   const failures = ref({})
   const requests = new Map()
-  const eligible = computed(() => store.runs.value.filter(run => ['completed', 'aborted'].includes(run.status)))
+  // A run stopped on request still produced the rounds it completed, so its record
+  // is comparable; it is not a failure.
+  const eligible = computed(() => store.runs.value.filter(run => ['completed', 'aborted', 'stopped'].includes(run.status)))
   const dataset = computed(() => {
     const run = eligible.value.find(item => selected.value.includes(item.run_id))
     return run ? runDataset(run) : null

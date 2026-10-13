@@ -19,6 +19,8 @@
 
 ## 本次验收结果
 
+> **版本边界声明。** 本节记录的验收在 2026-10-12 当时的源码上完成，该源码不是当前检出。逐文件 SHA-256 实测：本次冻结的 51 个文件中 8 个已改变（`cli.py`、`crypto/lego_registry.py`、`deployment.py`、`experiments/runner.py`、`services/control.py`、`services/roles.py`、`services/tensorboard.py`、`validation/policy.py`），1 个已不在检出（`scripts/verify_attack_architecture.py`），另有 2 个新增文件（`tamper_playground.py`、`verification_materials.py`）。因此**下表是那次运行的真实结果，但不是当前检出的验收结论**；记录中的 `source_unchanged: true` 只对当时那次运行成立。逐文件对照与当前来源摘要见 [version-boundary.json](../research/evidence/version-boundary.json)，可用 `python scripts/evidence_version_boundary.py --check` 复核。
+
 2026-10-12在当时的验收源码上完成8项真实mTLS节点实验，共12个完成轮次，全部通过，源文件前后指纹一致。公开报告随源码保存：[完整配置与逐轮结果](../research/evidence/attack-architecture-20261012.json)、[独立记录复核摘要](../research/evidence/attack-architecture-review-20261012.json)。这些记录保留当时 σ=2 的配置，不追写为后续可配置分组的测试结果。
 
 随后接入可配置 σ：`tests/integration/test_configurable_batches.py` 验证 API 参数与旧记录兼容，并执行六客户端、三边缘、四云的两轮真实 LegoGroth16 密码运算（进程内角色调用、2维公开测试向量，不是分类训练或物理多机性能实验）。σ=3 时首轮接纳两组，第二轮一人的范数声明被篡改，同组另两人记录为连带退出，另一组三人完成门限聚合；篡改签名中的 σ、跨轮改组、重启后改组均被拒绝。部署页另经真实 Chromium 桌面/手机检查，业务启动使用明确的捕获桩。

@@ -7,6 +7,7 @@ import MonitorTrainingPanel from '../components/MonitorTrainingPanel.vue'
 import MonitorExecutionPanel from '../components/MonitorExecutionPanel.vue'
 import MetricCard from '../components/MetricCard.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import RecoveryPanel from '../components/RecoveryPanel.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LabIcon from '../components/LabIcon.vue'
 import { consoleStore as store } from '../lib/store.js'
@@ -72,6 +73,9 @@ onBeforeUnmount(() => { clearInterval(ageTimer); document.removeEventListener('v
     <div class="monitor-health" role="status"><span :class="['health-connection', { disconnected: !store.connected.value }]"><i></i>{{ store.connected.value ? '实验引擎已连接' : '实验引擎未连接' }}</span><span v-if="resourceTime" :class="{ 'health-warning': samplingDelayed }" :title="date(resourceTime)">{{ live ? `最近资源采样 ${samplingAge(resourceTime, now)}${samplingDelayed ? ' · 采样延迟' : ''}` : `历史资源采样 ${date(resourceTime)}` }}</span><span v-else>{{ run ? live ? '等待首条资源采样' : '该历史实验未记录资源采样时间' : '选择实验后查看监控记录' }}</span><span v-if="collectionIssues" class="health-warning">{{ collectionIssues }} 个节点采集异常</span><span v-if="run" class="health-end">{{ live ? '运行实验' : '历史实验' }}<span v-if="store.lastUpdated.value"> · 记录读取 {{ date(store.lastUpdated.value) }}</span></span></div>
     <div v-if="!store.connected.value && !store.initialLoading.value" class="nb-notice warning" role="alert"><LabIcon name="alert" :size="17" /><div>{{ store.connectionError.value || '暂时无法连接实验引擎。' }}<p>保留最近读取的数据，采样时间见各指标。</p></div></div>
     <div v-if="store.runError.value || store.listError.value || store.operationError.value" class="nb-notice warning" role="alert">{{ store.runError.value || store.listError.value || store.operationError.value }}</div>
+    <RecoveryPanel v-if="run && !live && store.recovery.value?.run_id === runId"
+      :recovery="store.recovery.value" :busy="store.recovering.value"
+      :disabled="!store.connected.value || store.hasActiveRun.value" @resume="store.resumeRun()" />
     <div v-if="run?.error" class="nb-notice warning" role="alert"><LabIcon name="alert" :size="17" /><div><strong>任务执行说明</strong><p>{{ run.error }}</p></div></div>
     <div v-if="historyIssues" class="nb-notice warning" role="status"><LabIcon name="alert" :size="17" /><div><strong>部分监控历史可能不完整</strong><p>累计缺失事件 {{ snapshot?.summary?.events_missing ?? '未记录' }} 条，日志写入异常 {{ snapshot?.summary?.log_failures ?? '未记录' }} 次。{{ snapshot?.summary?.last_error || '' }}{{ !live && snapshot?.summary?.cleanup_complete === false ? ' 采集收尾未完成。' : '' }}</p></div></div>
     <div class="monitor-tabs" role="tablist" aria-label="监控工作区"><button v-for="(item, index) in tabs" :id="`monitor-tab-${item.id}`" :key="item.id" role="tab" :aria-selected="tab === item.id" :aria-controls="`monitor-panel-${item.id}`" :tabindex="tab === item.id ? 0 : -1" @click="selectTab(item.id)" @keydown="tabKey($event, index)"><LabIcon :name="item.icon" :size="15" />{{ item.label }}</button><span class="tabs-note">{{ tab === 'analysis' ? '原生 TensorBoard · 支持多实验对比' : '仅展示实际记录的指标' }}</span></div>

@@ -11,7 +11,10 @@ dependencies = ["py-arkworks-bls12381==0.5.0", "numpy>=2,<3", "fastapi>=0.115,<1
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
-dev = ["pytest>=8", "ruff>=0.6"]
+# `pypdf` is required by the packaging content scan, which inspects PDF metadata
+# instead of scanning raw bytes. Without it the packager fails closed on any PDF,
+# so the development extra must carry it or the packaging test cannot run.
+dev = ["pytest>=8", "ruff>=0.6", "pypdf>=5"]
 train = ["torch>=2.5", "torchvision>=0.20"]
 gpu = ["nvidia-cuda-nvrtc-cu12>=12.9,<13"]
 
@@ -28,6 +31,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+# Keep the cache inside the project. The default user-level cache lives under a
+# personal directory, and absolute personal paths recorded from a test run have
+# already leaked into archived test reports and delivery evidence.
+cache_dir = ".pytest_cache"
 
 [tool.ruff]
 line-length = 120

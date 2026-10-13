@@ -55,6 +55,18 @@ export const api = {
   getMonitor: (id, signal) => request(`/runs/${encodeURIComponent(id)}/monitor`, { signal }),
   startRun: (config, signal) => request('/runs', { method: 'POST', body: JSON.stringify(config), signal }),
   stopRun: (id, signal) => request(`/runs/${encodeURIComponent(id)}/stop`, { method: 'POST', signal }),
+  // Recovery reads the checkpoint summary and the resume conditions; it never
+  // returns the stored model, and the resume request carries the idempotency key
+  // so repeating it cannot create a second continuation.
+  getCheckpoints: (id, signal) => request(`/runs/${encodeURIComponent(id)}/checkpoints`, { signal }),
+  getRecovery: (id, signal) => request(`/runs/${encodeURIComponent(id)}/recovery`, { signal }),
+  getRegistration: (machine, signal) => request(
+    `/registration/status${machine ? `?machine=${encodeURIComponent(machine)}` : ''}`, { signal }),
+  resumeRun: (id, idempotencyKey, signal) => request(`/runs/${encodeURIComponent(id)}/resume`, {
+    method: 'POST',
+    body: JSON.stringify(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+    signal,
+  }),
 }
 
 export const exportUrl = id => `/api/runs/${encodeURIComponent(id)}/export`

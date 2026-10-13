@@ -218,11 +218,19 @@ def init_lan_cluster(runtime=DEFAULT_RUNTIME, *, nodes,
 def init_cluster(runtime=DEFAULT_RUNTIME, hosts_file=None, *, client_count=DEFAULT_CLIENT_COUNT,
                  authority_count=DEFAULT_AUTHORITY_COUNT, aggregator_count=DEFAULT_AGGREGATOR_COUNT,
                  authority_threshold=DEFAULT_AUTHORITY_THRESHOLD,
-                 aggregator_threshold=DEFAULT_AGGREGATOR_THRESHOLD):
-    """Create one immutable identity set; never repair/overwrite existing keys."""
+                 aggregator_threshold=DEFAULT_AGGREGATOR_THRESHOLD, deployment_id=None):
+    """Create one immutable identity set; never repair/overwrite existing keys.
+
+    `deployment_id` names this deployment for registration requests. When it is
+    omitted a stable identifier is derived from the topology, so a deployment
+    prepared before registration existed still has something to bind a request to.
+    """
     runtime = Path(runtime).resolve()
     topology = validate_topology(client_count, authority_count, aggregator_count,
                                  authority_threshold, aggregator_threshold)
+    deployment_id = deployment_id or secrets.token_hex(8)
+    if (type(deployment_id) is not str or re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', deployment_id) is None):
+        raise ValueError('部署标识必须是 1-64 位的字母、数字、下划线、点或连字符')
     ports = node_ports(client_count, authority_count, aggregator_count)
     if (runtime/'cluster.json').exists() or ((runtime/'keys').exists() and any((runtime/'keys').iterdir())):
         raise FileExistsError('cluster configuration/keys already exist; use the existing runtime or a new directory')
@@ -234,6 +242,10 @@ def init_cluster(runtime=DEFAULT_RUNTIME, hosts_file=None, *, client_count=DEFAU
         entries, coordinator_host = _hosts_document(hosts_file, ports)
         deployment = 'lan'
     config = {'deployment': deployment, **topology,
+              'deployment_id': deployment_id,
+              'identity_scheme': IDENTITY_SCHEME_LOCAL_CENTRALISED,
+              'trust_environment': (TRUST_ENVIRONMENT_SIMULATED if deployment == 'single_host'
+                                    else TRUST_ENVIRONMENT_REGISTERED),
               'client_authorities': client_authorities(client_count, authority_count), 'nodes': {
         name: {'url': f"https://{entry['host']}:{ports[name]}",
                'port': ports[name], 'bind': '127.0.0.1' if deployment == 'single_host' else '0.0.0.0',
@@ -257,6 +269,12 @@ def load_cluster(runtime=DEFAULT_RUNTIME):
     config = json.loads((Path(runtime)/'cluster.json').read_text('utf8'))
     if not isinstance(config, dict) or config.get('deployment') not in ('single_host', 'lan'):
         raise ValueError('invalid cluster deployment')
+    # Added after the first deployments existed, so its absence is a historical
+    # record rather than an error; `trust_environment` derives it on read.
+    recorded_id = config.get('deployment_id')
+    if recorded_id is not None and (type(recorded_id) is not str
+                                    or re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', recorded_id) is None):
+        raise ValueError('invalid deployment identifier')
     nodes = config.get('nodes')
     cluster_topology(config)
     endpoints = set()
@@ -873,3 +891,313 @@ def doctor(runtime=DEFAULT_RUNTIME, data_dir=DEFAULT_DATA):
         return {'train_probe': len(train_x), 'test_probe': len(test_x), 'network': 'disabled by loader'}
     check('data:mnist', data_check)
     return {'ok': all(item['ok'] for item in checks), 'checks': checks}
+
+
+# --- registration-based identity ---------------------------------------------
+#
+# A multi-machine deployment used to be prepared by generating every node's
+# private keys on one machine and shipping each node its copy. The deployment guide
+# always called that preparation directory a controlled offline environment, which
+# is a caution, not a control. These functions implement the alternative: each
+# machine generates its own keys and sends a request; the platform answers with
+# public material only.
+#
+# The platform side needs the signing authority, which lives outside the runtime.
+# `issue_registration` therefore takes its path explicitly, so the everyday control
+# service cannot issue credentials as a side effect of being started.
+
+TRUST_ENVIRONMENT_SIMULATED = '单机模拟信任环境'
+TRUST_ENVIRONMENT_REGISTERED = '登记的分布式信任环境'
+#: Identity preparation schemes a deployment record may name.
+#:
+#: `local_centralised` is the historical path, where one machine generated every
+#: node's keys and the packages carried them. `registered` is the path in this
+#: module, where each machine generates its own keys and only public material is
+#: issued back. The record names which one was used, so a machine can report the
+#: fact without inspecting another machine's files.
+IDENTITY_SCHEME_REGISTERED = 'registered'
+IDENTITY_SCHEME_LOCAL_CENTRALISED = 'local_centralised'
+
+
+def identity_scheme(runtime=DEFAULT_RUNTIME):
+    """How this deployment's node identities were prepared."""
+    config = load_cluster(runtime)
+    recorded = config.get('identity_scheme')
+    if recorded in (IDENTITY_SCHEME_REGISTERED, IDENTITY_SCHEME_LOCAL_CENTRALISED):
+        return recorded
+    # A record written before this field existed used the local path, which is what
+    # `create_cluster` did for every deployment at the time.
+    return IDENTITY_SCHEME_LOCAL_CENTRALISED
+
+
+def trust_environment(runtime=DEFAULT_RUNTIME):
+    """How this deployment's identities came to exist, for the deployment record.
+
+    A single-host runtime has all roles on one machine, so its identity separation
+    is simulated rather than enforced by distinct hosts. That is stated in the
+    deployment record rather than left for a reader to infer from the layout.
+    """
+    config = load_cluster(runtime)
+    recorded = config.get('trust_environment')
+    if recorded in (TRUST_ENVIRONMENT_SIMULATED, TRUST_ENVIRONMENT_REGISTERED):
+        return recorded
+    # A deployment written before this field existed: derive it from the layout.
+    return (TRUST_ENVIRONMENT_SIMULATED if config['deployment'] == 'single_host'
+            else TRUST_ENVIRONMENT_REGISTERED)
+
+
+def registration_topology(runtime=DEFAULT_RUNTIME):
+    """The intended topology a registration request is checked against."""
+    config = load_cluster(runtime)
+    topology = {}
+    for name, item in config['nodes'].items():
+        topology[name] = {'host': urlsplit(item['url']).hostname,
+                          'role': 'coordinator' if name == 'coordinator' else ''.join(
+                              character for character in name if not character.isdigit()),
+                          'machine': item['machine']}
+    coordinator = config['nodes'].get('coordinator')
+    if coordinator is not None:
+        topology['coordinator'] = {'host': urlsplit(coordinator['url']).hostname,
+                                   'role': 'coordinator', 'machine': coordinator['machine']}
+    return topology
+
+
+def pending_registration(runtime=DEFAULT_RUNTIME, *, machine=None):
+    """Which nodes still need to be registered, and which are ready to start.
+
+    The three states are `pending` (no accepted request), `registered` (the platform
+    issued material) and `startable` (material issued and the certificate installed
+    where the node will run). The platform holds the first two; the third is a fact
+    about a machine, so `machine` says which machine's view to report.
+    """
+    from dgfl import registration as reg
+    runtime = Path(runtime).resolve()
+    config = load_cluster(runtime)
+    ledger = reg.ledger_summary(runtime)
+    # "Registered" means a signed entry exists where this report is being read. On
+    # the platform that is the ledger of accepted requests; on a machine it is the
+    # signed registry it received. Both describe the same fact, and each runtime can
+    # only see its own, so neither has to be told about the other.
+    signed_registry = _signed_registry(runtime)
+    accepted = ledger['registered']
+    by_node = {}
+    for name, entries in accepted.items():
+        by_node.setdefault(name, len(entries))
+    keys_root = runtime/'keys'
+    scheme = identity_scheme(runtime)
+    nodes = {}
+    for name, item in config['nodes'].items():
+        if machine is not None and item['machine'] != machine:
+            continue
+        issued = name in accepted or name in signed_registry
+        has_identity = (keys_root/name/'identity.json').is_file()
+        has_certificate = (keys_root/name/'tls.pem').is_file()
+        has_registration = (keys_root/name/'registration.json').is_file()
+        if scheme != IDENTITY_SCHEME_REGISTERED:
+            # Identities were prepared locally, so nothing is pending and a node can
+            # start when its identity and certificate are present.
+            state = 'startable' if has_identity and has_certificate else 'pending'
+        elif issued and has_identity and has_registration and has_certificate:
+            state = 'startable'
+        elif issued:
+            state = 'registered'
+        else:
+            state = 'pending'
+        nodes[name] = {'machine': item['machine'], 'state': state,
+                       'attempts': by_node.get(name, 1 if name in signed_registry else 0),
+                       'has_local_identity': has_identity,
+                       'has_certificate': has_certificate}
+    return {'deployment_id': config.get('deployment_id'),
+            'identity_scheme': scheme,
+            'trust_environment': trust_environment(runtime),
+            'individually_registered': _uses_registration(runtime),
+            'machine': machine,
+            'nodes': nodes,
+            'pending': sorted(name for name, item in nodes.items() if item['state'] == 'pending'),
+            'registered': sorted(name for name, item in nodes.items() if item['state'] == 'registered'),
+            'startable': sorted(name for name, item in nodes.items() if item['state'] == 'startable')}
+
+
+def _signed_registry(runtime):
+    """The signed node entries a machine received, or an empty mapping.
+
+    Read-only and tolerant: a machine that has not installed its package yet simply
+    has no signed registry, which is reported as "not registered" rather than as an
+    error. A registry that is present but unreadable is an error, because that is a
+    corrupt installation rather than an incomplete one.
+    """
+    path = Path(runtime)/'keys'/'registration-registry.json'
+    if not path.exists():
+        return {}
+    try:
+        registry = json.loads(path.read_text('utf8'))
+    except (ValueError, OSError) as exc:
+        raise ValueError(f'已登记公共身份表无法读取：{path}') from exc
+    nodes = registry.get('nodes')
+    return nodes if isinstance(nodes, dict) else {}
+
+
+def _uses_registration(runtime):
+    """True when this runtime's identities came from individual registration.
+
+    Two artefacts indicate that, and a machine only ever holds one of them: the
+    platform keeps the ledger of accepted requests, while a machine receives the
+    signed registry that a signed entry belongs to. A runtime with neither was
+    prepared by the local, centralised `create_cluster` path.
+    """
+    from dgfl import registration as reg
+    runtime = Path(runtime)
+    return (reg.ledger_path(runtime).exists()
+            or (runtime/'keys'/'registration-registry.json').exists())
+
+
+def require_registration(hosts, *, deployment_id, runtime=DEFAULT_RUNTIME):
+    """Prepare a multi-machine deployment whose nodes register themselves.
+
+    Only public material is written into each node's directory here: the registry
+    entry and the issued certificate follow once the request is accepted. No private
+    key is created by this call for any node.
+    """
+    from dgfl import registration as reg
+    runtime = Path(runtime).resolve()
+    if not isinstance(deployment_id, str) or not deployment_id:
+        raise ValueError('部署标识不能为空')
+    topology = {}
+    for name, entry in hosts.items():
+        host = entry['host'] if isinstance(entry, dict) else entry
+        topology[name] = {'host': _host(host),
+                          'role': 'coordinator' if name == 'coordinator' else ''.join(
+                              character for character in name if not character.isdigit()),
+                          'machine': entry.get('machine', 'A') if isinstance(entry, dict) else 'A'}
+    for name in topology:
+        folder = runtime/'keys'/name
+        folder.mkdir(parents=True, exist_ok=True)
+        if (folder/'identity.json').exists():
+            raise ValueError(f'{name}：本机身份已存在，不会静默替换；请使用新的运行目录或先迁移')
+    (runtime/'registration-requests').mkdir(parents=True, exist_ok=True)
+    atomic_json(runtime/'registration-ledger.json',
+                {'schema': reg.LEDGER_SCHEMA, 'deployment_id': deployment_id,
+                 'consumed': {}, 'by_node': {}})
+    return {'deployment_id': deployment_id, 'topology': topology,
+            'runtime': str(runtime), 'identity_scheme': IDENTITY_SCHEME_REGISTERED,
+            'trust_environment': TRUST_ENVIRONMENT_REGISTERED}
+
+
+def issue_registration(runtime, request, *, authority, allow_reissue=False):
+    """Verify one machine's request and answer with public registration material.
+
+    The acceptance order matters: the request is checked against the intended
+    topology first, then its challenge is consumed, and only then is material
+    issued. A rejected request therefore does not burn a challenge, and an accepted
+    one cannot be replayed.
+    """
+    from dgfl import registration as reg
+    runtime = Path(runtime).resolve()
+    config = load_cluster(runtime)
+    deployment_id = config.get('deployment_id') or config.get('deployment')
+    topology = registration_topology(runtime)
+    reg.verify_request(request, deployment_id=deployment_id, topology=topology)
+    reg.consume_challenge(runtime, request, deployment_id=deployment_id,
+                          allow_reissue=allow_reissue)
+    issued = reg.issue(request, authority=authority, deployment_id=deployment_id)
+    entries = []
+    for path in sorted((runtime/'registration-issued').glob('*.json')):
+        entries.append(json.loads(path.read_text('utf8')))
+    entries = [entry for entry in entries if entry['entry']['node'] != request['node']]
+    entries.append(issued)
+    (runtime/'registration-issued').mkdir(parents=True, exist_ok=True)
+    atomic_json(runtime/'registration-issued'/f"{request['node']}.json", issued)
+    registry = reg.registry_from_entries(entries, authority_certificate=issued['ca_certificate'])
+    atomic_json(runtime/'keys'/'registry.json',
+                reg.transport_registry(registry, authority_certificate=issued['ca_certificate']))
+    (runtime/'keys'/'ca.pem').write_text(issued['ca_certificate'], encoding='ascii')
+    (runtime/'keys'/'registration-registry.json').write_text(
+        json.dumps(registry, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
+    return issued
+
+
+def registration_bundle(runtime, machine, output):
+    """Write one machine's public registration configuration package.
+
+    The package holds the issued certificates, the public registry, the authority
+    certificate, the cluster configuration and the machine marker. It holds no
+    private key, and it deliberately does not need one: the machine generated its own
+    keys, so the platform has nothing of the machine's to give back.
+
+    A node whose request this platform never accepted is a refusal, not an omission:
+    shipping a package that silently lacks one node's material would produce a
+    machine that starts and then fails to authenticate.
+    """
+    from dgfl import registration as reg
+    runtime, output = Path(runtime).resolve(), Path(output).resolve()
+    if output.exists():
+        raise FileExistsError('registration bundle output already exists; choose a new destination')
+    config = load_cluster(runtime)
+    names = [name for name, item in config['nodes'].items() if item['machine'] == machine]
+    if not names:
+        raise ValueError(f'machine {machine} has no nodes in this deployment')
+    issued_material = {}
+    for name in names:
+        path = runtime/'registration-issued'/f'{name}.json'
+        if not path.exists():
+            raise ValueError(f'{name}：尚未登记，本机配置包无法生成；请先接受该节点的登记请求')
+        issued_material[name] = json.loads(path.read_text('utf8'))
+    # Every role needs peer public keys, including peers on other machines. Only
+    # this machine's certificates are packaged below; private keys never leave it.
+    all_material = [json.loads(path.read_text('utf8'))
+                    for path in sorted((runtime/'registration-issued').glob('*.json'))]
+    authority_certificate = next(iter(issued_material.values()))['ca_certificate']
+    registry = reg.registry_from_entries(all_material, authority_certificate=authority_certificate)
+    public_registry = reg.transport_registry(registry, authority_certificate=authority_certificate)
+    output.mkdir(parents=True, exist_ok=False)
+    folder = output/machine
+    (folder/'keys').mkdir(parents=True)
+    for name, issued in issued_material.items():
+        node_folder = folder/'keys'/name
+        node_folder.mkdir()
+        # The certificate and the signed entry are public; the machine already holds
+        # the private keys these correspond to.
+        (node_folder/'tls.pem').write_text(issued['certificate'], encoding='ascii')
+        (node_folder/'registration.json').write_text(
+            json.dumps({'entry': issued['entry'], 'signature': issued['signature'],
+                        'challenge': issued['entry']['challenge']},
+                       ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
+    (folder/'keys'/'registration-registry.json').write_text(
+        json.dumps(registry, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
+    (folder/'keys'/'ca.pem').write_text(next(iter(issued_material.values()))['ca_certificate'],
+                                        encoding='ascii')
+    (folder/'keys'/'registry.json').write_text(
+        json.dumps(public_registry, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
+    (folder/'cluster.json').write_text(
+        json.dumps(config, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
+    atomic_json(folder/'machine.json', {'machine': machine})
+    from dgfl.crypto.lego_registry import Registry
+    parameters = Registry(runtime).export_to(folder)
+    (folder/'README.txt').write_text(_registration_instructions(machine, names, config), encoding='utf8')
+    return {'machine': machine, 'nodes': names, 'output': str(folder),
+            'public_only': True,
+            'proof_parameters': len(parameters),
+            'deployment_id': config.get('deployment_id')}
+
+
+def _registration_instructions(machine, names, config):
+    ports = ', '.join(str(config['nodes'][name]['port']) for name in names
+                      if name != 'coordinator')
+    return (
+        f'# DGFlow 电脑 {machine} 登记配置包（只含公共材料）\n\n'
+        '本包不包含任何私钥。每台机器自行生成并持有本机密钥；平台只登记公钥。\n\n'
+        '步骤：\n'
+        '1. 在本机源码目录生成身份与登记请求（私钥留在本机）：\n'
+        f'   python -m dgfl.cli identity-init --runtime <本机运行目录> --node {names[0]} '
+        f'--host <本机地址> --deployment {config.get("deployment_id")}\n'
+        '   对本机每个节点分别执行；请求文件在本机运行目录的 registration-requests 中。\n'
+        '2. 把请求文件交给平台（在签发环境所在机器执行）：\n'
+        '   python -m dgfl.cli register-accept --request <请求文件> --authority <签发环境>\n'
+        '3. 将包内 keys、cluster.json、machine.json 和 proof-parameters 合并到本机已有运行目录，'
+        '保留本机各节点的 identity.json 与 tls-key.pem，然后逐个核对身份：\n'
+        f'   python -m dgfl.cli register-check --runtime <本机运行目录> --node {names[0]}\n'
+        '   所有机器登记完成后重新下载各机配置包，以同步完整的远端公钥表。\n\n'
+        '启动前若报"本机私钥与登记公钥不匹配"，说明本机身份与登记材料不是同一对，'
+        '必须重新登记，不要手工改登记表。\n\n'
+        f'本机节点端口：{ports}\n'
+    )

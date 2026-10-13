@@ -9,10 +9,14 @@ from dgfl.services.node import create_node_app
 from dgfl.transport import chunking as ck
 from dgfl.transport.binary import packb, unpackb
 from dgfl.transport.security import Identity, create_cluster
+from dgfl.versioning import PROTOCOL_VERSION
 
 
-def body_for(action, payload):
-    return packb({'action': action, 'payload': payload})
+def body_for(action, payload, protocol_version=None):
+    message = {'action': action, 'payload': payload}
+    if protocol_version is not None:
+        message['protocol_version'] = protocol_version
+    return packb(message)
 
 
 def spec_for(action, body, index, total, digest=None, data=None):
@@ -295,7 +299,10 @@ def test_small_requests_travel_as_a_single_message(monkeypatch):
     client, seen = _recording_client(monkeypatch, threshold=4096, chunk_bytes=1024)
     result = client.call('authority1', 'health', {'note': 'small'})
     assert result == {'ok': True, 'action': 'health'}
-    assert seen == [{'action': 'health', 'payload': {'note': 'small'}}]
+    # The protocol version travels with every request. It is deliberately not a
+    # field of the round context, whose digest binds each proof challenge.
+    assert seen == [{'action': 'health', 'payload': {'note': 'small'},
+                     'protocol_version': PROTOCOL_VERSION}]
 
 
 def test_oversized_requests_are_split_into_bound_chunks(monkeypatch):
@@ -306,12 +313,14 @@ def test_oversized_requests_are_split_into_bound_chunks(monkeypatch):
     assert len(seen) >= 4
     assert all(message['action'] == ck.CHUNK_ACTION for message in seen)
     specs = [message['payload'] for message in seen]
-    assert {spec['digest'] for spec in specs} == {hashlib.sha256(body_for('authorize', payload)).hexdigest()}
+    assert {spec['digest'] for spec in specs} == {
+        hashlib.sha256(body_for('authorize', payload, PROTOCOL_VERSION)).hexdigest()}
     assert [spec['index'] for spec in specs] == list(range(len(specs)))
     assert all(spec['total'] == len(specs) for spec in specs)
     assert all(spec['action'] == 'authorize' for spec in specs)
     assert all(len(spec['data']) <= 100 for spec in specs)
-    assert unpackb(b''.join(spec['data'] for spec in specs)) == {'action': 'authorize', 'payload': payload}
+    assert unpackb(b''.join(spec['data'] for spec in specs)) == {
+        'action': 'authorize', 'payload': payload, 'protocol_version': PROTOCOL_VERSION}
 
 
 def test_chunked_payload_survives_the_assembler(monkeypatch):
@@ -323,4 +332,5 @@ def test_chunked_payload_survives_the_assembler(monkeypatch):
         assert assembler.accept('client1', message['payload'])['complete'] is False
     final = assembler.accept('client1', seen[-1]['payload'])
     assert final['complete'] is True and final['action'] == 'authorize'
-    assert unpackb(final['body']) == {'action': 'authorize', 'payload': payload}
+    assert unpackb(final['body']) == {'action': 'authorize', 'payload': payload,
+                                      'protocol_version': PROTOCOL_VERSION}

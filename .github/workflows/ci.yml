@@ -37,6 +37,9 @@ jobs:
       - name: Lint
         run: python -m ruff check src tests
 
+      - name: Require the delivered tree to carry no machine identity
+        run: python scripts/freeze_source.py --scan-only
+
       - name: Test
         run: python -m pytest -q
 
@@ -139,6 +142,7 @@ jobs:
           tests/crypto/test_lego.py tests/crypto/test_lego_registry.py
           tests/crypto/test_aggregate_native.py tests/crypto/test_partial_decryption.py
           tests/integration/test_lego_roles.py tests/experiments/test_runner_lego.py
+          tests/integration/test_configurable_batches.py
           --junitxml=native-lego-results.xml
       - name: Fail if any required native or Lego test was skipped
         run: |
@@ -148,3 +152,37 @@ jobs:
           assert cases, 'No native/Lego tests were collected'
           assert not any(case.find('skipped') is not None for case in cases), 'Required native/Lego tests were skipped'
           PY
+
+  packaging:
+    name: Real-repository delivery packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install packaging dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Package this checkout end to end
+        # The synthetic packaging fixtures cannot catch a guard that rejects the
+        # real tree, which is how a broken absolute-path check reached HEAD.
+        run: python scripts/package_submission.py --output dist/submission
+      - name: Require the delivered tree to carry no machine identity
+        run: python scripts/freeze_source.py --scan-only
+      - name: Require the packaging boundary tests to run, not skip
+        run: >-
+          python -m pytest -q tests/packaging
+          --junitxml=packaging-results.xml
+      - name: Fail if any packaging boundary test was skipped
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse('packaging-results.xml').findall('.//testcase')
+          assert cases, 'No packaging tests were collected'
+          assert not any(case.find('skipped') is not None for case in cases), 'Packaging boundary tests were skipped'
+          PY
+      - name: Report the source version boundary of frozen acceptance records
+        run: python scripts/evidence_version_boundary.py

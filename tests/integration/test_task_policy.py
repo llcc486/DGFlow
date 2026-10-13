@@ -109,13 +109,15 @@ def test_prepare_data_persists_complete_policy(cluster,monkeypatch):
         worker.execute('prepare_data',changed)
 
 
-def small_round(cluster,mode='encrypted',zero=False,*,vectors=None,screening=None):
+def small_round(cluster,mode='encrypted',zero=False,*,vectors=None,screening=None,
+                task_id='small-policy',round_id=1,key_epoch='small-epoch',reference=None,recovery=None):
     _,identities,workers=cluster
-    reference=[1,1]
-    ctx={'task_id':'small-policy','round_id':1,'key_epoch':'small-epoch',
+    reference=[1,1] if reference is None else reference
+    ctx={'task_id':task_id,'round_id':round_id,'key_epoch':key_epoch,
          'model_hash':b.digest(reference),'bits':5,'scale':16,'dimension':2}
     authorities=[workers[name] for name in AUTHORITIES]
     begin={'context':ctx,'reference':reference,'clients':4,'mode':mode}
+    if recovery is not None: begin['recovery']=recovery
     if screening is not None:
         begin['policy']={'mode':mode,'scale':16,'bits':5,'dimension':2,
                          'members':[f'client{i}' for i in range(1,5)],'batch_size':2,**screening}
@@ -190,6 +192,38 @@ def test_authority_accepts_next_round_with_unchanged_policy(cluster):
         assert result['purpose']=='dkg-commitments'
 
 
+def test_secure_recovery_continues_confirmed_parent_after_authority_restart(cluster):
+    root,identities,workers=cluster
+    ctx,authorities,packets,keys=small_round(cluster)
+    final=finish_round(cluster,ctx,authorities,packets,keys)
+    for name in AUTHORITIES:
+        workers[name]=RoleWorker(name,root,identities[name])
+    recovery={'parent_task_id':ctx['task_id'],'checkpoint_round':1,'checkpoint_sha256':'a'*64}
+    resumed_ctx,authorities,packets,keys=small_round(cluster,task_id='resumed-task',round_id=2,
+        key_epoch='fresh-recovery-epoch',reference=final['reference'],recovery=recovery)
+    result=finish_round(cluster,resumed_ctx,authorities,packets,keys)
+    for authority in authorities:
+        assert authority.task_state['resumed-task']['next_round']==3
+        assert authority.task_state['resumed-task']['reference']==result['reference']
+        assert authority.task_state[ctx['task_id']]['next_round']==2
+        assert authority.auth.epoch=='fresh-recovery-epoch'
+
+
+def test_new_task_cannot_skip_round_one_without_locally_confirmed_parent(cluster):
+    _,_,workers=cluster
+    reference=[1,1]
+    context={'task_id':'untrusted-recovery','round_id':2,'key_epoch':'fresh-epoch',
+             'model_hash':b.digest(reference),'bits':5,'scale':16,'dimension':2}
+    begin={'context':context,'reference':reference,'clients':4,'mode':'encrypted'}
+    with pytest.raises(ValueError,match='round one'):
+        workers['authority1'].execute('begin',begin)
+    begin['recovery']={'parent_task_id':'missing-task','checkpoint_round':1,
+                       'checkpoint_sha256':'a'*64}
+    with pytest.raises(ValueError,match='locally confirmed'):
+        workers['authority1'].execute('begin',begin)
+    assert 'untrusted-recovery' not in workers['authority1'].task_state
+
+
 @pytest.mark.parametrize('mode,approved',[
     ('encrypted',['client1','client2','client3','client4']),
     ('dgflow',['client3','client4']),('optimized',['client3','client4'])])
@@ -239,7 +273,18 @@ def test_all_authorities_reject_proven_amplitude_attack_and_keep_honest_partner(
     assert decisions[0]==decisions[1]==decisions[2]
     decision=decisions[0]
     assert decision['approved']==['client1','client2','client3']
-    assert decision['collateral']==[] and decision['screening']==controls
+    # The signed policy preserves exactly the gate thresholds the task stated, and
+    # additionally names the screening rule and its clustering parameters, which
+    # decide every outcome and used to sit outside the signature. No gate threshold
+    # is invented for a task that did not state one.
+    assert decision['collateral']==[]
+    for key,value in controls.items():
+        assert decision['screening'][key]==value
+    assert decision['screening']['screening_rule']=='legacy_v1'
+    assert decision['screening']['cluster_center_gap']==0.45
+    assert decision['screening']['cluster_low_center_max']==0.25
+    assert set(decision['screening'])-set(controls)=={'screening_rule','cluster_center_gap',
+        'cluster_low_center_max','cluster_iterations','cluster_tolerance'}
     malicious=decision['validations'][3]
     assert malicious['proof_valid'] and malicious['score']>.9
     assert malicious['decision']=='rejected' and '中位数' in malicious['reason']

@@ -18,6 +18,7 @@ from dgfl.training import datasets
 from dgfl.transport.security import Identity, create_cluster
 
 CLIENTS=[f'client{i}' for i in range(1,5)]
+DEFAULT_AUTHORITY_THRESHOLD=2
 
 
 @pytest.fixture(scope='module',params=['legacy','lego_norm_v1'])
@@ -110,13 +111,18 @@ def _make_cluster(tmp_path,monkeypatch,proof_parameters,*,pinned=False):
     return tmp_path,identities,workers,spec,context,reference,proof_parameters
 
 
-def _run_round(cluster):
+def _run_round(cluster,*,ctx=None):
     """DKG, client keys, ciphertexts and proofs. It does not authorize.
 
     Authorization is a separate, individually invoked step because own
     verification is a one-shot guard.
+
+    `ctx` overrides the round context, which is how a test pins a different
+    authorization consistency threshold: the threshold belongs to the round, and every
+    authorization decision binds the context it was made under.
     """
     _,identities,workers,spec,context,reference,proof_parameters=cluster
+    context=context if ctx is None else ctx
     authorities=[workers[name] for name in roles.AUTHORITIES]
     begin={'context':context,'reference':reference,'clients':len(CLIENTS),
            'mode':spec['mode'],'policy':spec}
@@ -144,10 +150,11 @@ def _run_round(cluster):
     return authorities,packets,keys
 
 
-def _authorize(cluster,authorities,packets,keys):
+def _authorize(cluster,authorities,packets,keys,*,ctx=None):
+    context=cluster[4] if ctx is None else ctx
     certificates=[authority.execute('authorize',{'packets':packets,'validation_keys':keys})
                   for authority in authorities]
-    return certificates,roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])
+    return certificates,roles.authorization(cluster[1]['coordinator'],certificates,context)
 
 
 def _finish(cluster,authorities,packets,certificates,decision):
@@ -267,34 +274,40 @@ def test_owner_material_is_replayable_by_the_published_verifier(started,monkeypa
     written=sorted((owner.folder/'verification-materials').glob('*.bin'))
     assert written, 'the owner must write material when opted in'
     material=vm.load(written[0])
-    assert material['authority_threshold']==2
     assert set(material['clients'])==set(owned)
     assert 'no DKG share' in material['scope']
-    native=proof_parameters is not None
-    if native:
+    assert 'no function key' in material['scope']
+    for cid in owned:
+        entry=material['clients'][cid]
+        # The shareable layer carries the packet and the enrolled key row only.
+        assert set(entry)=={'packet','public'}
+        assert 'validation_keys' not in entry
+    if proof_parameters is not None:
         # This fixture installs a synthetic registry, so the published verifier
-        # cannot resolve the trusted parameters here. Replaying the numeric
-        # relations is covered end to end by test_verification_materials.py,
-        # which installs a real registry.
-        for cid in owned:
-            entry=material['clients'][cid]
-            assert set(entry)=={'packet','public','validation_keys'}
-            assert len(entry['validation_keys'])>=2
-        assert list((authorities[0].folder/'verification-materials').glob('*.bin'))
+        # cannot resolve trusted parameters here. The numeric replay is covered
+        # end to end by test_verification_materials.py with a real registry.
+        assert 'validation_keys' not in material['clients'][owned[0]]
     else:
-        for cid in owned:
-            entry=material['clients'][cid]
-            # Public objects only: the packet, the enrolled key row, published keys.
-            assert set(entry)=={'packet','public','validation_keys'}
-            assert len(entry['validation_keys'])>=2
-            result=vm.verify_client(material,cid)
-            assert result['proof_valid'] is True,result
-            assert all(item['ok'] for item in result['relations'])
+        result=vm.verify_proof(material,owned[0])
+        assert result['proof_valid'] is True,result
+        assert all(item['ok'] for item in result['relations'])
+        # The shareable layer alone cannot confirm the inner product, and says so
+        # instead of reporting a pass it did not check.
+        unchecked=vm.authorization_not_verified(material,owned[0])
+        assert unchecked['proof_valid'] is True
+        assert unchecked['inner_product'] is None
+        assert unchecked['inner_product_verified'] is False
+        assert any(not item['ok'] for item in unchecked['relations'])
         # A tampered norm must fail; that is the artefact's whole purpose.
         material['clients'][owned[0]]['packet']['norm_squared']=999
-        tampered=vm.verify_client(material,owned[0])
+        tampered=vm.verify_proof(material,owned[0])
         assert tampered['proof_valid'] is False
         assert tampered['inner_product'] is None
+    # The restricted layer stays off until the operator opts in separately, and it
+    # is never written beside the shareable layer.
+    assert not vm.restricted_persistence_enabled()
+    for authority in authorities:
+        assert list((authority.folder/'restricted-materials').glob('*.bin'))==[]
     # A non-owner sees only sealed submissions, so it writes nothing.
     for other in authorities[1:]:
         assert list((other.folder/'verification-materials').glob('*.bin'))==[]
@@ -328,14 +341,158 @@ def test_unresigned_screening_changes_fail_authorization_signature(cluster,field
         roles.authorization(cluster[1]['coordinator'],altered,cluster[4])
 
 
+@pytest.mark.parametrize('field,value',[('cluster_low_center_max',0.4),
+                                        ('cluster_center_gap',0.6),
+                                        ('cluster_iterations',8)])
+def test_a_clustering_parameter_change_breaks_the_signed_decision(cluster,field,value):
+    """The clustering parameters are inside the signed policy, not beside it.
+
+    Before this, they were constants in the rule, so editing them changed nothing an
+    edge had signed and nothing a reader could detect.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    certificates,decision=_authorize(cluster,authorities,packets,keys)
+    assert decision['screening'][field]=={'cluster_low_center_max':0.25,
+                                          'cluster_center_gap':0.45,
+                                          'cluster_iterations':32}[field]
+    altered=deepcopy(certificates)
+    altered[0]['payload']['screening'][field]=value
+    with pytest.raises(ValueError,match='signed public'):
+        roles.authorization(cluster[1]['coordinator'],altered,cluster[4])
+
+
+def test_the_only_supported_rule_name_is_recorded_and_named(cluster):
+    """The rule is named in the signed policy, so a recorded round says which rule ran."""
+    authorities,packets,keys=_run_round(cluster)
+    _,decision=_authorize(cluster,authorities,packets,keys)
+    assert decision['screening']['screening_rule']=='legacy_v1'
+    assert decision['screening_decision']['rule']=='legacy_v1'
+
+
+def test_the_signed_decision_carries_the_screening_record(cluster):
+    """A round records what the rule measured, under the edge's signature."""
+    authorities,packets,keys=_run_round(cluster)
+    certificates,decision=_authorize(cluster,authorities,packets,keys)
+    assert all(cert['payload']['screening_decision']==decision['screening_decision']
+               for cert in certificates)
+    record=decision['screening_decision']
+    assert record['rule']=='legacy_v1' and record['version']>=1
+    # Nothing was removed by the cluster gate in this fixture, which is itself a
+    # recorded fact rather than an absent field.
+    assert record['thresholds']['cluster_center_gap']==0.45
+    assert record['thresholds']['cluster_low_center_max']==0.25
+    assert 'low_center' in record and 'high_center' in record and 'separation' in record
+    counts=decision['screening_counts']
+    assert counts['accepted']==len(decision['approved'])
+    # Every client appears under exactly one stage.
+    rows={row['client_id']:row for row in decision['validations']}
+    assert all(row['exit_stage'] in ('accepted','norm_gate','cluster_gate',
+                                     'proof_failed','not_submitted','batch_collateral')
+               for row in rows.values())
+    assert sum(counts[stage] for stage in ('proof_failed','not_submitted','norm_gate',
+                                          'cluster_gate','batch_collateral','accepted'))==len(rows)
+    assert rows['client1']['exit_stage']=='norm_gate'
+    assert rows['client2']['exit_stage']=='batch_collateral'
+    assert rows['client3']['exit_stage']=='accepted'
+
+
+def test_a_client_removed_by_the_norm_gate_is_not_counted_as_screening_detection(cluster):
+    """The four removal causes are separate counts, not one "rejected" number."""
+    authorities,packets,keys=_run_round(cluster)
+    _,decision=_authorize(cluster,authorities,packets,keys)
+    counts=decision['screening_counts']
+    rows={row['client_id']:row for row in decision['validations']}
+    norm_gated={cid for cid,row in rows.items() if row['exit_stage']=='norm_gate'}
+    cluster_gated={cid for cid,row in rows.items() if row['exit_stage']=='cluster_gate'}
+    assert norm_gated=={'client1'}
+    assert cluster_gated==set()
+    assert counts['norm_gate']==len(norm_gated)
+    assert counts['cluster_gate']==0
+
+
 def test_one_edge_cannot_authorize_a_conflicting_lower_norm_rule(cluster):
     authorities,packets,keys=_run_round(cluster)
     certificates,decision=_authorize(cluster,authorities,packets,keys)
     conflicting=deepcopy(decision)
     conflicting['screening']['min_norm_ratio']=None
     certificates[0]=cluster[1]['authority1'].sign_public('authorization',conflicting)
-    with pytest.raises(ValueError,match='conflicting decisions'):
+    # The refusal names which edges signed which decision, so an operator can see the
+    # split rather than being told only that the round failed.
+    with pytest.raises(ValueError,match='授权决定出现分歧'):
         roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])
+    with pytest.raises(ValueError,match='authority1'):
+        roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])
+
+
+def test_a_decision_signed_by_too_few_edges_is_refused_even_when_they_agree(cluster):
+    """The consistency threshold is separate from the key threshold.
+
+    Two of three edges agreeing is enough to hold key material, and it was also being
+    accepted as enough to confirm a decision. It must not be: two colluding edges could
+    then sign a decision the third never saw. An absent policy key therefore demands
+    every authority.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    certificates,_=_authorize(cluster,authorities,packets,keys)
+    partial=[cert for cert in certificates if cert['sender']!='authority3']
+    # Both remaining edges agree with each other, so this is not a split decision.
+    assert len(partial)==len(roles.AUTHORITIES)-1
+    with pytest.raises(ValueError,match='授权一致性未达门限'):
+        roles.authorization(cluster[1]['coordinator'],partial,cluster[4])
+    # The key threshold alone would have accepted it, which is the point: the
+    # requirement that bites here is the separate confirmation threshold.
+    assert len(partial)>=DEFAULT_AUTHORITY_THRESHOLD
+
+
+def test_a_policy_may_lower_the_consistency_threshold_deliberately(cluster):
+    """Relaxing it is possible, but it has to be named and then it is signed.
+
+    The threshold belongs to the round context, so a decision binds the threshold it
+    was made under and the value is part of the signed record rather than a local
+    setting.
+    """
+    relaxed_ctx={**cluster[4],'authorization_consistency_threshold':DEFAULT_AUTHORITY_THRESHOLD}
+    coordinator=cluster[1]['coordinator']
+    authorities,packets,keys=_run_round(cluster,ctx=relaxed_ctx)
+    certificates,_=_authorize(cluster,authorities,packets,keys,ctx=relaxed_ctx)
+    partial=[cert for cert in certificates if cert['sender']!='authority3']
+    assert roles.authorization(coordinator,partial,relaxed_ctx)['approved']==['client3','client4']
+    # Every authority signing the same decision is also accepted.
+    assert len(roles.authorization(coordinator,certificates,relaxed_ctx)['approved'])==2
+
+
+def test_the_strict_default_refuses_a_partial_set_that_the_key_threshold_allows(cluster):
+    """The consistency threshold is separate from the key threshold.
+
+    Two of three edges agreeing is enough to hold key material, and it was also being
+    accepted as enough to confirm a decision. It must not be: two colluding edges could
+    then sign a decision the third never saw. An absent policy key therefore demands
+    every authority.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    certificates,_=_authorize(cluster,authorities,packets,keys)
+    partial=[cert for cert in certificates if cert['sender']!='authority3']
+    # Both remaining edges agree with each other, so this is not a split decision.
+    assert len(partial)==len(roles.AUTHORITIES)-1
+    with pytest.raises(ValueError,match='授权一致性未达门限'):
+        roles.authorization(cluster[1]['coordinator'],partial,cluster[4])
+    # The key threshold alone would have accepted it, which is the point: the
+    # requirement that bites here is the separate confirmation threshold.
+    assert len(partial)>=DEFAULT_AUTHORITY_THRESHOLD
+    # And every authority agreeing is accepted, so the default is not "refuse always".
+    assert len(roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])['approved'])==2
+
+
+def test_an_out_of_range_consistency_threshold_is_refused():
+    """A threshold below the key threshold or above the edge count is a config error."""
+    from dgfl.topology import authorization_consistency_threshold
+    config={'authority_count':3,'authority_threshold':2}
+    assert authorization_consistency_threshold(config,3)==3
+    assert authorization_consistency_threshold({**config,'authorization_consistency_threshold':2},3)==2
+    assert authorization_consistency_threshold({**config,'authorization_consistency_threshold':None},3)==3
+    for bad in (1,4,True,'2',2.0):
+        with pytest.raises(ValueError,match='authorization_consistency_threshold'):
+            authorization_consistency_threshold({**config,'authorization_consistency_threshold':bad},3)
 
 
 @pytest.mark.parametrize('field,value',[('min_norm_ratio',None),('min_norm_ratio',.5),

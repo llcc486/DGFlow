@@ -46,7 +46,7 @@ test('switching the actual deployment form updates RGB dimensions, CRS selection
   const context = createContext({
     ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {},
     onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
@@ -91,5 +91,62 @@ test('switching the actual deployment form updates RGB dimensions, CRS selection
   } finally {
     stops.forEach(stop => stop())
     store.selectedDataset.value = 'mnist'
+  }
+})
+
+test('mount keeps CRS refresh and machine registration together and unmount cancels browser work', async () => {
+  const stops = [], intervals = new Map(), timeouts = new Map(), machines = [], requests = []
+  const original = { status: store.status.value, connected: store.connected.value,
+    selectedDataset: store.selectedDataset.value, loadRegistration: store.loadRegistration }
+  let mount, unmount, next = 0
+  store.status.value = { local_machine: 'A' }
+  store.connected.value = false
+  store.selectedDataset.value = 'mnist'
+  store.loadRegistration = async machine => { machines.push(machine) }
+  const context = createContext({
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
+    computed, reactive, ref, api, errorText, store, trainingEligibility, AbortController,
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {},
+    onMounted: fn => { mount = fn }, onUnmounted: fn => { unmount = fn },
+    watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
+    setInterval: (fn, delay) => { intervals.set(++next, { fn, delay }); return next },
+    clearInterval: id => intervals.delete(id), clearTimeout: id => timeouts.delete(id),
+    window: { setTimeout: fn => { timeouts.set(++next, fn); return next } },
+    fetch: async (url, { signal }) => {
+      requests.push({ url, signal })
+      return { ok: true, json: async () => ({ available: true,
+        parameters: [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }] }) }
+    },
+  })
+  runInContext(executable, context)
+  const state = context.component.setup({}, { expose() {}, emit() {} })
+  try {
+    mount()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepEqual(machines, ['A'])
+    assert.equal(state.selectedModel.value, 'softmax-mnist-8')
+    assert.equal(state.form.proof_crs_hash, 'a'.repeat(64))
+    assert.equal(intervals.size, 1)
+    assert.equal([...intervals.values()][0].delay, 30000)
+    await [...intervals.values()][0].fn()
+    assert.equal(requests.length, 2)
+    assert.equal(requests[0].signal.aborted, true)
+
+    store.status.value = { deployment: 'lan', deployment_id: 'new-deployment', local_machine: 'B' }
+    store.connected.value = true
+    await nextTick()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(machines.at(-1), 'B')
+    unmount()
+    assert.equal(intervals.size, 0)
+    assert.equal(requests.at(-1).signal.aborted, true)
+    assert.equal(timeouts.size, 0)
+  } finally {
+    unmount?.()
+    stops.forEach(stop => stop())
+    store.loadRegistration = original.loadRegistration
+    store.connected.value = original.connected
+    store.status.value = original.status
+    store.selectedDataset.value = original.selectedDataset
   }
 })

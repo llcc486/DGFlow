@@ -596,6 +596,24 @@ table.nb-table tbody tr:hover td { background: #fafbfd; }
 .nb-toolbar .nb-field > label { margin-bottom: 6px; }
 .nb-toolbar select { min-height: 36px; font-size: 12.5px; }
 
+/* Continue-from-checkpoint panel: a small state block, not a settings surface. */
+.nb-recovery {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; margin: -8px 0 20px;
+  min-width: 0; overflow-wrap: anywhere;
+  background: var(--nb-surface, #fbfbfd); border: 1px solid var(--nb-line);
+  border-radius: var(--nb-radius-lg);
+}
+.nb-recovery-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12.5px; }
+.nb-recovery-status {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: #eef1f6; color: var(--nb-muted);
+}
+.nb-recovery-status[data-resumable='true'] { background: #e5f4ec; color: #1c6b45; }
+.nb-recovery-line { font-size: 12px; line-height: 1.7; margin: 0; }
+.nb-recovery-blocked { color: #8a4b1f; }
+.nb-recovery-meta { font-size: 11px; color: var(--nb-muted); margin: 0; }
+.nb-recovery .nb-btn { align-self: flex-start; }
+
 .nb-run-context {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   font-size: 11.5px; color: var(--nb-muted); margin: 0 2px 20px; flex-wrap: wrap;

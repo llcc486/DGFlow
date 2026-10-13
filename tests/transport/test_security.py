@@ -1,3 +1,4 @@
+import json
 import socket
 import ssl
 import threading
@@ -55,6 +56,27 @@ def test_identity_setup_does_not_overwrite_keys(tmp_path):
     before=(tmp_path/'coordinator'/'identity.json').read_bytes()
     with pytest.raises(FileExistsError): s.create_cluster(tmp_path,{'coordinator':'127.0.0.1'})
     assert (tmp_path/'coordinator'/'identity.json').read_bytes()==before
+
+
+def test_identity_accepts_early_registration_registry_wrapper(tmp_path):
+    s.create_cluster(tmp_path,{'coordinator':'127.0.0.1','client1':'127.0.0.1'})
+    registry_path=tmp_path/'registry.json'
+    registry=json.loads(registry_path.read_text('utf8'))
+    registry_path.write_text(json.dumps({'nodes':registry}),encoding='utf8')
+    sender=s.Identity(tmp_path,'coordinator')
+    recipient=s.Identity(tmp_path,'client1')
+    message=sender.seal('client1','compatibility',{'value':1},'registry-wrapper')
+    assert recipient.open(message,'compatibility','registry-wrapper')['payload']=={'value':1}
+
+
+def test_identity_rejects_exchange_key_replaced_in_registry(tmp_path):
+    s.create_cluster(tmp_path,{'coordinator':'127.0.0.1','client1':'127.0.0.1'})
+    registry_path=tmp_path/'registry.json'
+    registry=json.loads(registry_path.read_text('utf8'))
+    registry['client1']['exchange_public']=registry['coordinator']['exchange_public']
+    registry_path.write_text(json.dumps(registry),encoding='utf8')
+    with pytest.raises(ValueError,match='exchange identity mismatch'):
+        s.Identity(tmp_path,'client1')
 
 
 @pytest.mark.parametrize('names',[{'Client1':'127.0.0.1','client1':'127.0.0.1'},{'con':'127.0.0.1'}])
