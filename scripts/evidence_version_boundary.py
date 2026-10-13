@@ -51,8 +51,20 @@ def current_files(root: Path) -> dict[str, str]:
 
 
 def git_value(root: Path, *arguments: str) -> str | None:
-    result = subprocess.run(['git', *arguments], cwd=root, capture_output=True, text=True)
-    return result.stdout.strip() if result.returncode == 0 else None
+    """Read one git value, decoding independently of the host locale.
+
+    A commit subject is not always ASCII. Decoding through the platform default
+    raises on a non-UTF-8 console codepage, and the whole measurement would then
+    fail over a label the reader only needs for orientation.
+    """
+    try:
+        result = subprocess.run(['git', *arguments], cwd=root, capture_output=True,
+                                text=True, encoding='utf-8', errors='replace')
+    except OSError:
+        return None
+    if result.returncode != 0 or not result.stdout:
+        return None
+    return result.stdout.strip()
 
 
 def compare(root: Path, document_path: str, before_field: str, after_field: str) -> dict:

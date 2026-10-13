@@ -591,31 +591,56 @@ class RoleWorker:
         return self.identity.sign_public('client-verification',self._owned_verification)
 
     def _own_verification_material(self,packets,published_keys):
-        """Persist the public material this owner alone can open, when opted in.
+        """Persist the two material layers this owner alone can open.
 
         Only the assigned owner ever holds a submitted packet in the clear, so it
         is the only actor able to write material an independent verifier can
-        replay. Persistence is off unless the operator sets the flag, and a
-        failure here is reported rather than allowed to change the round's
-        cryptographic outcome.
+        replay. The shareable proof layer and the restricted function-key layer
+        are written to separate trees, so a later export of the run record cannot
+        pick up the keys by accident. Persistence is off unless the operator sets
+        the flags, and a failure here is reported rather than allowed to change
+        the round's cryptographic outcome.
         """
         from dgfl import verification_materials as vm
         if not vm.persistence_enabled():
             return
         try:
-            material=vm.build(self.ctx['round_id'],self.ctx,self.reference,packets,
-                              {cid:self.auth.public_keys(cid) for cid in packets},
-                              published_keys,role_topology(self.policy)['authority_threshold'])
+            round_id=self.ctx['round_id']
+            public=vm.build(round_id,self.ctx,self.reference,packets,
+                            {cid:self.auth.public_keys(cid) for cid in packets})
             folder=self.folder/'verification-materials'
             # The key epoch is task level, so the file name carries its digest to
             # keep two epochs of the same round number apart.
-            name=f"round-{int(self.ctx['round_id'])}-{b.digest(self.ctx['key_epoch'])[:12]}.bin"
-            vm.write(folder/name,material)
-            self._material_note=f"verification material written to {name}"
+            epoch_digest=b.digest(self.ctx['key_epoch'])[:12]
+            name=f"round-{int(round_id)}-{epoch_digest}.bin"
+            vm.write(folder/name,public)
+            note=f"verification material written to {name}"
+            note+=self._write_restricted_material(vm,round_id,public,published_keys,epoch_digest)
+            self._material_note=note
         except (ValueError,OSError) as exc:
             # Never fail a verified round because a diagnostic artefact could not
             # be written; the signed verdict already stands.
             self._material_note=f'verification material not written: {exc}'
+
+    def _write_restricted_material(self,vm,round_id,public,published_keys,epoch_digest):
+        """Persist the restricted layer when the operator opted in.
+
+        Returns a short description of what happened. The keys never share a
+        directory with the shareable layer, and the file is created with
+        owner-only permissions before any bytes are written.
+        """
+        restricted_document=vm.build_restricted(
+            round_id,self.ctx,published_keys,proof_material_digest=vm.digest_of(public),
+            authority_threshold=role_topology(self.policy)['authority_threshold'])
+        root=self.folder/'restricted-materials'
+        if not vm.restricted_persistence_enabled():
+            return (f'；受限材料未落盘（{vm.RESTRICTED_ENVIRONMENT_FLAG} 未开启）；'
+                    '该轮内积只能在本机重新计算')
+        try:
+            vm.write_restricted(root/f'round-{int(round_id)}-{epoch_digest}.bin',restricted_document)
+        except (ValueError,OSError) as exc:
+            return f'；受限材料未落盘：{exc}'
+        return '；受限材料写入本机受保护目录（不随实验导出）'
 
     def _authorize_shared(self,payload):
         """Trust authenticated owner verdicts, then independently apply screening.

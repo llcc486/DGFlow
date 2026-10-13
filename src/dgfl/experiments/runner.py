@@ -214,6 +214,34 @@ def training_failure_reason(node, action, exc):
     return '训练请求或响应校验失败（' + type(exc).__name__ + '），请检查客户端日志'
 
 
+def require_participant_versions(replies, nodes, *, action='训练', strict=False):
+    """Refuse to start a round when a participant cannot speak this protocol.
+
+    `replies` maps node name to that participant's `health` reply, or None when
+    it could not be reached. The check runs before the first round so a
+    deployment built from mixed revisions produces one readable error listing the
+    offenders, instead of a round that fails part-way through for an unrelated
+    looking reason.
+
+    A declared-but-unsupported version is always refused. An undeclared version is
+    refused only under `strict`; see :func:`dgfl.versioning.require_participants`
+    for why the two cases are different. Every role this project starts declares
+    its version, so the declared check covers a real deployment either way.
+    """
+    from dgfl.versioning import require_participants
+    declarations = {}
+    for name in nodes:
+        reply = replies.get(name)
+        if not isinstance(reply, dict):
+            declarations[name] = None
+            continue
+        capabilities = reply.get('capabilities')
+        declarations[name] = ({'protocol_version': reply.get('protocol_version')}
+                              if 'protocol_version' in reply
+                              else (capabilities if isinstance(capabilities, dict) else None))
+    return require_participants(declarations, action=action, strict=strict)
+
+
 def require_client_training_backend(nodes, backend, clients):
     """Torch runs at the clients; the coordinator does not need its dependency."""
     if backend == 'numpy':
@@ -680,15 +708,25 @@ class RunManager:
                         return None
                 return executor.map(one,jobs)
             event('health','检查节点身份与双向 TLS 连接')
+            health_replies={}
             def health(node):
                 capabilities={}
                 try:
                     reply=rpc.call(node,'health',retries=0,timeout=3); state='online'
                     capabilities=reply.get('capabilities',{}) if isinstance(reply,dict) else {}
+                    health_replies[node]=reply
                 except (httpx.HTTPError,ValueError): state='offline'
                 return {'id':node,'role':''.join(c for c in node if not c.isdigit()),'status':state,
                         'host':cluster['nodes'][node]['url'],'capabilities':capabilities}
             self.last_nodes=executor.map(health,cluster['nodes'],always_parallel=True)
+            # A version mismatch is a configuration error, not a runtime failure:
+            # report it before the first round rather than after partial work.
+            online_nodes=[row['id'] for row in self.last_nodes if row['status']=='online']
+            version_check=require_participant_versions(
+                {name:health_replies.get(name) for name in online_nodes},online_nodes,
+                strict=bool(cfg.get('require_declared_protocol_version')))
+            if version_check['undeclared']:
+                record['evidence']['protocol_version_undeclared']=version_check['undeclared']
             telemetry_nodes={row['id'] for row in self.last_nodes if row['capabilities'].get('node_telemetry') is True}
             if telemetry_nodes:
                 try:

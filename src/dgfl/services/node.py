@@ -29,6 +29,12 @@ from dgfl.transport.chunking import (
     ResponseStore,
 )
 from dgfl.transport.security import Identity, atomic_bytes, read_bytes
+from dgfl.versioning import (
+    VersionMismatch,
+    is_message_shape,
+    require_protocol,
+    version_declaration,
+)
 
 from .telemetry import NodeTelemetry
 
@@ -90,12 +96,13 @@ def _reassemble(outcome):
             rebuilt = unpackb(outcome['body'])
     except (ValueError, TypeError) as exc:
         raise ValueError('assembled chunked body is not a valid message') from exc
-    if not isinstance(rebuilt, dict) or set(rebuilt) != {'action', 'payload'}:
+    if not is_message_shape(rebuilt):
         raise ValueError('assembled chunked body has an invalid schema')
     if rebuilt['action'] != outcome['action']:
         raise ValueError('assembled chunked body declares a different action')
-    if not isinstance(rebuilt['payload'], dict):
-        raise ValueError('assembled chunked payload must be a mapping')
+    if 'protocol_version' in rebuilt:
+        require_protocol(rebuilt['protocol_version'],
+                         subject=f"分块消息（{rebuilt['action']}）的协议版本")
     return rebuilt['action'], rebuilt['payload']
 
 
@@ -154,9 +161,19 @@ def create_node_app(node_id, runtime):
         context = opened['context']
         sender = opened['sender']
         data = opened['payload']
-        if (set(data) != {'action', 'payload'} or not isinstance(data['payload'], dict)
-                or not isinstance(data['action'], str) or not data['action']):
+        # A peer built before the version field existed sends the historical
+        # two-field message. That shape is still accepted here, because the
+        # version guarantee is enforced before any round starts: the coordinator
+        # verifies every participant's declared protocol version from `health`
+        # and refuses to begin otherwise. What is refused here is a peer that
+        # declares a version this build cannot interpret.
+        if not is_message_shape(data):
             raise HTTPException(400, 'invalid RPC schema')
+        if 'protocol_version' in data:
+            try:
+                require_protocol(data['protocol_version'], subject=f'{sender} 的 RPC 消息')
+            except VersionMismatch as exc:
+                raise HTTPException(400, str(exc)) from exc
         if data['action'] == 'health':
             from dgfl.crypto import backend as b
             from dgfl.crypto.gpu import compute_capabilities
@@ -174,7 +191,7 @@ def create_node_app(node_id, runtime):
                                        'batched_authorization':node_id.startswith('authority'),
                                        'owned_validation':node_id.startswith('authority'),
                                        'batched_client_keys':node_id.startswith('authority')},
-                      'native':loaded_native_evidence()}
+                      'native':loaded_native_evidence(), **version_declaration()}
             return identity.seal('coordinator', 'rpc-response', result, context)
         if data['action'] in ('telemetry_start', 'telemetry_read', 'telemetry_stop'):
             # Authentication above is shared with role operations; telemetry

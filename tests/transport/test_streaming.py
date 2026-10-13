@@ -14,6 +14,7 @@ from dgfl.transport import binary
 from dgfl.transport import chunking as ck
 from dgfl.transport import client as client_module
 from dgfl.transport.security import Identity, create_cluster
+from dgfl.versioning import PROTOCOL_VERSION
 
 
 @pytest.mark.parametrize('value', [None, True, -127, 2**200, -2**100, -0.0,
@@ -210,7 +211,8 @@ def test_completed_upload_rejects_altered_block_under_another_request_id(rpc_nod
     _, _, http, coordinator, rpc, calls = rpc_node
     payload = {'blob': b'p' * 500}
     rpc.call('authority1', 'echo', payload)
-    specs = chunk_specs(binary.packb({'action': 'echo', 'payload': payload}))
+    specs = chunk_specs(binary.packb({'action': 'echo', 'payload': payload,
+                                      'protocol_version': PROTOCOL_VERSION}))
     bad = {**specs[-1], 'data': b'X' + specs[-1]['data'][1:]}
     env = coordinator.seal('authority1', 'rpc', {'action': ck.CHUNK_ACTION, 'payload': bad}, 'altered-last')
     assert http.post('/rpc', content=env).status_code == 409

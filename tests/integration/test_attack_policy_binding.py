@@ -267,34 +267,40 @@ def test_owner_material_is_replayable_by_the_published_verifier(started,monkeypa
     written=sorted((owner.folder/'verification-materials').glob('*.bin'))
     assert written, 'the owner must write material when opted in'
     material=vm.load(written[0])
-    assert material['authority_threshold']==2
     assert set(material['clients'])==set(owned)
     assert 'no DKG share' in material['scope']
-    native=proof_parameters is not None
-    if native:
+    assert 'no function key' in material['scope']
+    for cid in owned:
+        entry=material['clients'][cid]
+        # The shareable layer carries the packet and the enrolled key row only.
+        assert set(entry)=={'packet','public'}
+        assert 'validation_keys' not in entry
+    if proof_parameters is not None:
         # This fixture installs a synthetic registry, so the published verifier
-        # cannot resolve the trusted parameters here. Replaying the numeric
-        # relations is covered end to end by test_verification_materials.py,
-        # which installs a real registry.
-        for cid in owned:
-            entry=material['clients'][cid]
-            assert set(entry)=={'packet','public','validation_keys'}
-            assert len(entry['validation_keys'])>=2
-        assert list((authorities[0].folder/'verification-materials').glob('*.bin'))
+        # cannot resolve trusted parameters here. The numeric replay is covered
+        # end to end by test_verification_materials.py with a real registry.
+        assert 'validation_keys' not in material['clients'][owned[0]]
     else:
-        for cid in owned:
-            entry=material['clients'][cid]
-            # Public objects only: the packet, the enrolled key row, published keys.
-            assert set(entry)=={'packet','public','validation_keys'}
-            assert len(entry['validation_keys'])>=2
-            result=vm.verify_client(material,cid)
-            assert result['proof_valid'] is True,result
-            assert all(item['ok'] for item in result['relations'])
+        result=vm.verify_proof(material,owned[0])
+        assert result['proof_valid'] is True,result
+        assert all(item['ok'] for item in result['relations'])
+        # The shareable layer alone cannot confirm the inner product, and says so
+        # instead of reporting a pass it did not check.
+        unchecked=vm.authorization_not_verified(material,owned[0])
+        assert unchecked['proof_valid'] is True
+        assert unchecked['inner_product'] is None
+        assert unchecked['inner_product_verified'] is False
+        assert any(not item['ok'] for item in unchecked['relations'])
         # A tampered norm must fail; that is the artefact's whole purpose.
         material['clients'][owned[0]]['packet']['norm_squared']=999
-        tampered=vm.verify_client(material,owned[0])
+        tampered=vm.verify_proof(material,owned[0])
         assert tampered['proof_valid'] is False
         assert tampered['inner_product'] is None
+    # The restricted layer stays off until the operator opts in separately, and it
+    # is never written beside the shareable layer.
+    assert not vm.restricted_persistence_enabled()
+    for authority in authorities:
+        assert list((authority.folder/'restricted-materials').glob('*.bin'))==[]
     # A non-owner sees only sealed submissions, so it writes nothing.
     for other in authorities[1:]:
         assert list((other.folder/'verification-materials').glob('*.bin'))==[]

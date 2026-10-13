@@ -11,6 +11,7 @@ import pytest
 
 from dgfl.transport import binary, chunking, security
 from dgfl.transport import client as client_module
+from dgfl.versioning import PROTOCOL_VERSION
 
 
 @pytest.fixture
@@ -317,7 +318,8 @@ def test_small_rpc_request_encodes_payload_once_and_retries_exact_same_frame(ide
     assert client.call('authority1', 'authorize', payload, retries=1) == {'accepted': True}
     assert count == [1]
     assert client.client.frames[0] == client.client.frames[1]
-    assert client.client.opened[0]['payload'] == {'action': 'authorize', 'payload': payload}
+    assert client.client.opened[0]['payload'] == {'action': 'authorize', 'payload': payload,
+                                                  'protocol_version': PROTOCOL_VERSION}
     assert not list(client.spool_dir.iterdir())
 
 

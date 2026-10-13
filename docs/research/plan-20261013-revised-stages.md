@@ -44,6 +44,31 @@
 
 ## A. 版本基线、材料分级、导出隔离
 
+**实施状态（2026-10-13）**
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| `protocol_version` 只进 RPC 消息与 `health`，不进 `ctx` | 已完成 | `src/dgfl/versioning.py`、`transport/client.py`、`services/node.py` |
+| 训练前版本核对，混用报明确错误 | 已完成 | `experiments/runner.py:require_participant_versions` |
+| 版本编号统一（记录/检查点/身份登记/筛选） | 已完成 | `versioning.version_declaration()` |
+| 历史记录走显式解析分支 | 已完成 | `verification_materials.is_legacy_combined` / `split_legacy_combined` / `accepts_record` |
+| 材料分成可分享层与受限层 | 已完成 | `build` / `build_restricted`（`verification_materials.py`） |
+| 受限材料独立开关、独立目录、属主权限 | 已完成 | `RESTRICTED_ENVIRONMENT_FLAG`、`write_restricted`、`roles._write_restricted_material` |
+| 导出白名单 | 已完成 | `control.export_view` 与三张字段表 |
+| CLI 分开"证明复核"与"授权内积复核" | 已完成 | `verify-proof`、`verify-authorization`、`--restricted-dir` |
+| 无函数钥时显示"内积未复核"，不计为通过 | 已完成 | `authorization_not_verified` |
+| 材料真实性核对（不止文件摘要） | 已完成 | `src/dgfl/material_authenticity.py`、`verify-material-origin` |
+
+**版本字段的落点（`src/dgfl/versioning.py`）**：`PROTOCOL_VERSION`（RPC 消息与 `health` 声明）、`RECORD_SCHEMA_VERSION`、`CHECKPOINT_SCHEMA_VERSION`、`IDENTITY_REGISTRY_VERSION`、`SCREENING_VERSION`。检查点格式不使用独立版本号，改用检查点自摘要——摘要覆盖格式与内容，严格强于版本号，少一个需要同步维护的字段。
+
+**版本核对的两档语义**：声明了但本实现无法解释的版本**一律拒绝**；**未声明**版本只记录并报告（`evidence.protocol_version_undeclared`），仅在 `strict` 下拒绝。二者是不同的事实：前者是已知不兼容，后者无法与"早于该字段的构建"区分。本项目的角色服务始终声明版本，因此真实部署总是被完整核对；`strict` 供已升级全部机器的运维者启用更强规则。
+
+**材料分级**：`build()` 只产出可分享的证明材料（密文、证明、注册密钥行、参考与上下文）；`build_restricted()` 只产出验证函数钥，并用 `proof_material_digest` 绑定到对应的证明材料，因此离线核对不会把两轮的半份材料拼在一起。受限材料写入 `nodes/<id>/restricted-materials/`（与实验记录不在同一棵树），默认不落盘，启用时以属主权限创建后再写入字节。
+
+**真实性核对的内容**：受信身份登记（`runtime/keys/registry.json`，不采信材料自带的身份声明）、实验上下文与拓扑（读者固定值）、参考模型与上下文摘要的绑定、材料轮次与上下文轮次、证明方案、注册密钥行的群元素合法性、客户端标识与所在条目一致、DKG 转录摘要（读者提供时精确比对）。**无法执行的检查记录为"未核对"，绝不计为通过。**
+
+**尚未完成（本阶段后续）**：受限材料在 Windows/Linux 上的平台权限检查（当前用创建时 mode，Windows 上仅为建议值）；离线核对对客户端签名的直接验证（材料层目前不含客户端签名，绑定由注册密钥行与证明联动承担，需在第 9 阶段随完整证明关系规格一并设计）。
+
 1. **版本字段**：`protocol_version`（信封头/握手）、`record_schema_version`（统一现有散落值：`verification_materials.SCHEMA_VERSION`、`protocol_evidence.schema_version`、`telemetry`）、`screening_version`、`identity_registry_version`。检查点格式用**检查点自摘要**替代独立版本号（摘要覆盖格式与内容，严格强于版本号）。
 2. **老记录解析分支**：缺字段时走明确的历史分支；新任务要求所有参与节点支持所需版本。版本协商复用既有 `health` 能力集（`runner.py:493-494`、`control.py:433`）与 `require_client_training_backend`（`runner.py:217`）的预检位置，不新增独立协商协议。
 3. **材料分级**：`verification_materials.build` 现在把 `validation_keys`（函数钥）与公开材料写进同一文档（`verification_materials.py:102-111`），而模块 docstring 自称全部公开（`:11-18`），二者矛盾。拆成：

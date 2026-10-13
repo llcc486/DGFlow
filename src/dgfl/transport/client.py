@@ -54,7 +54,12 @@ class RPCClient:
 
     def call(self,node,action,payload=None,*,retries=1,timeout=None):
         """Send one logical request, splitting it when it exceeds one RPC body."""
+        from dgfl.versioning import PROTOCOL_VERSION
         message={'action':action,'payload':payload or {}}
+        # The protocol version travels with the request, never inside the round
+        # context: `ctx` is digested into every proof challenge and evidence row,
+        # so a version field there would change historical hashes.
+        message['protocol_version']=PROTOCOL_VERSION
         with EncodedMessage(message,directory=getattr(self,'spool_dir',None),
                             memory_limit=SEND_THRESHOLD) as body:
             if body.size<=SEND_THRESHOLD:
