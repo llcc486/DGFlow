@@ -57,7 +57,10 @@ export const RUN_STATUS = {
   running: '正在运行',
   completed: '已完成',
   aborted: '已中止',
+  stopped: '已按请求停止',
   failed: '执行失败',
+  // "Stopping" is a request that has been recorded, not an outcome: the computation
+  // ends at the next safe point and the status becomes `stopped` there.
   stopping: '正在停止',
 }
 

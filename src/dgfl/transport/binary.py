@@ -366,6 +366,16 @@ def unpackb(data: bytes):
 
 
 class _StreamReader:
+    """Decoder over a stream.
+
+    Each value is requested in one call. A varint is decoded byte by byte, which looks
+    like an obvious cost to remove, and a read-ahead window was measured as a 2.6x
+    *regression* at transcript sizes (see ``scripts/benchmark_codec_timing.py``): the
+    window bookkeeping cost more per value than the reads it saved, and the large
+    byte-string values that dominate a real transcript were already served by a single
+    read. The measurement is kept so the same reasoning is not tried again without one.
+    """
+
     def __init__(self, stream):
         self.stream = stream
 

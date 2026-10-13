@@ -243,6 +243,14 @@ class Registry:
             raise ValueError('Lego prover workers must be between 1 and 4')
         start = time.perf_counter()
         folder, manifest, vk = self._material(crs_hash, dimension, bits)
+        # The proving key is read and digested on every call, including a cached one.
+        # That is deliberate, not an oversight: `test_changed_file_rejected_even_after_cached_load`
+        # pins it. Serving the cached prover without re-reading would mean a rewritten
+        # `pk.bin` is only noticed on the next uncached load, so a tampered installation
+        # could keep proving for an unbounded number of rounds. The cost was measured
+        # before changing it (see `scripts/benchmark_codec_timing.py`) and is a few
+        # milliseconds against a proof that takes hundreds, which is not worth a
+        # weaker guarantee.
         params = public_parameters({'manifest': manifest, 'verifying_key': vk})
         raw = self._read(folder, 'pk.bin', manifest['pk_bytes'])
         if hashlib.sha256(raw).hexdigest() != manifest['pk_sha256']:

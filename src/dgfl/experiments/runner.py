@@ -29,7 +29,7 @@ from dgfl.crypto import protocol as p
 from dgfl.deployment import cluster_topology
 from dgfl.experiments.attack_metrics import participation_metrics
 from dgfl.experiments.monitoring import RunNodeMonitor, clean_event, frozen_nodes, monitor_snapshot
-from dgfl.experiments.resources import check_wire_resources, model_configuration
+from dgfl.experiments.resources import check_wire_resources, model_configuration, resource_layers
 from dgfl.experiments.telemetry import LocalProcessMonitor
 from dgfl.experiments.tensorboard import TensorBoardLogs
 from dgfl.services.roles import (
@@ -378,6 +378,19 @@ class RunManager:
     def __init__(self,runtime):
         self.runtime=Path(runtime).resolve(); self.runtime.mkdir(parents=True,exist_ok=True)
         self.lock=threading.RLock(); self.active=None; self.stop_event=threading.Event(); self.records={}
+        # Stop bookkeeping: when the request arrived, which stage honoured it, and
+        # which stage the run is in now. Kept separately from the event so the
+        # difference between "stop requested" and "computation stopped" is reportable.
+        self.stop_requested_at=None
+        self.stop_requested_stage=None
+        self.stop_honoured_stage=None
+        self.current_stage=None
+        # Persistence cost, accumulated over the run: how many whole-document writes
+        # happened and how long they took. A round's stage times do not include this,
+        # because saves happen inside the stages that trigger them.
+        self.save_count=0
+        self.save_seconds=0.0
+        self.save_last_seconds=0.0
         self.last_nodes=[]
         self._monitors={}
         self._node_monitors={}
@@ -460,7 +473,16 @@ class RunManager:
                 if measured:
                     row['monitoring_overhead']=dict(measured)
                     row['metrics_eval_s']=measured.get('metrics_eval_s')
+        # Every save rewrites the whole result document, and the document grows as
+        # rounds complete, so the cost per save rises over a run. The count and total
+        # are recorded so the round's persistence overhead is a measurement in the
+        # result rather than something a reader has to infer from the round duration.
+        started=time.perf_counter()
         atomic_json(self.runtime/'results'/record['run_id']/'result.json',record)
+        elapsed=time.perf_counter()-started
+        self.save_count+=1
+        self.save_seconds+=elapsed
+        self.save_last_seconds=elapsed
 
     def _failure_detail(self,exc):
         return f'{type(exc).__name__}: {exc}'.replace(str(self.runtime.parent),'[workspace]')[:600]
@@ -696,6 +718,12 @@ class RunManager:
             except Exception as exc:
                 raise ValueError('任务初始记录无法保存，任务未启动：'+self._failure_detail(exc)) from exc
             self.records[run_id]=record; self.active=run_id; self.stop_event.clear()
+            # The stop bookkeeping belongs to the run, not to the manager: a previous
+            # run's request must not be able to end this one.
+            self.stop_requested_at=None
+            self.stop_requested_stage=None
+            self.stop_honoured_stage=None
+            self.current_stage=None
             try:
                 threading.Thread(target=self._run,args=(record,),daemon=True,name='dgflow-experiment').start()
             except Exception as exc:
@@ -816,13 +844,48 @@ class RunManager:
                 'key_epoch_rotation_required':True}
 
     def stop(self,run_id):
+        """Record that a stop was requested.
+
+        "Requested" is not "stopped". The request is checked at safe points, so the
+        computation continues until the next one; reporting the terminal status here
+        would tell an operator the round had ended while it was still running. The
+        request time is kept so the wait can be measured and published.
+        """
         with self.lock:
-            if self.active!=run_id: raise ValueError('该任务未在运行')
-            self.stop_event.set(); self.records[run_id]['status']='stopping'; self._save(self.records[run_id])
-        return {'status':'stopping'}
+            if self.active!=run_id:
+                existing=self.records.get(run_id)
+                if existing is not None and existing.get('status') in ('stopped','aborted','failed','completed'):
+                    # Repeating a stop for a run that already ended is not an error:
+                    # the request did what it asked for.
+                    return {'status':existing['status'],'already_finished':True}
+                raise ValueError('该任务未在运行')
+            if not self.stop_event.is_set():
+                self.stop_requested_at=time.time()
+                self.stop_requested_stage=None
+                self.stop_event.set()
+            self.records[run_id]['status']='stopping'
+            self._save(self.records[run_id])
+        return {'status':'stopping','requested_at':self.stop_requested_at,
+                'note':'已记录停止请求；计算将在下一个安全点结束'}
+
+    @property
+    def stop_latency_s(self):
+        """Seconds from the stop request to the computation actually ending."""
+        return None if self.stop_requested_at is None else time.time()-self.stop_requested_at
+
+    def _begin_stage(self,name):
+        """Name the stage a stop request would interrupt, for the record."""
+        self.current_stage=name
 
     def _check_stop(self):
-        if self.stop_event.is_set(): raise InterruptedError('用户停止任务；已完成的密码调用会安全结束')
+        if self.stop_event.is_set():
+            # The stage is recorded where the request is honoured, not where it was
+            # made: an operator asking "how long did that take, and what was it doing"
+            # needs the point of interruption.
+            self.stop_honoured_stage=self.current_stage
+            raise InterruptedError(
+                f'用户停止任务；在第 {self.current_stage or "未标明"} 阶段的安全点结束，'
+                '已完成的密码调用会安全结束')
 
     def _run(self,record):
         rpc=None; executor=None; start=time.perf_counter(); cpu_start=time.process_time(); cfg=record['config']
@@ -881,6 +944,11 @@ class RunManager:
             requested_strategy=cloud_strategy_settings(cfg)
             cfg['cloud_strategy']=requested_strategy
             record['evidence']['wire_resources']=check_wire_resources(cfg)
+            # The per-machine host budget and the runtime controls are recorded beside
+            # the wire limit, each labelled with its own layer. The wire layer answers
+            # "will this message fit"; it never answered "will this machine survive the
+            # round", and the record previously showed only the first.
+            record['evidence']['resource_layers']=resource_layers(cfg)
             record['evidence']['cloud_strategy']={'requested':requested_strategy,'resolved':None}
             topology={name:cfg[name] for name in TOPOLOGY_FIELDS}
             authorities=[f'authority{i}' for i in range(1,cfg['authority_count']+1)]
@@ -1110,6 +1178,7 @@ class RunManager:
                                  f'继续第 {start_round} 轮；新密钥周期',start_round)
                 self._save(record)
             for round_id in range(start_round,cfg['rounds']+1):
+                self._begin_stage('round_start')
                 self._check_stop(); record['current_round']=round_id; round_start=time.perf_counter(); round_cpu_start=time.process_time(); bytes_before=rpc.bytes_sent
                 record['current_validations']=[]; record['current_validations_round']=round_id
                 record['current_cloud_selection']=None
@@ -1145,6 +1214,10 @@ class RunManager:
                 def evidence_checkpoint(stage, **updates):
                     protocol_evidence.update(updates,active_stage=stage)
                     protocol_evidence['updated_at']=datetime.now(UTC).isoformat()
+                    # Also name the stage for the stop path: a stop request honoured
+                    # while this stage runs is reported against it, so "how long did
+                    # the stop take, and what was it doing" has an answer.
+                    self._begin_stage(stage)
                     with self.lock:
                         record['current_protocol_evidence']=deepcopy(protocol_evidence)
                         self._save(record)
@@ -1191,6 +1264,7 @@ class RunManager:
                 dropped=attack_ids if cfg['attack']=='dropout' else set()
                 participants=[c for c in active_clients if c not in dropped]
                 t=time.perf_counter(); event('training','客户端本地训练、量化；安全模式生成密文与范围/范数证明',round_id)
+                self._begin_stage('training')
                 jobs=[]
                 for cid in participants:
                     args={'context':ctx,'reference':reference,'mode':cfg['mode'],'local_epochs':cfg['local_epochs'],
@@ -1208,6 +1282,7 @@ class RunManager:
                 times['training_wall_sum_s']=sum(v['training_s'] for v in results)
                 times['encryption_wall_sum_s']=sum(v['encrypt_s'] for v in results)
                 times['proof_wall_sum_s']=sum(v['proof_s'] for v in results)
+                self._begin_stage('proof_verification')
                 self._check_stop()
                 protocol_evidence['context']['dkg_transcript_hash']=dkg_transcript_hash
                 evidence_checkpoint('submission',submission={
@@ -1333,6 +1408,7 @@ class RunManager:
                     if len(active_clouds)<cfg['aggregator_threshold']:
                         raise ValueError(f"聚合节点不足 {cfg['aggregator_threshold']}/{cfg['aggregator_count']} 门限，未发布新模型")
                     t=time.perf_counter(); event('aggregation',f"{len(approved)} 个客户端获准；等待至少 {cfg['aggregator_threshold']} 份聚合结果",round_id)
+                    self._begin_stage('threshold_aggregation')
                     packets={cid:submission_core(packets[cid]) for cid in approved}
                     times['aggregate_key_s']=0.; times['partial_decryption_s']=0.
                     cloud_selection={'requested_strategy':requested_strategy}
@@ -1411,6 +1487,7 @@ class RunManager:
                         # A bad selected cloud must fail full local math before
                         # any stateful finish is dispatched. Each edge then still
                         # performs its own unchanged independent full combine.
+                        self._begin_stage('confirmation')
                         self._check_stop()
                         total=coordinator_combine()
                         confirmations=many(finish_jobs)
@@ -1542,7 +1619,16 @@ class RunManager:
                 event('completed_round',f'第 {round_id} 轮完成，测试准确率 {metrics["accuracy"]:.2%}',round_id)
                 self._sync_tensorboard(record)
         except InterruptedError as exc:
-            outcome='aborted'; failure=str(exc)
+            # A stop request and a stopped computation are two different facts, and
+            # both are recorded: when the request arrived, which stage honoured it,
+            # and how long the run continued after the request.
+            outcome='stopped'; failure=str(exc)
+            record['stop']={'requested':self.stop_requested_at is not None,
+                            'requested_at':self.stop_requested_at,
+                            'requested_stage':self.stop_requested_stage,
+                            'honoured_stage':self.stop_honoured_stage,
+                            'latency_s':self.stop_latency_s,
+                            'rounds_completed':len(record['rounds'])}
         except Exception as exc:
             outcome='aborted' if isinstance(exc,ValueError) else 'failed'
             failure=str(exc).replace(str(self.runtime.parent),'[workspace]')[:600]
@@ -1599,7 +1685,14 @@ class RunManager:
                 record['status']=outcome; record['error']=failure
                 record['summary']={'accuracy':record['rounds'][-1]['accuracy'] if record['rounds'] else None,
                                    'elapsed_s':elapsed,'controller_cpu_s':time.process_time()-cpu_start,
-                                   'bytes_sent':rpc.bytes_sent if rpc else 0,'completed_rounds':len(record['rounds'])}
+                                   'bytes_sent':rpc.bytes_sent if rpc else 0,'completed_rounds':len(record['rounds']),
+                                   # Persistence overhead: the whole result document is
+                                   # rewritten on every save, so this is a real fraction
+                                   # of a long run and is reported rather than hidden
+                                   # inside the round durations.
+                                   'persistence':{'saves':self.save_count,
+                                                  'total_s':self.save_seconds,
+                                                  'last_s':self.save_last_seconds}}
                 if record['rounds']:
                     last=record['rounds'][-1]
                     for field in ('loss','attack_success_rate','attack_success_count','attack_success_denominator',

@@ -86,6 +86,11 @@ def check_wire_resources(config):
     A partial config checks whichever messages have all required inputs. The
     confirmation bound uses the minimum successful cloud count (epsilon), not
     the configured/online cloud count: fewer returned clouds can still succeed.
+
+    This is layer 1 of 3. It bounds a *single logical message* by the transport's
+    hard limit; it says nothing about how much memory one machine needs, and it must
+    not be read as a host requirement. Layers 2 and 3 are :func:`host_budget` and
+    :func:`runtime_budget`.
     """
     if not isinstance(config, Mapping):
         raise ValueError('resource preflight requires a configuration mapping')
@@ -107,7 +112,8 @@ def check_wire_resources(config):
     mode = config.get('mode')
     if mode is not None and (type(mode) is not str or mode not in _MODES):
         raise ValueError('invalid resource preflight mode')
-    result = {'scope': 'lower-bound', 'limit_bytes': MAX_TOTAL_BYTES, 'checks': []}
+    result = {'scope': 'lower-bound', 'layer': 'protocol_message_limit',
+              'limit_bytes': MAX_TOTAL_BYTES, 'checks': []}
     dimension = descriptor['dimension'] if descriptor is not None else None
     if descriptor is not None: result['model_dimension']=dimension
     if dimension is None and 'grid' in values:
@@ -160,3 +166,178 @@ def check_wire_resources(config):
                   f'最少 {epsilon} 份云结果的聚合确认消息',
                   '边缘数量、云门限或模型网格')
     return result
+
+
+#: Per-role concurrent remote work. A machine that runs several roles must budget
+#: for all of them, so these are per role and are summed by :func:`host_budget`.
+ROLE_WORKERS = {'client': 'train_workers', 'aggregator': 'partial_workers',
+                'authority': 'verification_workers'}
+
+
+def host_budget(config, *, machine=None, available_bytes=None):
+    """Layer 2: what one machine must be able to hold at once.
+
+    The protocol limit answers "will this message fit on the wire". It does not
+    answer "will this machine survive the round", and the two were previously the
+    same number. A machine can pass the wire check and still be asked to hold several
+    messages at once, because it runs several roles and each role has its own
+    worker pool.
+
+    The estimate counts, per role on this machine, the number of concurrent workers
+    times the largest message that role must hold, and sums them. It counts only
+    fixed-width cryptographic values and coordinate row headers, so it is a lower
+    bound and passing it is not a guarantee.
+
+    `available_bytes` is the memory the caller measured. When it is supplied and the
+    estimate exceeds it, the configuration is refused here rather than at the point
+    where the process is killed.
+    """
+    if not isinstance(config, Mapping):
+        raise ValueError('host budget requires a configuration mapping')
+    descriptor = model_configuration(config)
+    mode = config.get('mode')
+    if mode is not None and (type(mode) is not str or mode not in _MODES):
+        raise ValueError('invalid host budget mode')
+    dimension = descriptor['dimension'] if descriptor is not None else config.get('dimension')
+    dataset = config.get('dataset', 'mnist')
+    if descriptor is None and dimension is None and 'grid' in config:
+        dimension = 10*(feature_count(dataset, config['grid'])+1)
+    nodes = config.get('nodes')
+    present = _roles_on_machine(config, machine)
+    result = {'layer': 'per_machine_host_budget', 'scope': 'lower-bound', 'machine': machine,
+              'roles': {}, 'total_bytes': 0, 'available_bytes': available_bytes,
+              'fits': None, 'notes': []}
+    if dimension is None:
+        result['notes'].append('缺少模型维度，无法估算本机预算')
+        return result
+    if not nodes:
+        result['notes'].append('未提供集群布局，按全部角色估算并计入并发度上限')
+    for role in ('client', 'aggregator', 'authority'):
+        if present is not None and role not in present:
+            # This machine does not hold this role, so it does not budget for it.
+            continue
+        count = (sum(1 for name in nodes if _role_of(name) == role) if nodes
+                 else _declared_count(config, role))
+        workers = _workers_for(config, role)
+        per_role = count*workers*_fits_bytes(mode, role, dimension, config)
+        result['roles'][role] = {'nodes': count, 'workers_per_node': workers,
+                                 'bytes': per_role}
+        result['total_bytes'] += per_role
+    if available_bytes is not None:
+        if type(available_bytes) is not int or available_bytes <= 0:
+            raise ValueError('available_bytes must be a positive integer')
+        result['fits'] = result['total_bytes'] <= available_bytes
+        if not result['fits']:
+            raise ValueError(
+                f'本机资源预算不足：至少需要 {result["total_bytes"]/2**20:,.1f} MiB，'
+                f'可用 {available_bytes/2**20:,.1f} MiB；请减少本机角色、'
+                '并发工作进程数或模型网格。这是编码下限，实际占用更高。')
+    return result
+
+
+def _roles_on_machine(config, machine):
+    nodes = config.get('nodes')
+    if not isinstance(nodes, Mapping) or machine is None:
+        return None
+    return sorted({_role_of(name) for name, item in nodes.items()
+                   if isinstance(item, Mapping) and item.get('machine') == machine})
+
+
+def _role_of(name):
+    if not isinstance(name, str):
+        return None
+    for role in ('client', 'aggregator', 'authority'):
+        if name.startswith(role):
+            return role
+    return None
+
+
+def _declared_count(config, role):
+    declared = config.get(f'{role}_count')
+    if declared is not None:
+        return declared
+    # The topology ceiling, so an estimate with no layout errs towards refusing
+    # rather than towards promising a machine can hold what it cannot.
+    from dgfl.topology import MAX_AGGREGATOR_COUNT, MAX_AUTHORITY_COUNT, MAX_CLIENT_COUNT
+    return {'client': MAX_CLIENT_COUNT, 'aggregator': MAX_AGGREGATOR_COUNT,
+            'authority': MAX_AUTHORITY_COUNT}[role]
+
+
+def _workers_for(config, role):
+    """Concurrent remote jobs one node of this role accepts.
+
+    The runner issues one logical request per client per round, so a client's
+    concurrency is bounded by the request pool, not by a role-specific pool. This is
+    the number the coordinator will actually have outstanding against that node.
+    """
+    declared = config.get(ROLE_WORKERS[role])
+    if declared is None:
+        declared = config.get('rpc_workers', 1)
+    if type(declared) is not int or not 1 <= declared <= 1024:
+        raise ValueError(f'invalid worker count for role {role}')
+    return declared
+
+
+def _fits_bytes(mode, role, dimension, config):
+    """Lower bound on one held message for this role on this machine.
+
+    Plain runs hold only the quantized model. Encrypted runs hold ciphertexts plus
+    the proof material, which dominates; the constants match the wire preflight so
+    the two layers cannot disagree about what a message contains.
+    """
+    if mode is None or mode == 'plain':
+        # One int64 per coordinate, plus the quantized reference held beside it.
+        return 16*dimension
+    values = {}
+    for name in ('client_count', 'authority_count', 'aggregator_count',
+                 'authority_threshold', 'aggregator_threshold'):
+        if type(config.get(name)) is int:
+            values[name] = config[name]
+    w = values.get('authority_count', 1)
+    epsilon = values.get('aggregator_threshold', 1)
+    if role == 'client':
+        # A submission carries its ciphertext and its proof for every recipient
+        # authority, which is the same expression the wire preflight bounds.
+        return dimension*(50*w + 1158)
+    if role == 'aggregator':
+        return epsilon*dimension*(w*(50*epsilon+1280)+1158)
+    # An authority holds the transcript and every client's proof material.
+    n = values.get('client_count', 1)
+    return w*n*dimension*(50*max(epsilon, 1)+2)
+
+
+def runtime_budget(config, *, host=None):
+    """Layer 3: controls that bound how much work is in flight at once.
+
+    Layers 1 and 2 are static. This one bounds the run: how many remote jobs the
+    coordinator keeps outstanding, how many threads each role may use, and which
+    per-machine caps the host imposed. It reports the effective values rather than
+    reading them, so the deployment record can show what was actually applied.
+    """
+    if not isinstance(config, Mapping):
+        raise ValueError('runtime budget requires a configuration mapping')
+    jobs = config.get('rpc_workers', 1)
+    if type(jobs) is not int or not 1 <= jobs <= 1024:
+        raise ValueError('invalid concurrent remote job budget')
+    per_machine = {}
+    nodes = config.get('nodes')
+    if isinstance(nodes, Mapping):
+        for name, item in nodes.items():
+            if isinstance(item, Mapping) and 'machine' in item:
+                per_machine.setdefault(item['machine'], []).append(name)
+    return {'layer': 'runtime_controls',
+            'max_concurrent_remote_jobs': jobs,
+            'verification_workers': config.get('verification_workers'),
+            'verification_threads': config.get('verification_threads'),
+            'host_limits': dict(host or {}),
+            'nodes_per_machine': {machine: sorted(names)
+                                  for machine, names in sorted(per_machine.items())},
+            'notes': ['并发上限按进程生效；同一台机器上的多个角色各自受限']}
+
+
+def resource_layers(config, *, machine=None, available_bytes=None, host=None):
+    """All three layers in one report, each labelled with what it does not claim."""
+    return {'protocol_message_limit': check_wire_resources(config),
+            'host_budget': host_budget(config, machine=machine,
+                                       available_bytes=available_bytes),
+            'runtime_controls': runtime_budget(config, host=host)}

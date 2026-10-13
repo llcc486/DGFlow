@@ -1,0 +1,91 @@
+{
+  "implementation": "CPython",
+  "kind": "canonical-codec-timing",
+  "machine": "DESKTOP-GT1VP52",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "python": "3.12.2",
+  "rejected_changes": [
+    {
+      "measured": "decode of a 64-authority transcript: 0.4521 ms -> 1.1835 ms",
+      "reason_expected": "a varint is at most ten bytes, so a three-byte varint reads three times",
+      "verdict": "rejected; reverted",
+      "what": "_StreamReader: a bounded read-ahead window so a varint costs one stream.read instead of one per byte",
+      "why": "window bookkeeping cost more per value than the reads it saved, and the large byte-string values that dominate a transcript were already served by a single read"
+    }
+  ],
+  "results": [
+    {
+      "encoded_bytes": 1333,
+      "entries": 3,
+      "operations": {
+        "decode_transcript": {
+          "max_s": 4.859996261075139e-05,
+          "median_s": 2.5500019546598196e-05,
+          "min_s": 2.47000134550035e-05,
+          "repeats": 25
+        },
+        "encode_transcript": {
+          "max_s": 3.579998156055808e-05,
+          "median_s": 2.5099958293139935e-05,
+          "min_s": 2.4499953724443913e-05,
+          "repeats": 25
+        },
+        "packb_snapshot_then_reencode": {
+          "max_s": 8.9599983766675e-05,
+          "median_s": 2.6399968191981316e-05,
+          "min_s": 2.5900022592395544e-05,
+          "repeats": 25
+        }
+      }
+    },
+    {
+      "encoded_bytes": 6681,
+      "entries": 16,
+      "operations": {
+        "decode_transcript": {
+          "max_s": 0.00102680001873523,
+          "median_s": 0.00011729996185749769,
+          "min_s": 0.00011580000864341855,
+          "repeats": 25
+        },
+        "encode_transcript": {
+          "max_s": 0.0023031000164337456,
+          "median_s": 0.00014129996998235583,
+          "min_s": 0.00010699999984353781,
+          "repeats": 25
+        },
+        "packb_snapshot_then_reencode": {
+          "max_s": 0.0001210999907925725,
+          "median_s": 0.0001105000264942646,
+          "min_s": 0.00010979996295645833,
+          "repeats": 25
+        }
+      }
+    },
+    {
+      "encoded_bytes": 26505,
+      "entries": 64,
+      "operations": {
+        "decode_transcript": {
+          "max_s": 0.0006036999984644353,
+          "median_s": 0.0004531000158749521,
+          "min_s": 0.00044600002001971006,
+          "repeats": 25
+        },
+        "encode_transcript": {
+          "max_s": 0.0025399000151082873,
+          "median_s": 0.0004095000331290066,
+          "min_s": 0.00040469999657943845,
+          "repeats": 25
+        },
+        "packb_snapshot_then_reencode": {
+          "max_s": 0.000750300008803606,
+          "median_s": 0.0004240999696776271,
+          "min_s": 0.000414299953263253,
+          "repeats": 25
+        }
+      }
+    }
+  ],
+  "scope": "Single-process in-memory timings of the canonical codec. No network, disk or cryptographic work; not a protocol benchmark."
+}
