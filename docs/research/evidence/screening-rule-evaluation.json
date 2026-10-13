@@ -1,0 +1,237 @@
+{
+  "kind": "screening-rule-candidate-evaluation",
+  "not_a_calibration": true,
+  "rules": [
+    "legacy_v1",
+    "gap_only_v1",
+    "size_dispersion_v1"
+  ],
+  "scenarios": {
+    "attacked_loose_minority": {
+      "disagreement": {
+        "gap_only_v1": 0.0,
+        "size_dispersion_v1": -0.921875
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.800091245513882,
+          "rejection_rate": 1.0
+        },
+        "legacy_v1": {
+          "mean_separation": 0.800091245513882,
+          "rejection_rate": 1.0
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.800091245513882,
+          "rejection_rate": 0.078125
+        }
+      },
+      "shape": {
+        "high_center": 0.9,
+        "high_size": 4,
+        "high_spread": 0.01,
+        "low_center": 0.1,
+        "low_size": 2,
+        "low_spread": 0.09
+      }
+    },
+    "attacked_minority_clear": {
+      "disagreement": {
+        "gap_only_v1": 0.0,
+        "size_dispersion_v1": -0.046875
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.8503691980475562,
+          "rejection_rate": 1.0
+        },
+        "legacy_v1": {
+          "mean_separation": 0.8503691980475562,
+          "rejection_rate": 1.0
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.8503691980475562,
+          "rejection_rate": 0.953125
+        }
+      },
+      "shape": {
+        "high_center": 0.9,
+        "high_size": 4,
+        "high_spread": 0.02,
+        "low_center": 0.05,
+        "low_size": 2,
+        "low_spread": 0.01
+      }
+    },
+    "attacked_minority_marginal": {
+      "disagreement": {
+        "gap_only_v1": 0.0,
+        "size_dispersion_v1": -1.0
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.7000611546894551,
+          "rejection_rate": 1.0
+        },
+        "legacy_v1": {
+          "mean_separation": 0.7000611546894551,
+          "rejection_rate": 1.0
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.7000611546894551,
+          "rejection_rate": 0.0
+        }
+      },
+      "shape": {
+        "high_center": 0.9,
+        "high_size": 3,
+        "high_spread": 0.02,
+        "low_center": 0.2,
+        "low_size": 3,
+        "low_spread": 0.01
+      }
+    },
+    "barely_separated": {
+      "disagreement": {
+        "gap_only_v1": 0.0,
+        "size_dispersion_v1": -0.046875
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.4506196625915254,
+          "rejection_rate": 0.578125
+        },
+        "legacy_v1": {
+          "mean_separation": 0.4506196625915254,
+          "rejection_rate": 0.578125
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.4506196625915254,
+          "rejection_rate": 0.53125
+        }
+      },
+      "shape": {
+        "high_center": 0.5,
+        "high_size": 4,
+        "high_spread": 0.02,
+        "low_center": 0.05,
+        "low_size": 2,
+        "low_spread": 0.01
+      }
+    },
+    "equal_groups": {
+      "disagreement": {
+        "gap_only_v1": 0.0,
+        "size_dispersion_v1": -1.0
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.8500611546894551,
+          "rejection_rate": 1.0
+        },
+        "legacy_v1": {
+          "mean_separation": 0.8500611546894551,
+          "rejection_rate": 1.0
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.8500611546894551,
+          "rejection_rate": 0.0
+        }
+      },
+      "shape": {
+        "high_center": 0.9,
+        "high_size": 3,
+        "high_spread": 0.02,
+        "low_center": 0.05,
+        "low_size": 3,
+        "low_spread": 0.01
+      }
+    },
+    "honest_non_iid_majority": {
+      "disagreement": {
+        "gap_only_v1": 0.0,
+        "size_dispersion_v1": -1.0
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.7999775604361111,
+          "rejection_rate": 1.0
+        },
+        "legacy_v1": {
+          "mean_separation": 0.7999775604361111,
+          "rejection_rate": 1.0
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.7999775604361111,
+          "rejection_rate": 0.0
+        }
+      },
+      "shape": {
+        "high_center": 0.9,
+        "high_size": 2,
+        "high_spread": 0.01,
+        "low_center": 0.1,
+        "low_size": 4,
+        "low_spread": 0.02
+      }
+    },
+    "honest_non_iid_minority": {
+      "disagreement": {
+        "gap_only_v1": 1.0,
+        "size_dispersion_v1": 0.0
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.6000611546894551,
+          "rejection_rate": 1.0
+        },
+        "legacy_v1": {
+          "mean_separation": 0.6000611546894551,
+          "rejection_rate": 0.0
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.6000611546894551,
+          "rejection_rate": 0.0
+        }
+      },
+      "shape": {
+        "high_center": 0.9,
+        "high_size": 3,
+        "high_spread": 0.02,
+        "low_center": 0.3,
+        "low_size": 3,
+        "low_spread": 0.01
+      }
+    },
+    "honest_tight_low_minority": {
+      "disagreement": {
+        "gap_only_v1": 0.0,
+        "size_dispersion_v1": 0.0
+      },
+      "rules": {
+        "gap_only_v1": {
+          "mean_separation": 0.7509449606506308,
+          "rejection_rate": 1.0
+        },
+        "legacy_v1": {
+          "mean_separation": 0.7509449606506308,
+          "rejection_rate": 1.0
+        },
+        "size_dispersion_v1": {
+          "mean_separation": 0.7509449606506308,
+          "rejection_rate": 1.0
+        }
+      },
+      "shape": {
+        "high_center": 0.9,
+        "high_size": 4,
+        "high_spread": 0.05,
+        "low_center": 0.15,
+        "low_size": 2,
+        "low_spread": 0.005
+      }
+    }
+  },
+  "scope": "Synthetic score sets only. No training data, no attack model and no calibration/validation seed split. Not defence evidence.",
+  "seeds_per_scenario": 64
+}

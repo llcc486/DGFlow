@@ -70,11 +70,15 @@ EXPORT_ROUND_FIELDS = (
     'attacker_acceptance_rate', 'honest_exclusion_rate', 'metrics_eval_s',
     'monitoring_overhead', 'client_training_metrics', 'cloud_selection',
     'proof_verification_metrics', 'proof_generation_metrics', 'combine_metrics',
+    # The screening decision record: centres, sizes, dispersions, separation and the
+    # thresholds applied. Public observations about the rule, not secret material.
+    'screening_decision', 'screening_counts',
 )
 #: Per-client validation fields a downloadable record may carry.
 EXPORT_VALIDATION_FIELDS = (
     'client_id', 'proof_valid', 'score', 'decision', 'reason', 'rejection_reason',
     'proof_suite', 'proof_crs_hash', 'norm_squared', 'proof_hash', 'packet_hash',
+    'exit_stage',
 )
 
 
@@ -235,6 +239,19 @@ class ArchivedRunConfig(BaseModel):
     batch_strategy:Literal['fixed','regroup']='regroup'
     # Privacy-group size, independent of local SGD's mini-batch size.
     batch_size:int=Field(2,ge=2,le=100,strict=True)
+    # Screening rule and its clustering parameters.
+    #
+    # These decide which clients an honest round drops, and they used to be
+    # constants inside the rule, which meant the signed authorization manifest did
+    # not cover them: replacing the whole rule while leaving the five thresholds
+    # above unchanged produced an identical manifest hash. Declaring them here puts
+    # them into the manifest, so a change to the decision procedure is a change to
+    # the signed policy.
+    screening_rule:Literal['legacy_v1']='legacy_v1'
+    cluster_center_gap:float=Field(0.45,gt=0,le=2,allow_inf_nan=False,strict=True)
+    cluster_low_center_max:float=Field(0.25,ge=-1,le=1,allow_inf_nan=False,strict=True)
+    cluster_iterations:int=Field(32,ge=1,le=4096,strict=True)
+    cluster_tolerance:float=Field(1e-12,gt=0,le=1e-3,allow_inf_nan=False,strict=True)
 
     @model_validator(mode='after')
     def crs_matches_suite(self):

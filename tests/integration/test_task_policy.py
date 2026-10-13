@@ -239,7 +239,18 @@ def test_all_authorities_reject_proven_amplitude_attack_and_keep_honest_partner(
     assert decisions[0]==decisions[1]==decisions[2]
     decision=decisions[0]
     assert decision['approved']==['client1','client2','client3']
-    assert decision['collateral']==[] and decision['screening']==controls
+    # The signed policy preserves exactly the gate thresholds the task stated, and
+    # additionally names the screening rule and its clustering parameters, which
+    # decide every outcome and used to sit outside the signature. No gate threshold
+    # is invented for a task that did not state one.
+    assert decision['collateral']==[]
+    for key,value in controls.items():
+        assert decision['screening'][key]==value
+    assert decision['screening']['screening_rule']=='legacy_v1'
+    assert decision['screening']['cluster_center_gap']==0.45
+    assert decision['screening']['cluster_low_center_max']==0.25
+    assert set(decision['screening'])-set(controls)=={'screening_rule','cluster_center_gap',
+        'cluster_low_center_max','cluster_iterations','cluster_tolerance'}
     malicious=decision['validations'][3]
     assert malicious['proof_valid'] and malicious['score']>.9
     assert malicious['decision']=='rejected' and '中位数' in malicious['reason']

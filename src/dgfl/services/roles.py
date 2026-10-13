@@ -18,12 +18,14 @@ from dgfl.deployment import cluster_topology
 from dgfl.topology import client_authorities, validate_topology
 from dgfl.transport.security import atomic_bytes, atomic_json, parse_frame, read_bytes
 from dgfl.validation.policy import (
+    EXIT_STAGES,
     SCREENING_DEFAULTS,
+    SCREENING_VERSION,
     apply_batches,
     client_members,
     cosine,
     quantize,
-    screen,
+    screen_decided,
     screening_settings,
 )
 
@@ -276,10 +278,17 @@ def _training_bounds(value,mode=None):
 
 
 def _policy(value):
-    """Validate the complete immutable policy supported by these role workers."""
+    """Validate the complete immutable policy supported by these role workers.
+
+    The allowlist is built from the declared parameter sets rather than written out,
+    so a new screening parameter is accepted here as soon as it is declared. The
+    rule's own name is allowed alongside them: it is not a threshold but it decides
+    which thresholds apply, so it belongs in the policy an edge signs.
+    """
     fields={'mode','scale','bits','dimension','members','batch_size'}
-    if (not isinstance(value,dict) or not fields<=set(value)
-            or set(value)-fields-set(_PROOF_DEFAULTS)-set(SCREENING_DEFAULTS)-{'proof_crs_hash','dataset','model_descriptor'}-TOPOLOGY_FIELDS):
+    optional=(set(_PROOF_DEFAULTS) | set(SCREENING_DEFAULTS) | {'screening_rule'}
+              | {'proof_crs_hash','dataset','model_descriptor'} | TOPOLOGY_FIELDS)
+    if not isinstance(value,dict) or not fields<=set(value) or set(value)-fields-optional:
         raise ValueError('complete task policy is required')
     if value['mode'] not in ('plain','encrypted','dgflow','optimized'):
         raise ValueError('invalid task policy mode')
@@ -719,26 +728,63 @@ class RoleWorker:
                                 'norm_squared':core['norm_squared'] if core is not None else None,
                                 'proof_hash':proof_hash,
                                 'packet_hash':b.digest(submission_core(core)) if core is not None else None})
-        screening=screening_settings(self.policy); rejection_reasons={}
-        if self.mode=='encrypted': candidates=valid_clients
-        else: candidates,rejection_reasons=screen(scores,{cid:packets[cid]['norm_squared'] for cid in scores},screening)
+        # The signed policy states the rule and its parameters, which decide every
+        # outcome, plus whichever gate thresholds the task stated. It deliberately
+        # does not invent gate thresholds the task left unspecified: an omitted gate
+        # is disabled, and materialising it here would change what the rule rejects.
+        screening=screening_settings(self.policy)
+        rejection_reasons={}; stages={}; clustering=None
+        counts=dict.fromkeys(EXIT_STAGES,0)
+        if self.mode=='encrypted':
+            candidates=valid_clients
+            # Encrypted runs keep their historical meaning: screening is not applied,
+            # so the decision record states that rather than reporting empty counts
+            # that would look like "nothing was removed by the rule".
+            clustering={'rule':None,'version':SCREENING_VERSION,'applied':False,
+                        'reason':'encrypted_mode_skips_screening'}
+            counts['accepted']=len(candidates)
+        else:
+            decision=screen_decided(scores,{cid:packets[cid]['norm_squared'] for cid in scores},screening)
+            candidates=decision['chosen']; rejection_reasons=decision['reasons']
+            stages=decision['stages']; clustering=decision['clustering']
+            counts=dict(decision['counts'])
+            for cid in list(packets):
+                if cid not in scores:
+                    # The client submitted but its owner verdict is missing, so no
+                    # score exists and the rule never saw it.
+                    counts['proof_failed']=counts.get('proof_failed',0)+1
+                    stages[cid]='proof_failed'
         strategy=screening.get('batch_strategy','fixed')
         approved=apply_batches(candidates,self.clients,strategy=strategy,batch_size=self.policy['batch_size'])
         collateral=sorted(candidates-set(approved))
+        for cid in collateral:
+            stages[cid]='batch_collateral'
+        counts['batch_collateral']=len(collateral)
+        # "Accepted" counts what the batch rule actually released, not what survived
+        # screening: a candidate whose fixed batch is incomplete is not accepted, and
+        # reporting it as such would overstate participation.
+        counts['accepted']=len(approved)
         for row in validations:
             cid=row['client_id']
-            if cid in approved: row.update(decision='accepted',reason='通过并纳入聚合')
-            elif cid in collateral: row.update(decision='collateral',reason=(
+            if cid in approved: row.update(decision='accepted',reason='通过并纳入聚合',exit_stage='accepted')
+            elif cid in collateral: row.update(decision='collateral',exit_stage='batch_collateral',reason=(
                 '固定批次中其他成员未通过或缺席' if strategy=='fixed' else '合格成员不足两人，不能发布单人聚合'))
-            elif cid in scores: row.update(decision='rejected',reason=rejection_reasons[cid])
-            else: row['decision']='rejected'
+            elif cid in scores: row.update(decision='rejected',exit_stage=stages.get(cid,'cluster_gate'),
+                                           reason=rejection_reasons[cid])
+            else: row.update(decision='rejected',exit_stage=stages.get(cid,'proof_failed'))
         manifest={'context_hash':b.digest(self.ctx),'members':list(self.policy['members']),'approved':approved,
                   'packet_hashes':{cid:b.digest(submission_core(packets[cid])) for cid in approved},
                   'batch_size':self.policy['batch_size']}
         if screening: manifest['screening']=screening
         topology=pinned_topology(self.policy)
         if topology is not None: manifest.update(topology)
-        self.approval={**manifest,'manifest_hash':b.digest(manifest),'validations':validations,'collateral':collateral}
+        # The decision record travels with the signed authorization, so a later
+        # reader sees the centres, sizes, dispersions, separation, the thresholds
+        # actually applied and the stage each client exited at — not only who was
+        # accepted. It is inside the manifest, so it is covered by the signature.
+        self.approval={**manifest,'manifest_hash':b.digest(manifest),
+                       'screening_decision':clustering,'screening_counts':counts,
+                       'validations':validations,'collateral':collateral}
         self._approved_packets={cid:packets[cid] for cid in approved}
         return self.identity.sign_public('authorization',self.approval)
 

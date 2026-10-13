@@ -994,6 +994,13 @@ class RunManager:
                 'strategy':screening['batch_strategy'],'batch_size':batch_size,
                 'groups':fixed_batches(len(members),batch_size=batch_size) if screening['batch_strategy']=='fixed' else [],
             }
+            # The screening rule and its thresholds are recorded as the policy that
+            # will be signed for every round, so a change to the decision procedure
+            # is visible in the record rather than only in the source.
+            record['evidence']['screening']={key:screening[key] for key in
+                ('min_cosine','max_norm_squared','max_norm_ratio','min_norm_ratio',
+                 'batch_strategy','screening_rule','cluster_center_gap','cluster_low_center_max',
+                 'cluster_iterations','cluster_tolerance') if key in screening}
             active_clients,active_clouds=choose_participants(online,cfg['mode'],cfg['offline_aggregators'],
                 batch_strategy=screening['batch_strategy'],batch_size=batch_size,
                 **{name:topology[name] for name in TOPOLOGY_FIELDS-{'client_authorities'}})
@@ -1110,6 +1117,9 @@ class RunManager:
                 # Filled in by the confirmation step on a secure round; a plain
                 # round has nothing to confirm and commits an empty list.
                 confirmation_rows=[]
+                # Filled in by the authorization step on a screened round; a plain
+                # round has no signed decision to take them from.
+                screening_decision=None; screening_counts=None
                 ctx={'task_id':record['run_id'],'round_id':round_id,'key_epoch':epoch,'model_hash':b.digest(reference),
                      'bits':bits,'scale':scale,'dimension':dimension,'dataset':cfg['dataset'],**topology}
                 if descriptor is not None: ctx['model_descriptor']=descriptor
@@ -1268,9 +1278,28 @@ class RunManager:
                     decision=authorization(rpc.identity,certs,ctx)
                     if decision.get('members')!=members:
                         raise ValueError('授权签名中的客户端成员与实验部署人数不一致')
-                    if decision.get('batch_size')!=batch_size or decision.get('screening')!=screening:
+                    if decision.get('batch_size')!=batch_size:
                         raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致')
+                    # The signed policy must state the rule and its parameters, and
+                    # must agree with this task wherever both state a value. A gate
+                    # the task left unspecified is absent from both sides, so the
+                    # comparison does not invent one.
+                    signed_screening=decision.get('screening') or {}
+                    for key,value in signed_screening.items():
+                        if key in screening and value!=screening[key]:
+                            raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致'
+                                             f'（{key}）')
+                    for key in ('screening_rule','cluster_center_gap','cluster_low_center_max',
+                                'cluster_iterations','cluster_tolerance'):
+                        if signed_screening.get(key)!=screening.get(key):
+                            raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致'
+                                             f'（{key}）')
                     approved=decision['approved']; collateral=decision['collateral']; validations=decision['validations']
+                    # The signed decision carries the screening record: both centres,
+                    # both cluster sizes, their dispersions, the separation, the
+                    # thresholds applied and how many clients each stage removed.
+                    screening_decision=decision.get('screening_decision')
+                    screening_counts=decision.get('screening_counts')
                     authorized_manifest_hash=decision.get('manifest_hash')
                     evidence_checkpoint('aggregation',authorization={
                         'checked':True,'context_hash':decision.get('context_hash'),
@@ -1278,7 +1307,8 @@ class RunManager:
                         'signers':[cert['sender'] for cert in certs],
                         'required_signers':cfg['authority_threshold'],
                         'approved_clients':list(approved),'packet_hashes':dict(decision.get('packet_hashes',{})),
-                        'batch_size':batch_size,'batch_strategy':screening['batch_strategy']})
+                        'batch_size':batch_size,'batch_strategy':screening['batch_strategy'],
+                        'screening_decision':screening_decision,'screening_counts':screening_counts})
                     times['authorization_s']=time.perf_counter()-authorization_start
                     times['validation_s']=time.perf_counter()-t
                     if policy['proof_suite']=='lego_norm_v1':
@@ -1441,6 +1471,13 @@ class RunManager:
                      'collateral_clients':collateral,'duration_s':time.perf_counter()-round_start,'bytes_sent':rpc.bytes_sent-bytes_before,
                      'stage_times':times,'controller_cpu_s':time.process_time()-round_cpu_start,
                      'validations':validations,'model_hash':b.digest(reference),
+                     # The decision record for this round: what the screening rule
+                     # measured and which stage removed each client. Kept beside the
+                     # metrics so a reader can see why a client was dropped without
+                     # re-deriving the rule, and so a later threshold change can be
+                     # compared against the rounds it replaces.
+                     'screening_decision':screening_decision,
+                     'screening_counts':screening_counts,
                      'protocol_evidence':deepcopy(protocol_evidence),
                      # Public cryptographic identifiers for this round: the bytes
                      # that identify what was proven and what was authorized.

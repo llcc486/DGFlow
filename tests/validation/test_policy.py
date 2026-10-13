@@ -52,8 +52,18 @@ def test_screening_settings_reject_invalid_controls(settings):
     with pytest.raises(ValueError): policy.screening_settings(settings)
 
 
+#: What a policy that states nothing still names: the rule and the parameters that
+#: decide every outcome. The gate thresholds are absent because an omitted gate is
+#: disabled, and materialising one here would change what the rule rejects.
+RULE_ONLY={**policy.SCREENING_RULE_DEFAULTS,'screening_rule':policy.SCREENING_RULE_LEGACY_V1}
+
+
 def test_legacy_omitted_settings_retain_explicit_ablation_behavior():
-    assert policy.screening_settings({})=={}
+    # A mapping that states no gate thresholds returns none of them, and no
+    # norm-ratio gate is invented for a task that never opted into one.
+    settings=policy.screening_settings({})
+    assert settings==RULE_ONLY
+    assert 'max_norm_ratio' not in settings and 'min_cosine' not in settings
     chosen,_=policy.screen({'a':-.1,'b':-.1},{'a':1,'b':100},{})
     assert chosen=={'a','b'}
 
@@ -62,7 +72,12 @@ def test_new_task_defaults_preserve_fixed_batches_and_leave_lower_norm_disabled(
     settings=policy.screening_settings({},defaults=True)
     assert settings['batch_strategy']=='fixed'
     assert settings['min_norm_ratio'] is None
-    assert policy.screening_settings({})=={}
+    # The clustering parameters are part of the pinned policy, not constants hidden
+    # in the rule, so a complete policy states them and they enter the digest.
+    assert settings['cluster_center_gap']==0.45
+    assert settings['cluster_low_center_max']==0.25
+    assert settings['screening_rule']==policy.SCREENING_RULE_LEGACY_V1
+    assert policy.screening_settings({})==RULE_ONLY
 
 
 @pytest.mark.parametrize('squared_norm,accepted',[(63,False),(64,True),(65,True)])

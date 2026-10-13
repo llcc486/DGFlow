@@ -334,6 +334,75 @@ def test_unresigned_screening_changes_fail_authorization_signature(cluster,field
         roles.authorization(cluster[1]['coordinator'],altered,cluster[4])
 
 
+@pytest.mark.parametrize('field,value',[('cluster_low_center_max',0.4),
+                                        ('cluster_center_gap',0.6),
+                                        ('cluster_iterations',8)])
+def test_a_clustering_parameter_change_breaks_the_signed_decision(cluster,field,value):
+    """The clustering parameters are inside the signed policy, not beside it.
+
+    Before this, they were constants in the rule, so editing them changed nothing an
+    edge had signed and nothing a reader could detect.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    certificates,decision=_authorize(cluster,authorities,packets,keys)
+    assert decision['screening'][field]=={'cluster_low_center_max':0.25,
+                                          'cluster_center_gap':0.45,
+                                          'cluster_iterations':32}[field]
+    altered=deepcopy(certificates)
+    altered[0]['payload']['screening'][field]=value
+    with pytest.raises(ValueError,match='signed public'):
+        roles.authorization(cluster[1]['coordinator'],altered,cluster[4])
+
+
+def test_the_only_supported_rule_name_is_recorded_and_named(cluster):
+    """The rule is named in the signed policy, so a recorded round says which rule ran."""
+    authorities,packets,keys=_run_round(cluster)
+    _,decision=_authorize(cluster,authorities,packets,keys)
+    assert decision['screening']['screening_rule']=='legacy_v1'
+    assert decision['screening_decision']['rule']=='legacy_v1'
+
+
+def test_the_signed_decision_carries_the_screening_record(cluster):
+    """A round records what the rule measured, under the edge's signature."""
+    authorities,packets,keys=_run_round(cluster)
+    certificates,decision=_authorize(cluster,authorities,packets,keys)
+    assert all(cert['payload']['screening_decision']==decision['screening_decision']
+               for cert in certificates)
+    record=decision['screening_decision']
+    assert record['rule']=='legacy_v1' and record['version']>=1
+    # Nothing was removed by the cluster gate in this fixture, which is itself a
+    # recorded fact rather than an absent field.
+    assert record['thresholds']['cluster_center_gap']==0.45
+    assert record['thresholds']['cluster_low_center_max']==0.25
+    assert 'low_center' in record and 'high_center' in record and 'separation' in record
+    counts=decision['screening_counts']
+    assert counts['accepted']==len(decision['approved'])
+    # Every client appears under exactly one stage.
+    rows={row['client_id']:row for row in decision['validations']}
+    assert all(row['exit_stage'] in ('accepted','norm_gate','cluster_gate',
+                                     'proof_failed','not_submitted','batch_collateral')
+               for row in rows.values())
+    assert sum(counts[stage] for stage in ('proof_failed','not_submitted','norm_gate',
+                                          'cluster_gate','batch_collateral','accepted'))==len(rows)
+    assert rows['client1']['exit_stage']=='norm_gate'
+    assert rows['client2']['exit_stage']=='batch_collateral'
+    assert rows['client3']['exit_stage']=='accepted'
+
+
+def test_a_client_removed_by_the_norm_gate_is_not_counted_as_screening_detection(cluster):
+    """The four removal causes are separate counts, not one "rejected" number."""
+    authorities,packets,keys=_run_round(cluster)
+    _,decision=_authorize(cluster,authorities,packets,keys)
+    counts=decision['screening_counts']
+    rows={row['client_id']:row for row in decision['validations']}
+    norm_gated={cid for cid,row in rows.items() if row['exit_stage']=='norm_gate'}
+    cluster_gated={cid for cid,row in rows.items() if row['exit_stage']=='cluster_gate'}
+    assert norm_gated=={'client1'}
+    assert cluster_gated==set()
+    assert counts['norm_gate']==len(norm_gated)
+    assert counts['cluster_gate']==0
+
+
 def test_one_edge_cannot_authorize_a_conflicting_lower_norm_rule(cluster):
     authorities,packets,keys=_run_round(cluster)
     certificates,decision=_authorize(cluster,authorities,packets,keys)
