@@ -7,6 +7,7 @@ import { deploymentConfig, deploymentPayloadError, deploymentState, deployedTopo
 import { trainingBackendError, trainingBackendStatus } from './trainingBackends.js'
 import { datasetName, datasetReady as isDatasetReady, modelConfigurationError, withPreparedDataset } from './datasets.js'
 import { trainingEligibility } from './trainingEligibility.js'
+import { experimentMetadataError } from './experiments.js'
 
 const status = ref(null)
 const connected = ref(false)
@@ -15,6 +16,7 @@ const initialLoading = ref(true)
 const runs = ref([])
 const listError = ref('')
 const selectedRunId = ref('')
+const inspectionRound = ref(null)
 const currentRun = ref(null)
 const loadingRun = ref(false)
 const runError = ref('')
@@ -135,6 +137,7 @@ function stop() {
 }
 
 function chooseRun(id) {
+  if (selectedRunId.value !== id) inspectionRound.value = null
   selectedRunId.value = id
   currentRun.value = id ? runCache.get(id) || null : null
   loadingRun.value = Boolean(id)
@@ -225,6 +228,8 @@ async function deployNodes(configuration, startNodes = true) {
 
 async function startRun(config) {
   if (submitting.value || deploying.value) return null
+  const metadataError = experimentMetadataError(config)
+  if (metadataError) { operationError.value = metadataError; return null }
   const modelError = modelConfigurationError(config)
   if (modelError) { operationError.value = modelError; return null }
   const compatibilityError = connected.value ? runCompatibilityError(status.value, config.mode) : ''
@@ -274,7 +279,7 @@ async function stopRun() {
 
 export const consoleStore = {
   status, connected, connectionError, initialLoading,
-  runs, listError, selectedRunId, currentRun, loadingRun, runError,
+  runs, listError, selectedRunId, inspectionRound, currentRun, loadingRun, runError,
   lastUpdated, operationError, notification,
   preparing, selectedDataset, submitting, deploying, stopping, stopRequestedId,
   hasActiveRun, datasetReady, nodes, runCache,

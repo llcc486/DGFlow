@@ -14,16 +14,26 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.datastructures import URL, Headers
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from dgfl import __version__
-from dgfl.deployment import MACHINE_GROUPS, bundle_cluster, configure_cluster, init_lan_cluster, load_cluster, start_nodes, validate_machine
+from dgfl.deployment import (
+    MACHINE_GROUPS,
+    bundle_cluster,
+    configure_cluster,
+    init_lan_cluster,
+    load_cluster,
+    start_nodes,
+    validate_machine,
+)
+from dgfl.experiments.monitor_series import MonitorSeries
+from dgfl.experiments.metadata import normalize_text
 from dgfl.experiments.runner import RunManager
 from dgfl.services.node import training_backends
 from dgfl.services.tensorboard import EmbeddedTensorBoard
@@ -119,6 +129,8 @@ class ControlSafetyMiddleware:
 class ArchivedRunConfig(BaseModel):
     """Read-only validation of historical declarations and experiment evidence."""
     model_config=ConfigDict(extra='forbid')
+    name:str|None=Field(None,strict=True,max_length=80)
+    description:str|None=Field(None,strict=True,max_length=1000)
     dataset:Literal['mnist','cifar10']='mnist'
     # Optional metadata: None means the unchanged historical linear path.
     model_name:Literal['linear','paper_cnn_mnist','paper_cnn_cifar10']|None=None
@@ -171,6 +183,11 @@ class ArchivedRunConfig(BaseModel):
     batch_strategy:Literal['fixed','regroup']='regroup'
     # Privacy-group size, independent of local SGD's mini-batch size.
     batch_size:int=Field(2,ge=2,le=100,strict=True)
+
+    @field_validator('name','description',mode='before')
+    @classmethod
+    def normalize_user_metadata(cls,value,info):
+        return normalize_text(value,field=info.field_name)
 
     @model_validator(mode='after')
     def crs_matches_suite(self):
@@ -278,7 +295,7 @@ class DeploymentStart(DeploymentConfig):
 
 def create_control_app(runtime, *, auto_prepare_compute=True):
     runtime=Path(runtime).resolve(); manager=RunManager(runtime)
-    tensorboard=EmbeddedTensorBoard(manager.tensorboard)
+    tensorboard=EmbeddedTensorBoard(manager.tensorboard,run_labels=manager.tensorboard_run_labels)
     compute_shutdown=threading.Event(); compute_wakeup=threading.Event()
 
     @asynccontextmanager
@@ -305,6 +322,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     app.add_middleware(ControlSafetyMiddleware)
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
     monitor={'time':0.,'nodes':[]}; monitor_lock=threading.Lock(); prepare_lock=threading.Lock()
+    monitor_series = MonitorSeries(runtime)
     compute_lock=threading.Lock()
     compute_preparation={'state':'idle','reason':''}
     app.state.compute_preparation=compute_preparation
@@ -719,7 +737,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     @app.get('/api/runs')
     def listing():
         with manager.lock:
-            return {'runs':[{k:r[k] for k in ('run_id','mode','status','created_at','config','summary') if k in r}
+            return {'runs':[{k:r[k] for k in ('run_id','name','description','mode','status','created_at','config','summary') if k in r}
                             | {'mode':r['config']['mode']} for r in reversed(list(manager.records.values()))]}
 
     @app.get('/api/runs/{run_id}')
@@ -731,6 +749,33 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def monitor_detail(run_id:str):
         try: return manager.monitor_snapshot(run_id)
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    @app.get('/api/runs/{run_id}/monitor/series')
+    def monitor_series_detail(run_id: str, scope: Literal['node', 'machine'],
+                              target: Annotated[str, Query(min_length=1, max_length=128)],
+                              metric: Annotated[str, Query(min_length=1, max_length=128)],
+                              start: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+                              end: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+                              limit: Annotated[int, Query(ge=1, le=600)] = 300,
+                              cursor: Annotated[str | None, Query(min_length=1, max_length=32768)] = None):
+        # Capture only references to already cached immutable observations. The
+        # query itself has bounded disk IO and never asks a role or sensor for data.
+        with manager.lock:
+            if run_id not in manager.records:
+                raise HTTPException(404, '任务不存在')
+            source = manager.records[run_id]
+            evidence = dict(source.get('evidence') or {})
+            collector = manager._node_monitors.get(run_id)
+            if collector is not None:
+                evidence['node_monitoring'] = collector.snapshot()
+            record = {'run_id': run_id, 'evidence': evidence}
+        try:
+            return monitor_series.query(record, scope=scope, target=target, metric=metric,
+                                        start=start, end=end, limit=limit, cursor=cursor)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(503, '监控历史暂时无法读取，请稍后重试') from exc
 
     @app.post('/api/runs/{run_id}/stop')
     def stop(run_id:str):

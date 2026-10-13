@@ -1,0 +1,29 @@
+<script setup>
+import { computed, ref } from 'vue'
+import LabIcon from './LabIcon.vue'
+import { clockTime, date, isActiveRun } from '../lib/format.js'
+import { eventName, eventTone, latestStage } from '../lib/monitorOverview.js'
+const props = defineProps({ run: { type: Object, required: true }, selectedRound: { type: [Number, String, null], default: null } })
+const emit = defineEmits(['clear-round'])
+const filter = ref('all'), expanded = ref(false)
+const latest = computed(() => latestStage(props.run))
+const events = computed(() => (props.run.events || []).map((event, index) => ({ ...event, index, tone: eventTone(event, props.run) })).filter(event =>
+  (props.selectedRound === null || event.round === Number(props.selectedRound)) && (filter.value === 'all' || ['warning', 'danger'].includes(event.tone))).reverse())
+const visible = computed(() => events.value.slice(0, expanded.value ? 100 : 5))
+</script>
+
+<template>
+  <section class="nb-card execution-panel" aria-label="执行动态">
+    <div class="nb-card-head"><div><span class="panel-eyebrow">EXECUTION FEED</span><h2>执行动态</h2></div><span :class="['execution-indicator', { running: isActiveRun(run) }]">{{ isActiveRun(run) ? '持续更新' : '历史记录' }}</span></div>
+    <div class="latest-stage"><span>{{ isActiveRun(run) ? '最近上报阶段' : '最后执行事件' }}</span><strong>{{ latest ? eventName(latest.stage) : '等待执行事件' }}</strong><p :title="latest?.message">{{ latest?.message || '后端上报后显示阶段与执行说明。' }}</p><time v-if="latest?.time">{{ date(latest.time) }}{{ latest.round ? ` · 第 ${latest.round} 轮` : '' }}</time></div>
+    <div class="event-toolbar"><span>{{ selectedRound === null ? '最近事件' : `第 ${selectedRound} 轮事件` }} <button v-if="selectedRound !== null" @click="emit('clear-round')">全部轮次</button></span><select v-model="filter" aria-label="筛选执行事件"><option value="all">全部事件</option><option value="issues">异常事件</option></select></div>
+    <div class="execution-events" :class="{ expanded }"><article v-for="event in visible" :key="event.index" :class="['execution-event', event.tone]"><i></i><div><div class="event-meta"><strong>{{ eventName(event.stage) }}</strong><time :title="event.time">{{ clockTime(event.time) }}</time></div><p>{{ event.message }}</p><small>{{ event.round ? `第 ${event.round} 轮` : '任务级事件' }}</small></div></article><p v-if="!visible.length" class="events-empty">{{ filter === 'issues' ? '此范围暂无异常事件。' : '此范围暂无执行事件。' }}</p></div>
+    <button v-if="events.length > 5" class="events-more" @click="expanded = !expanded">{{ expanded ? '收起事件' : `展开事件（${events.length}）` }}<LabIcon :name="expanded ? 'chevron' : 'arrow'" :size="13" /></button>
+    <p v-if="expanded && events.length > 100" class="event-limit">显示最近 100 条；完整事件可导出实验记录查看。</p>
+  </section>
+</template>
+
+<style scoped>
+.execution-panel { min-width:0; overflow:hidden; }.nb-card-head { padding:15px 20px 10px; border-bottom:0; align-items:center; }.panel-eyebrow { display:block; color:#8a96ad; letter-spacing:1.8px; font-size:9px; font-weight:600; margin-bottom:4px; }h2 { font-size:16px; }.execution-indicator { display:flex; align-items:center; gap:6px; color:#8895a8; font-size:10px; }.execution-indicator:before { content:''; width:5px; height:5px; border-radius:50%; background:#a3aec0; }.execution-indicator.running:before { background:#359973; }.latest-stage { margin:0 20px 12px; padding:12px; background:#f3f7fc; border:1px solid #e4ecf6; border-radius:8px; }.latest-stage > span { color:#8393aa; font-size:10px; }.latest-stage strong { display:block; font-size:16px; color:#2d476c; font-weight:600; margin:6px 0; }.latest-stage p { font-size:11px; line-height:1.65; color:#64758f; overflow-wrap:anywhere; }.latest-stage time { display:block; margin-top:7px; font-size:10px; color:#8e9bb0; font-variant-numeric:tabular-nums; }.event-toolbar { display:flex; align-items:center; justify-content:space-between; padding:0 20px 10px; gap:8px; font-size:11px; color:#64738a; }.event-toolbar select { max-width:100px; border:0; background:#f3f5f9; border-radius:5px; padding:5px; font-size:10px; color:#6d7b90; }.event-toolbar button { border:0; background:transparent; color:#1f6fb2; padding:0 3px; font-size:10px; }.execution-events { padding:0 20px; max-height:130px; overflow:auto; }.execution-events.expanded { max-height:420px; }.execution-event { display:flex; gap:10px; padding:0 0 12px; }.execution-event > i { width:6px; height:6px; margin-top:5px; background:#a1b3cd; border-radius:50%; flex-shrink:0; }.execution-event.warning > i { background:#d39b3d; }.execution-event.danger > i { background:#c0483c; }.execution-event.success > i { background:#359973; }.execution-event > div { flex:1; min-width:0; }.event-meta { display:flex; align-items:center; gap:6px; justify-content:space-between; }.event-meta strong { font-size:11px; color:#526782; font-weight:500; }.event-meta time { font-size:10px; color:#99a4b5; white-space:nowrap; }.execution-event p { font-size:11px; line-height:1.75; color:#7d8a9e; margin:5px 0 3px; overflow-wrap:anywhere; }.execution-event small { font-size:9px; color:#a0aaba; }.events-empty { font-size:12px; color:#8a96aa; padding:15px 0 25px; }.events-more { border:0; border-top:1px solid #edf0f5; background:#fff; display:flex; gap:8px; justify-content:center; padding:10px; width:100%; font-size:11px; color:#6a809c; }.event-limit { font-size:10px; padding:0 20px 14px; color:#8a96aa; }
+.nb-card-head { min-height:0; padding-top:12px; padding-bottom:8px; }.panel-eyebrow { display:none; }.latest-stage { padding:10px 12px; margin-bottom:10px; }.latest-stage strong { margin:5px 0; }.latest-stage p { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.latest-stage time { margin-top:5px; }.event-toolbar { padding-bottom:6px; }.execution-events { max-height:70px; }.execution-events.expanded { max-height:420px; }.events-more { padding-top:8px; padding-bottom:8px; }
+</style>

@@ -1,8 +1,10 @@
 """Lazy same-origin TensorBoard ASGI application, with no listening socket."""
 import logging
+import sys
 import threading
 import time
 from importlib import resources
+from types import ModuleType
 
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.wsgi import WSGIMiddleware
@@ -89,8 +91,9 @@ async def _localized_html(application, scope, receive, send):
 
 
 class EmbeddedTensorBoard:
-    def __init__(self, logs, *, reload_interval=2.):
+    def __init__(self, logs, *, reload_interval=2., run_labels=None):
         self.logs = logs
+        self._label_supplier = run_labels
         self._lock = threading.RLock()
         self._application = None
         self._ingester = None
@@ -134,6 +137,11 @@ class EmbeddedTensorBoard:
                 return None
 
     def _compose(self):
+        # This viewer only reads validated local event files. TensorBoard's
+        # official no-TensorFlow compatibility mode avoids adopting an unrelated
+        # TensorFlow installation whose Windows gfile backend rejects Unicode
+        # runtime paths. Select it before the lazy compat API is first resolved.
+        sys.modules.setdefault('tensorboard.compat.notf', ModuleType('tensorboard.compat.notf'))
         from tensorboard import program
         from tensorboard.backend import application
         from tensorboard.backend.event_processing.data_ingester import LocalDataIngester
@@ -243,6 +251,12 @@ class EmbeddedTensorBoard:
         except Exception:
             return []
 
+    def _run_labels(self):
+        try:
+            return dict(self._label_supplier()) if self._label_supplier else {}
+        except Exception:
+            return {}
+
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
             return
@@ -259,6 +273,7 @@ class EmbeddedTensorBoard:
                 # exactly instead of being guessed from rendered markup.
                 catalog = dict(scalar_label_catalog())
                 catalog['runs'] = self._run_names()
+                catalog['run_labels'] = self._run_labels()
                 response = JSONResponse(catalog, headers={'Cache-Control': 'no-cache'})
             elif name in _LOCALE_ASSETS:
                 response = Response(_locale_bytes(name), media_type=_LOCALE_ASSETS[name],

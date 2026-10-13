@@ -7,11 +7,13 @@ const props = defineProps({
   runId: { type: String, default: '' },
   runs: { type: Array, default: () => [] },
   active: { type: Boolean, default: true },
+  selection: { type: Object, default: () => ({ kind: 'run' }) },
+  nodes: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['deploy'])
 const selectedRun = computed(() => props.runId)
 const active = computed(() => props.active)
-const { busy, frameUrl, frameLoaded, frameFailed, syncFailed, frameKey, message, confirmFrame, refresh } = useTensorBoard(selectedRun, { active })
+const { busy, frameUrl, frameLoaded, frameFailed, syncFailed, frameKey, message, confirmFrame, refresh } = useTensorBoard(selectedRun, { active, selection: computed(() => props.selection), nodes: computed(() => props.nodes) })
 // Exporting all history should not compete with the selected panel's first load.
 useTensorBoardHistory(computed(() => props.runs), selectedRun, { enabled: computed(() => active.value && frameLoaded.value) })
 
@@ -19,7 +21,7 @@ function loaded(event) {
   // An iframe load also fires for HTTP error pages; inspect the same-origin page.
   try {
     const document = event.target.contentDocument
-    confirmFrame(Boolean(document?.querySelector('tb-web-app, tensor-board') || /TensorBoard/i.test(document?.title || '')))
+    confirmFrame(Boolean(document?.querySelector('tb-webapp, tb-web-app, tensor-board') || /TensorBoard/i.test(document?.title || '')))
   } catch { confirmFrame(false) }
 }
 </script>
@@ -27,6 +29,7 @@ function loaded(event) {
 <template>
   <section class="tensorboard-workspace" aria-label="TensorBoard 实验监控" :aria-busy="busy || (Boolean(frameUrl) && !frameLoaded && !frameFailed)">
     <iframe v-if="frameUrl" :key="frameKey" :src="frameUrl" title="TensorBoard 原生实验分析面板" referrerpolicy="same-origin" @load="loaded" @error="confirmFrame(false)"></iframe>
+    <div v-if="frameUrl && !frameLoaded && !frameFailed" class="tb-overlay" role="status"><div class="tb-placeholder"><strong>正在加载分析工作区…</strong><p>{{ message }}</p></div></div>
     <div v-if="!frameUrl || frameFailed" class="tb-overlay" role="status">
       <div class="tb-placeholder">
         <strong>{{ busy ? '正在准备 TensorBoard…' : 'TensorBoard 暂不可用' }}</strong>
@@ -46,8 +49,8 @@ function loaded(event) {
 </template>
 
 <style scoped>
-.tensorboard-workspace { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
-.tensorboard-workspace iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.tensorboard-workspace { position: relative; display:flex; flex-direction:column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
+.tensorboard-workspace iframe { display: block; flex:1; min-height:0; width: 100%; height: 100%; border: 0; background: #fff; }
 .tb-overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: #fff; }
 .tb-placeholder { width: min(100%, 560px); text-align: center; color: var(--nb-muted); font-size: 13px; }
 .tb-placeholder strong { color: var(--nb-text); font-size: 18px; }

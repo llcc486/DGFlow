@@ -8,6 +8,7 @@ import PageHead from '../components/PageHead.vue'
 import { consoleStore as store } from '../lib/store'
 import { attackName, bytes, date, isActiveRun, modeName, modeTag, percent, seconds } from '../lib/format'
 import { DATASETS, runDataset, runDatasetName } from '../lib/datasets.js'
+import { runName, runDescription } from '../lib/experiments.js'
 
 const emit = defineEmits(['navigate', 'open'])
 
@@ -80,12 +81,13 @@ function open(run, view) {
         >
           <div class="nb-run-main">
             <div class="nb-run-title">
-              <strong>{{ modeName(run.mode || run.config?.mode) }}</strong>
+              <strong :title="`实验编号：${run.run_id}`">{{ runName(run) }}</strong>
+              <span class="nb-badge neutral">{{ modeName(run.mode || run.config?.mode) }}</span>
               <span class="nb-badge neutral">{{ runDatasetName(run) }}</span>
               <StatusBadge :status="run.status" />
               <span class="nb-badge neutral">{{ modeTag(run.mode || run.config?.mode) }}</span>
             </div>
-            <span class="nb-run-id">{{ run.run_id }}</span>
+            <p v-if="runDescription(run)" class="experiment-description">{{ runDescription(run) }}</p>
             <div class="nb-run-meta">
               <span>{{ date(run.created_at) }}</span>
               <span>种子 {{ run.config?.seed ?? '—' }}</span>
@@ -141,3 +143,8 @@ function open(run, view) {
     </section>
   </div>
 </template>
+
+<style scoped>
+.nb-run-title strong { overflow-wrap: anywhere; }
+.experiment-description { margin: 8px 0 0; color: var(--nb-muted); font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>

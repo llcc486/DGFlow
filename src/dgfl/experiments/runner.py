@@ -28,6 +28,7 @@ from dgfl.crypto import backend as b
 from dgfl.crypto import protocol as p
 from dgfl.deployment import cluster_topology
 from dgfl.experiments.attack_metrics import participation_metrics
+from dgfl.experiments.metadata import display_name, normalize_metadata, record_metadata
 from dgfl.experiments.monitoring import RunNodeMonitor, clean_event, frozen_nodes, monitor_snapshot
 from dgfl.experiments.resources import check_wire_resources, model_configuration
 from dgfl.experiments.telemetry import LocalProcessMonitor
@@ -356,6 +357,7 @@ class RunManager:
         for path in sorted((self.runtime/'results').glob('*/result.json')):
             try:
                 record=json.loads(path.read_text('utf8'))
+                record.update(record_metadata(record))
                 if record['status'] in ('queued','running','stopping'):
                     record['status']='aborted'; record['error']='控制进程曾停止；请创建新任务。'
                     atomic_json(path,record)
@@ -436,13 +438,17 @@ class RunManager:
     def _failure_detail(self,exc):
         return f'{type(exc).__name__}: {exc}'.replace(str(self.runtime.parent),'[workspace]')[:600]
 
+    def tensorboard_run_labels(self):
+        with self.lock:
+            return {run_id:display_name(record) for run_id,record in self.records.items()}
+
     def _emit(self,record,stage,message,round_id=0):
         with self.lock:
             record['events'].append({'time':utc(),'stage':stage,'message':message,'round':round_id})
             self._save(record)
 
     def start(self,config):
-        config={key:value for key,value in config.items()
+        config={key:value for key,value in normalize_metadata(config).items()
                 if key not in ('model_name','model_descriptor','bits','scale') or value is not None}
         attack_settings(config)
         config.setdefault('proof_suite','lego_norm_v1')
@@ -534,7 +540,8 @@ class RunManager:
             elif config.pop('proof_crs_hash',None) is not None:
                 raise ValueError('明文基线不使用证明或 CRS 摘要')
             run_id=uuid.uuid4().hex
-            record={'run_id':run_id,'status':'queued','config':dict(config),'created_at':utc(),'current_round':0,
+            record={'run_id':run_id,'name':config.get('name'),'description':config.get('description'),
+                    'status':'queued','config':dict(config),'created_at':utc(),'current_round':0,
                     'rounds':[],'events':[],'error':None,'summary':{},'evidence':{
                         'data':dataset_spec(config['dataset'])['name']+' public replay',
                         'dataset':config['dataset'],
@@ -581,7 +588,7 @@ class RunManager:
                 finally:
                     self.active=None
                 raise ValueError(record['error']) from exc
-            return {'run_id':run_id,'status':'queued'}
+            return {'run_id':run_id,'name':record['name'],'description':record['description'],'status':'queued'}
 
     def stop(self,run_id):
         with self.lock:

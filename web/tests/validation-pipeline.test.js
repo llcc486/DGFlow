@@ -15,6 +15,7 @@ import { renderToString } from '@vue/server-renderer'
 import * as cryptoPipeline from '../src/lib/cryptoPipeline.js'
 import * as verificationEvidence from '../src/lib/verificationEvidence.js'
 import * as format from '../src/lib/format.js'
+import * as experiments from '../src/lib/experiments.js'
 import { consoleStore as store } from '../src/lib/store.js'
 
 const MODULES = { 'vue': vue, '../lib/cryptoPipeline.js': cryptoPipeline, '../lib/verificationEvidence.js': verificationEvidence, '../lib/format.js': format }
@@ -28,7 +29,7 @@ const MODULES = { 'vue': vue, '../lib/cryptoPipeline.js': cryptoPipeline, '../li
 function component(name, dependencies) {
   const source = readFileSync(new URL(`../src/${name}.vue`, import.meta.url), 'utf8')
   const compiled = compileScript(parse(source).descriptor, { id: 'validation-pipeline-test', inlineTemplate: true }).content
-  const bindings = { ...vue, ...cryptoPipeline, ...format, store, consoleStore: store, ...dependencies }
+  const bindings = { ...vue, ...cryptoPipeline, ...format, ...experiments, store, consoleStore: store, ...dependencies }
   // Split aliased imports, e.g. `import { consoleStore as store } from '...'`.
   for (const match of compiled.matchAll(/^import \{([\s\S]*?)\} from '([^']+)'/gm)) {
     for (const item of match[1].split(',')) {
@@ -115,7 +116,7 @@ test('the pipeline reuses the page round selector instead of adding a second one
   } finally { store.currentRun.value = null }
 })
 
-test('the monitor page no longer carries the pipeline, so TensorBoard stays full-window', () => {
+test('the monitor leaves cryptographic evidence inspection in the validation workspace', () => {
   const source = readFileSync(new URL('../src/views/Monitor.vue', import.meta.url), 'utf8')
   assert.doesNotMatch(source, /密码学流水线|round-crypto-pipeline|cryptoPipeline/)
 })

@@ -11,7 +11,8 @@ import { recordedRounds, verificationEvidence, shortFingerprint } from '../lib/v
 import { decisionName, decisionTone, fmt, modeName, modeProtection, percent, proofSuiteShort, seconds } from '../lib/format'
 
 const emit = defineEmits(['navigate'])
-const selectedRound = ref('latest'), selectedStage = ref('submission'), selectedClientId = ref(null), clientFilter = ref('all')
+const requestedRound = store.inspectionRound?.value
+const selectedRound = ref(requestedRound?.runId === store.selectedRunId.value ? String(requestedRound.round) : 'latest'), selectedStage = ref('submission'), selectedClientId = ref(null), clientFilter = ref('all')
 const run = computed(() => store.currentRun.value)
 const rounds = computed(() => recordedRounds(run.value))
 const validationRound = computed(() => selectedRound.value === 'latest' ? rounds.value.at(-1) || null : rounds.value.find(row => String(row.round) === selectedRound.value) || null)
