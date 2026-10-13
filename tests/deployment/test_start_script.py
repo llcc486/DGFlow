@@ -13,7 +13,7 @@ POWERSHELL = shutil.which('powershell') or shutil.which('pwsh')
 
 def run_script(tmp_path, fail_install=False, offline=False, client_count=None, topology=None,
                fail_setup=False, setup_only=False, mnist_source=None, cifar_source=None,
-               python_name='fake-python.ps1', runtime=None):
+               python_name='fake-python.ps1', runtime=None, python_version=(3, 12)):
     source = PROJECT/'scripts'/'start_demo.ps1'
     assert source.exists(), 'The one-click PowerShell startup script is missing'
     (tmp_path/'scripts').mkdir(exist_ok=True)
@@ -24,7 +24,16 @@ def run_script(tmp_path, fail_install=False, offline=False, client_count=None, t
     fake = tmp_path/python_name
     fake.write_text("$args | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:DGFL_PROBE_LOG -Encoding UTF8\n"
                     "$pwd.Path | Add-Content -LiteralPath $env:DGFL_CWD_LOG -Encoding UTF8\n"
-                    "if ($args[0] -eq '-c' -and ($args[1] -like '*pathlib*' -or $args[1] -like '*sys.version_info*')) "
+                    # The selected deployment interpreter is a stub, not the
+                    # pytest host interpreter (which also supports Python 3.11).
+                    # Execute the real guard against the stub's declared version.
+                    "if ($args[0] -eq '-c' -and $args[1] -like '*sys.version_info*') {\n"
+                    "  & $env:DGFL_STDLIB_PYTHON -c \"import os,sys; "
+                    "sys.version_info=tuple(map(int,os.getenv('DGFL_MOCK_PYTHON_VERSION').split('.'))); "
+                    "exec(sys.argv[1])\" $args[1]\n"
+                    "  exit $LASTEXITCODE\n"
+                    "}\n"
+                    "if ($args[0] -eq '-c' -and $args[1] -like '*pathlib*') "
                     "{ & $env:DGFL_STDLIB_PYTHON @args; exit $LASTEXITCODE }\n"
                     "if ($env:DGFL_FAIL_INSTALL -eq '1' -and 'pip-install' -in $args) { exit 9 }\n"
                     "$isSetup = @($args | Where-Object { $_ -like '*setup_environment.py' }).Count -gt 0\n"
@@ -33,6 +42,7 @@ def run_script(tmp_path, fail_install=False, offline=False, client_count=None, t
     env = {**os.environ, 'DGFL_PROBE_LOG': str(tmp_path/'calls.jsonl'),
            'DGFL_CWD_LOG': str(tmp_path/'working-directories.log'),
            'DGFL_STDLIB_PYTHON': sys.executable,
+           'DGFL_MOCK_PYTHON_VERSION': '.'.join(map(str, python_version)),
            'DGFL_FAIL_INSTALL': '1' if fail_install else '0', 'DGFL_FAIL_SETUP': '1' if fail_setup else '0'}
     command = [POWERSHELL, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(tmp_path/'scripts'/'start_demo.ps1'), '-PythonPath', str(fake)]
     if offline:
@@ -65,6 +75,16 @@ def setup_call(calls):
 def base_install(call):
     return ('pip-install' in call and '-r' in call
             and any(Path(value).name == 'deployment_downloads.py' for value in call))
+
+
+@pytest.mark.skipif(not POWERSHELL, reason='PowerShell is unavailable on this platform')
+def test_unsupported_python_stops_before_install_setup_or_demo(tmp_path):
+    result, calls = run_script(tmp_path, python_version=(3, 11))
+    assert result.returncode != 0
+    assert 'Locked deployment requires Python 3.12 or newer' in result.stdout + result.stderr
+    assert len(calls) == 1
+    assert calls[0][0] == '-c' and 'sys.version_info' in calls[0][1]
+    assert not (tmp_path / '.venv/dgflow-install.sha256').exists()
 
 
 @pytest.mark.skipif(not POWERSHELL, reason='PowerShell is unavailable on this platform')
