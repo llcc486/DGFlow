@@ -101,6 +101,14 @@ def _parser():
         'verify-material-origin',
         help='Check material provenance against the trusted registry and the pinned experiment context')
     _authenticity_arguments(authenticity)
+    resume = commands.add_parser('resume',
+                                 help='Continue a run from its latest completed-round checkpoint')
+    resume.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    resume.add_argument('--run', required=True, help='Run id to continue')
+    resume.add_argument('--key', help='Idempotency key: repeating it returns the same continuation')
+    resume.add_argument('--check', action='store_true',
+                        help='Only report whether the run can be continued, and why not')
+    resume.add_argument('--json', action='store_true', help='Emit the result as JSON')
     tamper = commands.add_parser('tamper-check',
                                  help='Isolated tamper playground: real crypto, four forgeries, real refusal reasons')
     tamper.add_argument('--mutations', nargs='+', choices=('norm', 'ciphertext', 'reference', 'replay'),
@@ -370,6 +378,40 @@ def _verify_material_origin(arguments):
     return report
 
 
+def _resume(arguments):
+    """Continue a run from its latest completed-round checkpoint.
+
+    This drives the same `RunManager` the control service uses, so the CLI is not a
+    second implementation of recovery: it produces the same new execution record,
+    the same key-epoch rotation, and the same refusal reasons.
+    """
+    from dgfl.experiments.runner import RunManager
+
+    manager = RunManager(Path(arguments.runtime).resolve())
+    try:
+        status = manager.recovery_status(arguments.run)
+    except KeyError as exc:
+        raise ValueError(f'任务不存在：{arguments.run}') from exc
+    if arguments.check or not status.get('resumable'):
+        payload = status
+    else:
+        payload = manager.resume(arguments.run, idempotency_key=arguments.key)
+    if arguments.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    elif payload.get('reused') is not None:
+        state = '复用已创建的恢复执行' if payload['reused'] else '新建'
+        print(f"恢复执行：{payload['run_id']}（{state}）")
+        print(f"从第 {payload['checkpoint_round']} 轮检查点继续第 {payload['start_round']} 轮")
+    elif payload.get('resumable'):
+        checkpoint = payload.get('checkpoint') or {}
+        print(f"可恢复：最近检查点为第 {checkpoint.get('round')} 轮"
+              f"（摘要 {checkpoint.get('sha256')}），将从第 {payload['start_round']} 轮继续")
+        print(payload.get('key_epoch_reason', ''))
+    else:
+        print(f"不可恢复：{payload.get('reason')}")
+    return 1 if payload.get('resumable') is False else 0
+
+
 def _tamper_check(arguments):
     """Run the isolated tamper playground; it never touches a live task."""
     from dgfl import tamper_playground as tp
@@ -458,6 +500,8 @@ def main(argv=None):
         elif command == 'verify-material-origin':
             result = _verify_material_origin(arguments)
             return 0 if result['authentic'] else 1
+        elif command == 'resume':
+            return _resume(arguments)
         elif command == 'tamper-check':
             return _tamper_check(arguments)
         elif command == 'prepare-data':

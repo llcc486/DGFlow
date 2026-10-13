@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "scope": "Maps each frozen acceptance record to the source version it describes. A record with accurate_for_current_tree false is a real result for the version it names and is not evidence about this checkout.",
-  "measured_utc": "2026-10-13T13:08:29.913531+00:00",
-  "commit": "e17b0152d9b65da05cb89c97a6e1e564118773d2",
-  "commit_subject": "A0 交付链路修复：打包、匿名化、版本边界、故障命名",
+  "measured_utc": "2026-10-13T13:45:31.668961+00:00",
+  "commit": "abba32fa7721b961b4463f4a35bd8b29bc9949cf",
+  "commit_subject": "A 阶段：版本协商、材料分级、导出白名单、真实性核对",
   "working_tree_dirty": true,
   "current_source_files": {
     "src/dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
-    "src/dgfl/cli.py": "67ff24caf63079886ec5fc4bbba25db37b205d686eb4fa1bc73819ac5bd9a025",
+    "src/dgfl/cli.py": "7dc7623cac44dd34f728e7fdff9f370bf9510bf800d375269ac57e7986b23bb0",
     "src/dgfl/crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
     "src/dgfl/crypto/backend.py": "c68aa4b1467e7a5feccc9065f8b4bbe9c218e15340debdc9867759a16fc3f8af",
     "src/dgfl/crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
@@ -23,16 +23,17 @@
     "src/dgfl/deployment.py": "a37a6d400d59c4ef53c8816e64d6283ecd9178dd6df59fd14acaa45d4daa96d8",
     "src/dgfl/experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
     "src/dgfl/experiments/attack_metrics.py": "064215e950545890cdf069adcf6da3f22a834ef39a10185641536ee722273d26",
+    "src/dgfl/experiments/checkpoint.py": "4529a4dd159300dfcd9fa6309957c2d807987f01a5c3651c8f2c611311ff293e",
     "src/dgfl/experiments/evidence.py": "e2983667467144a317a6e9c54e82d04cba5f9f222208907195c1b0421cd2ac63",
     "src/dgfl/experiments/hardware.py": "14fd5c28f39551af3e7fcb9503c99bc2438a6481970215635de7913d3a1cea33",
     "src/dgfl/experiments/monitoring.py": "cfb223a5555cba3d451c45a9d2f0067b16adfc4758981c1deeb3aa8591e03fa4",
     "src/dgfl/experiments/resources.py": "68037215993411d7123125442cca4051c1c1800ebda3ab6502becd5202a57a9e",
-    "src/dgfl/experiments/runner.py": "043010c194b98a5afec602080c399cddda1021b6c7bf701529a80bcc9a548c69",
+    "src/dgfl/experiments/runner.py": "8cdbf29f1b3a3a8f55fe8c84e1724f896b353064581745b02bef16dc0ae472df",
     "src/dgfl/experiments/telemetry.py": "3006c17e4d8eb5af2961e305f8d4f691f504e40598fff08e987126b9c4690f3b",
     "src/dgfl/experiments/tensorboard.py": "c6a1fd1dcc02555ccbd4b922403917575c716fd479291ddff9aacdfaafab273d",
     "src/dgfl/material_authenticity.py": "bc6118ab27e3b88468eebfe568fa09a3b7b3a03138b3e93346a9cd4e45b57581",
     "src/dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
-    "src/dgfl/services/control.py": "7c99697ac0a152664977644627b19bed5057248594d1cb4dcedf62653ba53650",
+    "src/dgfl/services/control.py": "d7e1c9be21361d569f328e078fcbaa3e236e498c7586f290467c72b11bdb6672",
     "src/dgfl/services/node.py": "29ee129a16ed600bd922ddb3deb4baf1ba578563ff938c1adf9d6c9b9ece8815",
     "src/dgfl/services/roles.py": "f97db0cd05dc3a765d5f8831322b01d7ffc580cfe2701a0f99f2e11979f757bc",
     "src/dgfl/services/telemetry.py": "1ad07e6e7d10c1f97e1bd2dc936ec3501b537f9371f7cc02a04cabd9a0428696",
@@ -72,12 +73,12 @@
       "declared_source_unchanged": true,
       "declared_files": 51,
       "declared_source_matches_itself": true,
-      "current_files": 54,
+      "current_files": 55,
       "changed": [
         {
           "path": "src/dgfl/cli.py",
           "frozen_sha256": "b7b5a1de3808cb28ae22b14b2a42870df1844db810a5aadbb662f72129b665cd",
-          "current_sha256": "67ff24caf63079886ec5fc4bbba25db37b205d686eb4fa1bc73819ac5bd9a025"
+          "current_sha256": "7dc7623cac44dd34f728e7fdff9f370bf9510bf800d375269ac57e7986b23bb0"
         },
         {
           "path": "src/dgfl/crypto/lego_registry.py",
@@ -92,12 +93,12 @@
         {
           "path": "src/dgfl/experiments/runner.py",
           "frozen_sha256": "5d7cf72784448868530e842e9db75b63baa4e6437645df98ea355121a26f98b7",
-          "current_sha256": "043010c194b98a5afec602080c399cddda1021b6c7bf701529a80bcc9a548c69"
+          "current_sha256": "8cdbf29f1b3a3a8f55fe8c84e1724f896b353064581745b02bef16dc0ae472df"
         },
         {
           "path": "src/dgfl/services/control.py",
           "frozen_sha256": "116800f32f79b7043d935cb41af8330e7447061c7b466fd4ea57f45083128393",
-          "current_sha256": "7c99697ac0a152664977644627b19bed5057248594d1cb4dcedf62653ba53650"
+          "current_sha256": "d7e1c9be21361d569f328e078fcbaa3e236e498c7586f290467c72b11bdb6672"
         },
         {
           "path": "src/dgfl/services/node.py",
@@ -129,6 +130,7 @@
         "scripts/verify_attack_architecture.py"
       ],
       "added_since_freeze": [
+        "src/dgfl/experiments/checkpoint.py",
         "src/dgfl/material_authenticity.py",
         "src/dgfl/tamper_playground.py",
         "src/dgfl/verification_materials.py",

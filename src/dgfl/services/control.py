@@ -290,6 +290,22 @@ class RunConfig(ArchivedRunConfig):
         return self
 
 
+class ResumeRequest(BaseModel):
+    """A resume request is bound to a checkpoint and made idempotent by this key.
+
+    Repeating the same key returns the execution already created for it, so a
+    double click or a retried request cannot start a second continuation.
+    """
+    model_config=ConfigDict(extra='forbid')
+    idempotency_key:str|None=Field(default=None,max_length=80)
+
+    @model_validator(mode='after')
+    def validate_key(self):
+        if self.idempotency_key is not None and re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',self.idempotency_key) is None:
+            raise ValueError('幂等标识只能包含字母、数字、下划线、点和连字符')
+        return self
+
+
 class DataConfig(BaseModel):
     model_config=ConfigDict(extra='forbid')
     dataset:Literal['mnist','cifar10']='mnist'
@@ -795,6 +811,31 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def monitor_detail(run_id:str):
         try: return manager.monitor_snapshot(run_id)
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    @app.get('/api/runs/{run_id}/checkpoints')
+    def checkpoints(run_id:str):
+        """Checkpoint summaries. Never returns the model vector or any material."""
+        try: return manager.checkpoints(run_id)
+        except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    @app.get('/api/runs/{run_id}/recovery')
+    def recovery(run_id:str):
+        """The latest checkpoint, whether the run can continue, and what blocks it."""
+        try: return manager.recovery_status(run_id)
+        except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    @app.post('/api/runs/{run_id}/resume')
+    def resume(run_id:str,request:ResumeRequest|None=None):
+        """Verify the checkpoint and node state, then create the continuating run.
+
+        The original execution is terminated and kept as history; the continuation
+        is a separate execution with its own key epoch. Repeating the same
+        idempotency key returns the execution already created for it.
+        """
+        body=request or ResumeRequest()
+        try: return manager.resume(run_id,idempotency_key=body.idempotency_key)
+        except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+        except ValueError as exc: raise HTTPException(409,str(exc)) from exc
 
     @app.post('/api/runs/{run_id}/stop')
     def stop(run_id:str):

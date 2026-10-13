@@ -27,6 +27,10 @@ const submitting = ref(false)
 const deploying = ref(false)
 const stopping = ref(false)
 const stopRequestedId = ref('')
+const recovery = ref(null)
+const recovering = ref(false)
+/** One idempotency key per selected run: repeating the request reuses the execution. */
+const resumeKeys = new Map()
 
 /** Full records keyed by run id — reused by the comparison view.
  *  Reactive so views that read from it re-render when a record arrives. */
@@ -57,6 +61,51 @@ function defaultRunId(activeRunId) {
     if (!latest || time > latestTime) { latest = run; latestTime = time }
   }
   return latest?.run_id || ''
+}
+
+async function releaseRecovery() {
+  // Leaving recovery material on screen after the selection changed would offer a
+  // resume action for a run that is no longer selected.
+  recovery.value = null
+}
+
+async function loadRecovery(runId, signal) {
+  if (!runId) { await releaseRecovery(); return }
+  try {
+    recovery.value = await api.getRecovery(runId, signal)
+  } catch (error) {
+    if (error.name === 'AbortError') return
+    // A missing recovery reading is reported, never rendered as "resumable".
+    recovery.value = { run_id: runId, resumable: false, checkpoint: null,
+      reason: `无法读取恢复信息：${errorText(error)}` }
+  }
+}
+
+async function resumeRun() {
+  const run = currentRun.value
+  if (!run || recovering.value) return
+  recovering.value = true
+  operationError.value = ''
+  notification.value = ''
+  actionController = new AbortController()
+  try {
+    // The key is stable per run, so a repeated click returns the execution that
+    // already exists instead of creating a second continuation.
+    if (!resumeKeys.has(run.run_id)) {
+      resumeKeys.set(run.run_id, `ui-${run.run_id}-${Date.now().toString(36)}`)
+    }
+    const created = await api.resumeRun(run.run_id, resumeKeys.get(run.run_id), actionController.signal)
+    notification.value = created.reused
+      ? `已存在该恢复执行：${created.run_id}`
+      : `已创建恢复执行 ${created.run_id}，从第 ${created.start_round} 轮继续。`
+    await refreshRuns(actionController.signal)
+    chooseRun(created.run_id)
+    await loadRecovery(created.run_id, actionController.signal)
+  } catch (error) {
+    if (error.name !== 'AbortError') operationError.value = `创建恢复执行失败：${errorText(error)}`
+  } finally {
+    recovering.value = false
+  }
 }
 
 async function refreshRuns(signal) {
@@ -93,6 +142,9 @@ async function poll() {
           loadingRun.value = false
           runError.value = ''
           if (previous && previous !== run.status) await refreshRuns(signal)
+          // Recovery is part of the selected run's state, so it is refreshed with
+          // it rather than fetched once and left to go stale.
+          if (run.status !== 'running') await loadRecovery(requestedId, signal)
         }
       } catch (error) {
         if (error.name === 'AbortError') throw error
@@ -139,6 +191,9 @@ function chooseRun(id) {
   currentRun.value = id ? runCache.get(id) || null : null
   loadingRun.value = Boolean(id)
   runError.value = ''
+  // Recovery state belongs to one run, so it is cleared with the selection and
+  // reloaded by the poll for the newly selected run.
+  void releaseRecovery()
 }
 
 function clearMessages() {
@@ -277,6 +332,8 @@ export const consoleStore = {
   runs, listError, selectedRunId, currentRun, loadingRun, runError,
   lastUpdated, operationError, notification,
   preparing, selectedDataset, submitting, deploying, stopping, stopRequestedId,
+  recovery, recovering,
   hasActiveRun, datasetReady, nodes, runCache,
-  start, stop, chooseRun, refreshRuns, refreshStatus, deployNodes, prepareData, startRun, stopRun, clearMessages,
+  start, stop, chooseRun, refreshRuns, refreshStatus, deployNodes, prepareData, startRun, stopRun,
+  resumeRun, loadRecovery, clearMessages,
 }

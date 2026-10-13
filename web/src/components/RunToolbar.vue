@@ -1,5 +1,6 @@
 <script setup>
 import LabIcon from './LabIcon.vue'
+import RecoveryPanel from './RecoveryPanel.vue'
 import StatusBadge from './StatusBadge.vue'
 import { consoleStore as store } from '../lib/store'
 import { isActiveRun, modeName, runStatusName } from '../lib/format'
@@ -47,4 +48,12 @@ import { runDatasetName } from '../lib/datasets.js'
       {{ store.stopping.value || store.stopRequestedId.value === store.currentRun.value?.run_id ? '等待停止…' : '停止任务' }}
     </button>
   </div>
+
+  <RecoveryPanel
+    v-if="store.currentRun.value && !isActiveRun(store.currentRun.value)"
+    :recovery="store.recovery.value"
+    :busy="store.recovering.value"
+    :disabled="!store.connected.value"
+    @resume="store.resumeRun()"
+  />
 </template>

@@ -85,6 +85,30 @@
 
 ## B. 检查点、轮次提交、恢复
 
+**实施状态（2026-10-13）**
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| 每轮检查点（全局轮次、量化全局模型及摘要、计划、版本） | 已完成 | `src/dgfl/experiments/checkpoint.py` |
+| 检查点链（每份记录前序摘要，可验链） | 已完成 | `checkpoint.verify_chain` |
+| 提交证书（哪些边缘确认、模型是否一致、所确认检查点摘要） | 已完成 | `checkpoint.commit_certificate` / `write_certificate` |
+| 轮次结束的明确转换顺序 | 已完成 | `runner._commit_round_checkpoint`（行写入 → 检查点落盘 → 证书 → 再发布） |
+| 文件写入：临时文件 + 完整性 + fsync（文件与父目录）+ 原子替换 | 已完成 | `checkpoint.write` / `write_certificate` |
+| 恢复字段（`logical_experiment_id`、`parent_run_id`、`start_round`、`execution_attempt_id`、`key_epoch`） | 已完成 | `runner.start` |
+| 恢复创建新执行、旧执行终止并隔离、幂等标识 | 已完成 | `runner.resume` |
+| 三个接口 | 已完成 | `GET /runs/{id}/checkpoints`、`GET /runs/{id}/recovery`、`POST /runs/{id}/resume` |
+| 看板"从第 N 轮继续" | 已完成 | `web/src/components/RecoveryPanel.vue` |
+| CLI `dgflow resume`（含 `--check`） | 已完成 | `src/dgfl/cli.py` |
+| 确定性恢复（连续训练与恢复后模型一致） | 已完成并有测试 | `tests/experiments/test_checkpoint_recovery.py` |
+
+**与方案的一处差异**：原方案把"完整全局轮次粒度"表述为第一版的简化选择。实际这是**唯一可行选项**：DKG 份额在 finalize 后即被拒绝并擦除（`protocol.py:191-192`、`:261-262`），重启的边缘无法复用旧周期（`roles.py:750`），因此恢复必然从轮次边界开始并在新周期上重跑 DKG。`resume_plan` 直接把这一点作为 `key_epoch_reason` 报告，而不是留给读者推断。
+
+**与方案的另一处差异**：方案建议新增 `checkpoint_schema_version`。实际改为**检查点自摘要**（`model_sha256` 与整份检查点摘要）：摘要在任何时候都可用，且不会随实现更新而失效；独立版本号需要与摘要同步维护，收益为负。版本信息仍然记录在检查点的 `versions` 字段中，覆盖实现、协议、记录格式、检查点格式与筛选版本。
+
+**已复用而非重建**：每个归属边缘原有的 `task-state.json`（`roles.py:999-1001`）继续承担它已有的职责——下一轮号与期望模型，并在下一轮 `begin` 时拒绝轮次/模型分叉（`roles.py:762-763`）。新增的检查点是**主控侧**的持久化全局状态与提交证书，两者互补而不是重复。
+
+**尚未完成（本阶段后续）**：转换点的崩溃注入测试（在每个转换点强制结束进程，验证不出现"界面显示完成但模型未保存"、重复发布或不同节点接受不同模型）；提交证书中边缘签名目前复用既有的签名的确认行，尚未独立签名检查点摘要，需在第 9 阶段随完整证明关系规格一并设计。
+
 **现状（已核实）**：不存在完整轮次检查点与恢复。`runner.py:823` 的 `epoch` 在轮循环之外；`finish` 只写目标态 `task_state`（`roles.py:999-1001`）；全仓唯一 `fsync` 在 `evidence.py:156`，与角色状态无关。
 
 **已有可复用基础（勿重建）**：每个归属边缘已有 `task-state.json`，在 `finish` 中持久化 `{next_round, reference, mode, policy, status}`（`roles.py:999-1001`），并在下一轮 `begin` 校验轮次连续、模型一致、模式一致，不一致即抛 `'round/model fork rejected'`（`roles.py:762-763`）。防分叉的雏形已存在。

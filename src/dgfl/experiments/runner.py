@@ -59,6 +59,7 @@ from dgfl.validation.policy import (
     screening_settings,
     validate_batch_configuration,
 )
+from dgfl.versioning import version_declaration
 
 
 def utc(): return datetime.now(UTC).isoformat()
@@ -464,14 +465,102 @@ class RunManager:
     def _failure_detail(self,exc):
         return f'{type(exc).__name__}: {exc}'.replace(str(self.runtime.parent),'[workspace]')[:600]
 
+    def _round_plan(self,cfg,policy,batch_size,topology,descriptor):
+        """The immutable per-round plan a checkpoint records.
+
+        These are the values a resume has to keep fixed for the continuation to be
+        the same experiment: how the data was split, the seed derivation, the fixed
+        batches and client ownership, the screening policy, and the thresholds.
+        """
+        members=client_members(topology['client_count'])
+        return {'model_descriptor':descriptor,
+                'dataset':cfg.get('dataset'),
+                'grid':cfg.get('grid'),
+                'seed':cfg.get('seed'),
+                'local_epochs':cfg.get('local_epochs'),
+                'batch_size':batch_size,
+                'batch_strategy':policy.get('batch_strategy'),
+                'client_count':topology['client_count'],
+                'client_authorities':dict(topology['client_authorities']),
+                'batches':(fixed_batches(len(members),batch_size=batch_size)
+                           if policy.get('batch_strategy')=='fixed' else []),
+                'screening':{name:policy[name] for name in
+                             ('min_cosine','max_norm_squared','max_norm_ratio','min_norm_ratio',
+                              'batch_strategy') if name in policy},
+                'authority_threshold':topology['authority_threshold'],
+                'aggregator_threshold':topology['aggregator_threshold'],
+                'mode':cfg.get('mode'),
+                'bits':cfg.get('bits'),'scale':cfg.get('scale'),
+                'proof_suite':policy.get('proof_suite'),
+                'proof_crs_hash':policy.get('proof_crs_hash')}
+
+    def _commit_round_checkpoint(self,record,round_id,reference,ctx,manifest_hash,epoch,
+                                 confirmation_rows,authority_threshold,policy,batch_size,
+                                 topology,descriptor):
+        """Persist the round's checkpoint and its commit certificate.
+
+        Called with the run lock held, after the round's row is saved and before
+        the round is announced. A failure here is reported on the record rather
+        than raised: the round's cryptographic outcome is already fixed, and the
+        run should continue while an operator can see that the checkpoint is
+        missing. A missing checkpoint means the run is not resumable, which
+        `resume_plan` reports instead of guessing.
+        """
+        from dgfl.experiments import checkpoint as cp
+        try:
+            results=self.runtime/'results'
+            previous=cp.latest(results,record['run_id'])
+            plan=self._round_plan(record['config'],policy,batch_size,topology,descriptor)
+            document=cp.build(round_id=round_id,reference=reference,context=ctx,
+                              config=record['config'],plan=plan,key_epoch=epoch,
+                              authorization_manifest_hash=manifest_hash,previous=previous)
+            written=cp.write(cp.checkpoint_path(results,record['run_id'],round_id),document)
+            certificate=cp.commit_certificate(round_id=round_id,
+                                              checkpoint_sha256=written['sha256'],
+                                              confirmations=confirmation_rows,
+                                              threshold=int(authority_threshold))
+            cp.write_certificate(results,record['run_id'],certificate)
+            record.setdefault('checkpoints',[]).append(
+                {'round':round_id,'sha256':written['sha256'],'bytes':written['bytes'],
+                 'model_hash':document['model_hash'],
+                 'context_hash':document['context_hash'],
+                 'authorization_manifest_hash':manifest_hash,
+                 'previous_checkpoint_sha256':document['previous_checkpoint_sha256'],
+                 'directory_fsynced':written['directory_fsynced']})
+            record['evidence'].setdefault('checkpoints',{})['latest_round']=round_id
+            self._save(record)
+            return written
+        except (OSError,ValueError) as exc:
+            detail=self._failure_detail(exc)
+            record.setdefault('evidence',{}).setdefault('checkpoints',{})['error']=detail
+            record['events'].append({'time':utc(),'stage':'checkpoint',
+                                     'message':f'第 {round_id} 轮检查点未写入：{detail}；'
+                                               '该执行不能从本轮恢复', 'round':round_id})
+            try:
+                self._save(record)
+            except OSError:
+                # The run record itself is unwritable, so the report of the missing
+                # checkpoint cannot be persisted either. The round outcome stands.
+                return None
+            return None
+
     def _emit(self,record,stage,message,round_id=0):
         with self.lock:
             record['events'].append({'time':utc(),'stage':stage,'message':message,'round':round_id})
             self._save(record)
 
-    def start(self,config):
+    def start(self,config,*,resume_from=None,parent_run_id=None,logical_experiment_id=None):
+        """Create and queue one execution.
+
+        `resume_from` continues a previous execution from a checkpoint. It carries
+        the checkpoint's global model and the round to start at, which are recorded
+        on the new execution rather than re-derived, so the continuation provably
+        begins from the checkpoint a reader can inspect.
+        """
         config={key:value for key,value in config.items()
                 if key not in ('model_name','model_descriptor','bits','scale') or value is not None}
+        if resume_from:
+            config['resume_from']=dict(resume_from)
         attack_settings(config)
         config.setdefault('proof_suite','lego_norm_v1')
         if config['proof_suite']!='lego_norm_v1':
@@ -577,10 +666,25 @@ class RunManager:
                         'execution':{'requested':config.get('execution','auto'),'resolved':execution,'rpc_workers':workers},
                         'cloud_strategy':{'requested':config['cloud_strategy'],'resolved':None},
                         'wire_resources':resource_checks,
+                        'versions':version_declaration(),
                         'proof_settings':{name:config.get(name,default) for name,default in
                                           (('proof_suite','lego_norm_v1'),('verification','deterministic'),
                                            ('verification_workers',1),('verification_threads',2),('proof_block_size',128))},
                         'implementation':implementation_evidence()}}
+            # Execution identity. A resumed run is a new execution of the same
+            # logical experiment: it keeps the logical id, names the execution it
+            # continues, and gets a fresh key epoch of its own.
+            execution_attempt_id=uuid.uuid4().hex
+            record['logical_experiment_id']=logical_experiment_id or run_id
+            record['parent_run_id']=parent_run_id
+            record['execution_attempt_id']=execution_attempt_id
+            if resume_from:
+                record['start_round']=int(resume_from['start_round'])
+                record['resumed_from']={'parent_run_id':parent_run_id,
+                                        'checkpoint_round':int(resume_from['checkpoint_round']),
+                                        'checkpoint_sha256':resume_from['checkpoint_sha256'],
+                                        'start_round':int(resume_from['start_round']),
+                                        'idempotency_key':resume_from.get('idempotency_key')}
             if descriptor is not None: record['evidence']['model_descriptor']=descriptor
             record['evidence']['node_snapshot']=frozen_nodes(cluster,config)
             if crs_evidence is not None:
@@ -611,6 +715,106 @@ class RunManager:
                 raise ValueError(record['error']) from exc
             return {'run_id':run_id,'status':'queued'}
 
+    def checkpoints(self,run_id):
+        """Public summaries of a run's checkpoints, without any model vector."""
+        from dgfl.experiments import checkpoint as cp
+        with self.lock:
+            if run_id not in self.records: raise KeyError(run_id)
+        summaries=cp.summaries(self.runtime/'results',run_id)
+        for entry in summaries:
+            entry.pop('path',None)
+        return {'run_id':run_id,'checkpoints':summaries,
+                'latest_round':(summaries[-1]['round'] if summaries else None)}
+
+    def recovery_status(self,run_id):
+        """Whether a run can be resumed, from where, and what blocks it.
+
+        `resume_plan` reports a missing checkpoint as a missing checkpoint rather
+        than inferring resumability from a stored accuracy or model digest.
+        """
+        from dgfl.experiments import checkpoint as cp
+        with self.lock:
+            if run_id not in self.records: raise KeyError(run_id)
+            record=self.records[run_id]
+            running=self.active is not None
+        plan=cp.resume_plan(self.runtime/'results',run_id,config=dict(record.get('config') or {}))
+        plan.pop('model',None)
+        plan['run_id']=run_id
+        plan['status']=record.get('status')
+        plan['resumed_by']=[other['run_id'] for other in self.records.values()
+                            if other.get('parent_run_id')==run_id]
+        if plan['resumable'] and running:
+            plan['resumable']=False
+            plan['reason']='已有任务正在运行；请先等待其结束或停止，再创建恢复执行'
+        plan['key_epoch']='新执行使用新的密钥周期与新的密码随机数'
+        plan['late_responses']='旧执行被明确终止并隔离；其迟到响应因上下文摘要不同不会被新执行接受'
+        return plan
+
+    def resume(self,run_id,*,idempotency_key=None):
+        """Create a new execution that continues `run_id` from its last checkpoint.
+
+        The original execution is terminated and kept as history; the continuation
+        is a separate execution of the same logical experiment with its own key
+        epoch. Repeating the same request returns the execution already created for
+        that idempotency key instead of starting a second one.
+        """
+        from dgfl.experiments import checkpoint as cp
+        with self.lock:
+            if run_id not in self.records: raise KeyError(run_id)
+            parent=self.records[run_id]
+            # Idempotency is checked before the busy check: a repeated request for a
+            # continuation that already exists returns it, including while that
+            # continuation is still running. Otherwise a retried or double-clicked
+            # request would be refused for the very execution it created, and the
+            # caller would have no way to learn the run it is waiting for.
+            if idempotency_key:
+                for other in self.records.values():
+                    resumed=(other.get('resumed_from') or {})
+                    if (other.get('parent_run_id')==run_id
+                            and resumed.get('idempotency_key')==idempotency_key
+                            and other.get('status') in ('queued','running','stopping','completed',
+                                                        'failed','aborted')):
+                        return {'run_id':other['run_id'],'status':other['status'],
+                                'reused':True,'parent_run_id':run_id,
+                                'checkpoint_round':resumed.get('checkpoint_round'),
+                                'start_round':resumed.get('start_round')}
+            if self.active is not None:
+                raise ValueError('已有任务正在运行；请等待其结束或停止后再创建恢复执行')
+            plan=cp.resume_plan(self.runtime/'results',run_id,config=dict(parent.get('config') or {}))
+            if not plan['resumable']:
+                raise ValueError(plan.get('reason') or '该执行不可恢复')
+            if parent.get('status') in ('queued','running','stopping'):
+                # Terminate the old execution so its late responses cannot enter the
+                # new one. It stays in the record list as history.
+                self.stop_event.set()
+                parent['status']='aborted'
+                parent['error']='已被恢复执行取代；旧执行明确终止并隔离'
+                parent.setdefault('events',[]).append(
+                    {'time':utc(),'stage':'superseded',
+                     'message':'创建恢复执行，旧执行终止并隔离','round':0})
+                self._save(parent)
+            checkpoint={'run_id':run_id,'start_round':plan['start_round'],'model':plan['model'],
+                        'checkpoint_round':plan['checkpoint']['round'],
+                        'checkpoint_sha256':plan['checkpoint']['sha256'],
+                        'idempotency_key':idempotency_key}
+            config={key:value for key,value in parent.get('config',{}).items()
+                    if key not in ('resume_from',)}
+            config['rounds']=max(int(parent.get('config',{}).get('rounds',1)),plan['start_round'])
+        created=self.start(config,resume_from=checkpoint,parent_run_id=run_id,
+                           logical_experiment_id=parent.get('logical_experiment_id') or run_id)
+        with self.lock:
+            created_record=self.records[created['run_id']]
+            created_record['resumed_from']=dict(created_record.get('resumed_from') or {},
+                                                idempotency_key=idempotency_key)
+            self._save(created_record)
+        return {'run_id':created['run_id'],'status':created['status'],'reused':False,
+                'parent_run_id':run_id,'logical_experiment_id':
+                    self.records[created['run_id']].get('logical_experiment_id'),
+                'checkpoint_round':plan['checkpoint']['round'],
+                'checkpoint_sha256':plan['checkpoint']['sha256'],
+                'start_round':plan['start_round'],
+                'key_epoch_rotation_required':True}
+
     def stop(self,run_id):
         with self.lock:
             if self.active!=run_id: raise ValueError('该任务未在运行')
@@ -625,6 +829,9 @@ class RunManager:
         gpu_device=None; gpu_before=None
         monitor=None; node_monitor=None; monitoring_stage='construct'
         outcome='completed'; failure=None
+        # A resume carries the checkpoint's model and starting round in the record
+        # itself, so the loop below does not re-derive either.
+        resume_from=cfg.get('resume_from')
 
         def monitoring_failure(stage,exc):
             # Sensor, callback and optional log failures are observability
@@ -863,11 +1070,46 @@ class RunManager:
             # later rounds of the same task-level key epoch, so it is carried
             # across rounds rather than recomputed per round.
             dkg_transcript_hash=None
-            for round_id in range(1,cfg['rounds']+1):
+            # --- recovery -------------------------------------------------------
+            # A resumed execution starts from the global round a checkpoint
+            # records. The model is read from that checkpoint rather than
+            # recomputed, and the key epoch above is a NEW one: DKG shares are
+            # erased at finalize and a restarted edge cannot reuse an epoch, so
+            # continuing the old epoch is not possible. This is a protocol
+            # constraint, not a simplification.
+            start_round=1; resumed_from=None
+            if resume_from:
+                start_round=int(resume_from['start_round'])
+                reference=list(resume_from['model'])
+                resumed_from={'run_id':resume_from['run_id'],
+                              'checkpoint_round':int(resume_from['checkpoint_round']),
+                              'checkpoint_sha256':resume_from['checkpoint_sha256'],
+                              'parent_run_id':resume_from.get('parent_run_id'),
+                              'start_round':start_round,
+                              # Preserved so a repeated request still matches this
+                              # execution after the run thread has rewritten it.
+                              'idempotency_key':resume_from.get('idempotency_key'),
+                              'key_epoch_rotation_required':True}
+                record['resumed_from']=deepcopy(resumed_from)
+                record['evidence']['recovery']={
+                    'parent_run_id':resumed_from.get('parent_run_id'),
+                    'checkpoint_round':resumed_from['checkpoint_round'],
+                    'checkpoint_sha256':resumed_from['checkpoint_sha256'],
+                    'start_round':start_round,
+                    'model_hash':b.digest(reference),
+                    'key_epoch_rotation':('新密钥周期；DKG 份额在 finalize 后即被擦除，恢复必然重跑仪式'),
+                    'late_responses':'旧执行的迟到响应因其上下文摘要不同而不会被本执行接受'}
+                event('recovery',f'从第 {resumed_from["checkpoint_round"]} 轮检查点恢复，'
+                                 f'继续第 {start_round} 轮；新密钥周期',start_round)
+                self._save(record)
+            for round_id in range(start_round,cfg['rounds']+1):
                 self._check_stop(); record['current_round']=round_id; round_start=time.perf_counter(); round_cpu_start=time.process_time(); bytes_before=rpc.bytes_sent
                 record['current_validations']=[]; record['current_validations_round']=round_id
                 record['current_cloud_selection']=None
                 times={}
+                # Filled in by the confirmation step on a secure round; a plain
+                # round has nothing to confirm and commits an empty list.
+                confirmation_rows=[]
                 ctx={'task_id':record['run_id'],'round_id':round_id,'key_epoch':epoch,'model_hash':b.digest(reference),
                      'bits':bits,'scale':scale,'dimension':dimension,'dataset':cfg['dataset'],**topology}
                 if descriptor is not None: ctx['model_descriptor']=descriptor
@@ -1249,6 +1491,17 @@ class RunManager:
                         row['proof_generation_metrics'][cid]=timing
                 with self.lock:
                     record['rounds'].append(row); self._save(record)
+                # The round's outcome is complete in memory at this point. Commit
+                # it durably before announcing it, so "the interface says complete"
+                # and "the checkpoint is on disk" are the same fact: a process that
+                # dies after this line leaves a resumable run, and one that dies
+                # before it leaves the previous checkpoint untouched.
+                with self.lock:
+                    self._commit_round_checkpoint(
+                        record,round_id,reference,ctx,authorized_manifest_hash,epoch,
+                        confirmation_rows if cfg['mode']!='plain' else [],
+                        topology['authority_threshold'],
+                        policy,batch_size,topology,descriptor)
                 event('completed_round',f'第 {round_id} 轮完成，测试准确率 {metrics["accuracy"]:.2%}',round_id)
                 self._sync_tensorboard(record)
         except InterruptedError as exc:
