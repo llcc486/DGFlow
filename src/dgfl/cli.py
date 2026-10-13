@@ -1,4 +1,4 @@
-"""Command-line entry points for the local and three-machine demonstration."""
+"""Command-line entry points for local and multi-machine deployment."""
 from __future__ import annotations
 
 import argparse
@@ -22,6 +22,7 @@ from dgfl.deployment import (
     runtime_lifecycle_lock,
     start_nodes,
     stop_nodes,
+    validate_machine,
 )
 from dgfl.topology import TOPOLOGY_FIELDS, validate_topology
 
@@ -41,7 +42,9 @@ def _parser():
         if name == 'node':
             command.add_argument('--node', required=True)
         if name in ('start', 'stop', 'demo'):
-            command.add_argument('--machine', choices=('local', 'A', 'B', 'C'))
+            command.add_argument('--machine', metavar='NAME',
+                                 type=lambda value: value if value == 'local' else validate_machine(value),
+                                 help='local or the machine group in the deployment bundle (A, B, ..., AA, ...)')
         if name in ('serve', 'demo'):
             command.add_argument('--host', default='127.0.0.1')
             command.add_argument('--port', type=int, default=8765)
@@ -49,6 +52,26 @@ def _parser():
             command.add_argument('--data-dir', type=Path, default=DEFAULT_DATA)
         if name == 'bundle':
             command.add_argument('--output', required=True, type=Path)
+    verify = commands.add_parser('verify-submission',
+                                 help='Independently re-run the published checks for one recorded submission')
+    verify.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    verify.add_argument('--run', required=True, help='Run id whose material should be verified')
+    verify.add_argument('--client', help='Verify only this client; default is every client in the round')
+    verify.add_argument('--round', type=int, help='Round to verify; default is the highest recorded round')
+    verify.add_argument('--materials-dir', type=Path,
+                        help='Directory holding round-<n>.bin material; defaults to the run directory')
+    verify.add_argument('--json', action='store_true', help='Emit the full result as JSON')
+    tamper = commands.add_parser('tamper-check',
+                                 help='Isolated tamper playground: real crypto, four forgeries, real refusal reasons')
+    tamper.add_argument('--mutations', nargs='+', choices=('norm', 'ciphertext', 'reference', 'replay'),
+                        help='Mutations to run; default is all four')
+    tamper.add_argument('--dimension', type=int, default=4, help='Playground model dimension (default 4)')
+    tamper.add_argument('--bits', type=int, default=4, help='Playground quantization bits (default 4)')
+    tamper.add_argument('--suite', choices=('legacy', 'lego_norm_v1'), default='legacy',
+                        help='Proof suite to exercise (default legacy; Lego needs an installed CRS)')
+    tamper.add_argument('--verify-setup', type=Path,
+                        help='Runtime holding the installed CRS, required for --suite lego_norm_v1')
+    tamper.add_argument('--json', action='store_true', help='Emit the full report as JSON')
     prepare = commands.add_parser('prepare-data', help='Explicitly download and verify the selected dataset')
     prepare.add_argument('--dataset', choices=('mnist', 'cifar10'), default='mnist')
     prepare.add_argument('--data-dir', type=Path)
@@ -107,7 +130,8 @@ def _serve(runtime, host, port, *, _before_serve=None):
         with runtime_lifecycle_lock(runtime):
             if _before_serve is not None:
                 _before_serve()
-            load_cluster(runtime)
+            if (runtime/'cluster.json').exists():
+                load_cluster(runtime)
             process = psutil.Process(os.getpid())
             record = {'pid':process.pid, 'node':'control', 'create_time':process.create_time(),
                       'command':process.cmdline(), 'executable':process.exe(), 'cwd':process.cwd(), 'runtime':str(runtime)}
@@ -125,6 +149,127 @@ def _serve(runtime, host, port, *, _before_serve=None):
                 # Never remove a marker replaced by a different controller.
                 if observed == record:
                     marker.unlink(missing_ok=True)
+
+
+def _verify_submission(arguments):
+    """Re-run the published checks from stored public material.
+
+    This is deliberately independent of the control service and of the UI: it
+    reads the recorded public material, re-executes the same public verification
+    code, and prints each relation. Nothing here trusts a stored boolean.
+    """
+    from dgfl import verification_materials as vm
+
+    runtime = Path(arguments.runtime).resolve()
+    material_root = (arguments.materials_dir or runtime/'results'/arguments.run/vm.SUBDIRECTORY)
+    rounds = sorted((path for path in material_root.glob(vm.MATERIAL_GLOB)
+                     if vm.parse_round_number(path) is not None),
+                    key=vm.parse_round_number)
+    if not rounds:
+        raise ValueError(
+            f'no verification material found under {material_root}；'
+            f'该运行没有开启材料落盘（{vm.ENVIRONMENT_FLAG}=1 时由归属边缘写出）')
+    if arguments.round is not None:
+        wanted = [path for path in rounds if vm.parse_round_number(path) == arguments.round]
+        if not wanted:
+            raise ValueError(f'round {arguments.round} has no stored material under {material_root}')
+        rounds = wanted
+    path = rounds[-1]
+    material = vm.load(path)
+    # The file name is not authoritative; refuse a document whose own round
+    # disagrees with the name it was stored under.
+    if vm.parse_round_number(path) != material['round']:
+        raise ValueError(f'材料文件名的轮次与其内容不一致：{path}')
+
+    parameters_factory = None
+    if material['suite'] == 'lego_norm_v1':
+        from dgfl.crypto.lego_registry import Registry, available, public_parameters
+        if not available():
+            raise ValueError('当前原生扩展缺少 Lego 能力，无法独立复核该提交')
+        registry = Registry(runtime)
+        ctx = material['context']
+        # The verifier takes its parameters from the installed trusted setup, not
+        # from the material file: a materials document must not be able to
+        # substitute its own verification key.
+        envelope = registry.public_job(ctx['proof_crs_hash'], ctx['dimension'], ctx['bits'])
+
+        def parameters_factory(*, crs_hash, dimension, bits, _envelope=envelope):
+            if crs_hash != ctx['proof_crs_hash'] or dimension != ctx['dimension'] or bits != ctx['bits']:
+                raise ValueError('材料携带的电路参数与上下文不一致')
+            return public_parameters(_envelope)
+
+    clients = [arguments.client] if arguments.client else sorted(material['clients'])
+    results = []
+    for client_id in clients:
+        try:
+            results.append(vm.verify_client(material, client_id, parameters_factory=parameters_factory))
+        except ValueError as exc:
+            results.append({'client_id': client_id, 'suite': material['suite'],
+                            'proof_valid': False, 'error': str(exc), 'relations': []})
+
+    failed = [item for item in results if not item.get('proof_valid')]
+    if arguments.json:
+        print(json.dumps({'material': str(path), 'round': material['round'],
+                          'suite': material['suite'], 'clients': results}, ensure_ascii=False, indent=2))
+    else:
+        print(f'材料文件：{path}')
+        print(f'轮次：{material["round"]}　证明方案：{material["suite"]}　'
+              f'参考模型范数平方：{sum(z*z for z in material["reference"])}')
+        print(f'材料范围：{material.get("scope", "未声明")}')
+        for item in results:
+            verdict = '通过' if item.get('proof_valid') else '未通过'
+            print(f'\n[{verdict}] {item["client_id"]}')
+            if item.get('error'):
+                print(f'  拒绝原因：{item["error"]}')
+            for relation in item.get('relations', []):
+                mark = '✓' if relation.get('ok') else '✗'
+                detail = f'（{relation["detail"]}）' if relation.get('detail') else ''
+                print(f'  {mark} {relation["relation"]}{detail}')
+            if item.get('inner_product') is not None:
+                print(f'  授权内积 = {item["inner_product"]}　余弦 = {item["cosine"]:.9f}')
+        print(f'\n合计 {len(results)} 个客户端：通过 {len(results)-len(failed)}，未通过 {len(failed)}')
+    return {'results': results, 'failed': len(failed), 'material': str(path)}
+
+
+def _tamper_check(arguments):
+    """Run the isolated tamper playground; it never touches a live task."""
+    from dgfl import tamper_playground as tp
+
+    if not 1 <= arguments.dimension <= 64:
+        raise ValueError('playground dimension must be between 1 and 64')
+    if not 2 <= arguments.bits <= 16:
+        raise ValueError('playground bits must be between 2 and 16')
+    parameters = None
+    prover = None
+    if arguments.suite == 'lego_norm_v1':
+        if arguments.verify_setup is None:
+            raise ValueError('--suite lego_norm_v1 需要 --verify-setup 指向装有 CRS 的运行目录')
+        from dgfl.crypto.lego_registry import Registry, available
+        if not available():
+            raise ValueError('当前原生扩展缺少 Lego 能力，无法运行该套件的靶场')
+        registry = Registry(Path(arguments.verify_setup).resolve())
+        manifest = None
+        for candidate in registry.list():
+            if candidate.get('dimension') == arguments.dimension and candidate.get('bits') == arguments.bits:
+                manifest = candidate
+                break
+        if manifest is None:
+            raise ValueError(f'未找到 {arguments.dimension} 维 / {arguments.bits} 位的已安装 CRS')
+        prover, parameters, _meta = registry.load_prover(manifest['crs_hash'], arguments.dimension,
+                                                         arguments.bits, workers=1)
+
+    report = tp.run(mutations=tuple(arguments.mutations or tp.MUTATIONS),
+                    dimension=arguments.dimension, bits=arguments.bits,
+                    suite=arguments.suite, parameters=parameters, prover=prover)
+    if arguments.json:
+        print(json.dumps({'scope': report['scope'], 'results': report['results']},
+                         ensure_ascii=False, indent=2))
+    else:
+        print(tp.render(report))
+    refused = [entry for entry in report['results'] if entry['mutation'] != 'baseline' and entry['refused']]
+    baseline_ok = not report['results'][0]['refused']
+    total = len(report['results']) - 1
+    return 0 if baseline_ok and len(refused) == total else 1
 
 
 def main(argv=None):
@@ -166,6 +311,11 @@ def main(argv=None):
                 print(json.dumps(start_nodes(runtime, arguments.machine, **topology), indent=2))
             _serve(runtime, arguments.host, arguments.port, _before_serve=prepare_demo)
             return 0
+        elif command == 'verify-submission':
+            result = _verify_submission(arguments)
+            return 1 if result['failed'] else 0
+        elif command == 'tamper-check':
+            return _tamper_check(arguments)
         elif command == 'prepare-data':
             from dgfl.transport.security import atomic_json
             data_dir = arguments.data_dir or DEFAULT_DATA.parent/arguments.dataset

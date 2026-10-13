@@ -38,9 +38,12 @@ test('paper topology keeps one owner per client, edge collaboration and edge-clo
     assert.ok(scene.edges.every(edge=>!(roles.get(edge.a)==='aggregator' && roles.get(edge.b)==='aggregator')))
     assert.equal(new Set(scene.nodes.map(node=>JSON.stringify(node.position))).size,scene.nodes.length)
     assert.ok(scene.nodes.every(node=>Number.isFinite(node.position[0]) && Math.hypot(node.position[0],node.position[2])<scene.radius))
-    const altitude=role=>scene.nodes.filter(node=>node.role===role).map(node=>node.position[1])
-    assert.ok(Math.max(...altitude('client'))<Math.min(...altitude('authority')))
-    assert.ok(Math.max(...altitude('authority'))<Math.min(...altitude('aggregator')))
+    assert.equal(new Set(scene.nodes.map(node=>node.position[1])).size,1)
+    for (let i=0;i<scene.nodes.length;i+=1) for (const other of scene.nodes.slice(i+1)) {
+      const node=scene.nodes[i]
+      assert.ok(Math.hypot(node.position[0]-other.position[0],node.position[2]-other.position[2])>=1,
+        `${node.id} and ${other.id} must not overlap on the platform`)
+    }
   }
 })
 

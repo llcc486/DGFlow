@@ -1,11 +1,10 @@
 /** Thin client for the DGFlow control-plane JSON API. */
-import { deploymentConfig, deploymentConfigError } from './deployment.js'
+import { deploymentPayload, deploymentPayloadError } from './deployment.js'
 
 function deploymentRequest(action, configuration, signal) {
-  const config = deploymentConfig(configuration)
-  const error = deploymentConfigError(config)
+  const error = deploymentPayloadError(configuration)
   if (error) throw new Error(error)
-  return request(`/deployment/${action}`, { method: 'POST', body: JSON.stringify(config), signal })
+  return request(`/deployment/${action}`, { method: 'POST', body: JSON.stringify(deploymentPayload(configuration)), signal })
 }
 
 function describeError(response, data) {
@@ -44,14 +43,14 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  prepareDeployment: (configuration, signal) => deploymentRequest('plans', configuration, signal),
   status: signal => request('/status', { signal }),
   tensorBoardStatus: signal => request('/tensorboard/status', { signal }),
   syncTensorBoard: (id, signal) => request(`/runs/${encodeURIComponent(id)}/tensorboard`, { method: 'POST', signal }),
   prepareData: (dataset = 'mnist', signal) => request('/data/prepare', { method: 'POST', body: JSON.stringify({ dataset }), signal }),
   prepareCompute: signal => request('/compute/prepare', { method: 'POST', body: '{}', signal }),
   initializeDeployment: (configuration, signal) => deploymentRequest('init', configuration, signal),
-  startDeployment: (configuration, signal) => deploymentRequest('start', configuration, signal),
-  listRuns: signal => request('/runs', { signal }),
+  startDeployment: (configuration, signal) => deploymentRequest('start', configuration, signal),  listRuns: signal => request('/runs', { signal }),
   getRun: (id, signal) => request(`/runs/${encodeURIComponent(id)}`, { signal }),
   getMonitor: (id, signal) => request(`/runs/${encodeURIComponent(id)}/monitor`, { signal }),
   startRun: (config, signal) => request('/runs', { method: 'POST', body: JSON.stringify(config), signal }),

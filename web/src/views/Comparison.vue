@@ -9,12 +9,36 @@ import { consoleStore as store } from '../lib/store'
 import { api } from '../lib/api'
 import { createComparison } from '../lib/comparison.js'
 import { bestAccuracy } from '../lib/runRecords.js'
-import { attackName, bytes, date, modeName, percent, seconds } from '../lib/format'
+import { attackName, bytes, date, modeName, percent, proofSuiteName, proofSuiteShort, seconds } from '../lib/format'
 import { datasetName, runDatasetName } from '../lib/datasets.js'
 
 const emit = defineEmits(['navigate'])
 const COLORS = ['#1f6fb2', '#f5a623', '#2f9e5f', '#8e6bbf']
 const MAX = 4
+
+/**
+ * Per-round cryptographic cost, aggregated over completed rounds.
+ *
+ * Proof/summary totals are call sums across clients and are NOT wall clock, so
+ * they are labelled as accumulated call time. A plain baseline ran no
+ * cryptography at all and must read as "no proof", never as zero seconds.
+ */
+function roundCryptoTotal(record, key) {
+  const rounds = record?.rounds || []
+  const values = rounds.map(row => row?.stage_times?.[key]).filter(value => typeof value === 'number' && Number.isFinite(value))
+  return values.length ? values.reduce((sum, value) => sum + value, 0) : null
+}
+function cryptoCost(record) {
+  const mode = record?.config?.mode || record?.mode
+  if (mode === 'plain') return '无密码计算'
+  const proof = roundCryptoTotal(record, 'proof_wall_sum_s')
+  const encryption = roundCryptoTotal(record, 'encryption_wall_sum_s')
+  const parts = []
+  if (encryption !== null) parts.push(`加密 ${seconds(encryption)}`)
+  if (proof !== null) parts.push(`证明 ${seconds(proof)}`)
+  if (!parts.length) return '未记录'
+  return `${parts.join(' · ')}（各轮客户端调用累计）`
+}
 
 const { selected, loading, failures, eligible, records, dataset, canSelect, toggle } = createComparison(store, api.getRun, MAX)
 const waiting = computed(() => selected.value.some(id => loading.value[id]))
@@ -165,7 +189,7 @@ const series = computed(() =>
             <table class="nb-table">
               <thead>
                 <tr>
-                  <th>实验</th><th>数据集 / 网格</th><th>种子</th><th>全局 / 本地轮数</th><th>数据分布</th>
+                  <th>实验</th><th>数据集 / 网格</th><th>证明方案</th><th>密码学代价</th><th>种子</th><th>全局 / 本地轮数</th><th>数据分布</th>
                   <th>异常场景</th><th>训练 / 测试样本</th><th>客户端 / 边缘 / 云</th><th>门限 ς / ϵ</th><th>后端</th>
                 </tr>
               </thead>
@@ -173,6 +197,10 @@ const series = computed(() =>
                 <tr v-for="record in records" :key="record.run_id">
                   <td class="mono">{{ record.run_id.slice(0, 10) }}</td>
                   <td>{{ runDatasetName(record) }} / {{ record.config?.grid ?? 8 }}×{{ record.config?.grid ?? 8 }}</td>
+                  <td class="mono" :title="proofSuiteName(record.config?.proof_suite)">{{ proofSuiteShort(record.config?.proof_suite) }}</td>
+                  <!-- Cryptographic cost, kept separate from training cost: a
+                       plain record has no proof to report and must not read 0 s. -->
+                  <td class="mono">{{ cryptoCost(record) }}</td>
                   <td class="mono">{{ record.config?.seed ?? '—' }}</td>
                   <td class="mono">{{ record.config?.rounds ?? '—' }} / {{ record.config?.local_epochs ?? '—' }}</td>
                   <td>{{ record.config?.non_iid ? 'Non-IID' : 'IID' }}</td>
@@ -185,6 +213,11 @@ const series = computed(() =>
               </tbody>
             </table>
           </div>
+          <p class="nb-note" style="padding:0 18px 14px">
+            「证明方案」取自该实验自身记录。历史记录没有保存该字段，因此显示为「未记录」；不同证明方案的耗时不可直接比较。
+            「密码学代价」是各轮客户端加密与证明调用的累计时间，不是墙钟时间，也不与「总耗时」相加。
+            明文基线不含任何密码计算，显示为「无密码计算」而不是 0 秒；准确率相同不代表两种策略等价，区别在于谁能看到个体模型。
+          </p>
         </section>
       </div>
     </div>

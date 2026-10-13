@@ -37,7 +37,7 @@ export function compactNodeId(node) {
   return number ? `${prefix}${number.padStart(2, '0')}` : String(node.id).slice(0, 12)
 }
 
-/** Three elevation layers and ownership clusters follow client / edge / cloud roles. Edges describe protocol cooperation,
+/** Ground-level ownership clusters and a separate cloud area share one platform. Edges describe protocol cooperation,
  * not observed traffic, latency, or the presence of a live connection. */
 export function topologyScene(nodes, preview = false, connected = true) {
   const groups = { client: [], authority: [], aggregator: [], other: [] }
@@ -52,29 +52,42 @@ export function topologyScene(nodes, preview = false, connected = true) {
   const owned = new Map(groups.authority.map(node => [node.id, groups.client.filter(client => client.authority_id === node.id)]))
   const largestGroup = Math.max(1, ...[...owned.values()].map(clients => clients.length))
   const clientColumns = Math.ceil(Math.sqrt(largestGroup)), clientRows = Math.ceil(largestGroup/clientColumns)
-  const groupWidth = Math.max(2.2, (clientColumns-1)*.9+1.4), groupDepth = Math.max(2.2, (clientRows-1)*.9+1.4)
+  const clientGap = 1.1
+  const groupWidth = Math.max(2.5, (clientColumns-1)*clientGap+1.5)
+  const groupDepth = (clientRows-1)*clientGap+2.6
   const grid = (index, length, gapX, gapZ) => {
     const columns = Math.min(6, Math.ceil(Math.sqrt(length*1.5))), rows = Math.ceil(length/columns)
     const row = Math.floor(index/columns), rowCount = Math.min(columns, length-row*columns)
     return [(index%columns-(rowCount-1)/2)*gapX, (row-(rows-1)/2)*gapZ]
   }
   const centers = new Map(groups.authority.map((node, index) => [node.id, grid(index, groups.authority.length, groupWidth, groupDepth)]))
+  const clusterBack = Math.min(0, ...[...centers.values()].map(([,z]) => z))-.75
+  const clusterFront = Math.max(0, ...[...centers.values()].map(([,z]) => z))+.65+(clientRows-1)*clientGap
+  const cloudGrid = groups.aggregator.map((_, index) => grid(index, groups.aggregator.length, 1.6, 1.5))
+  const cloudFront = Math.max(0, ...cloudGrid.map(([,z]) => z))
+  const unassigned = [...groups.client.filter(node => !authorityIds.has(node.authority_id)), ...groups.other]
+  const unassignedGrid = new Map(unassigned.map((node, index) => [node.id, grid(index, unassigned.length, clientGap, clientGap)]))
+  const unassignedBack = Math.min(0, ...[...unassignedGrid.values()].map(([,z]) => z))
   const placed = []
   for (const [role, values] of Object.entries(groups)) {
     values.forEach((node, index) => {
-      let x = 0, y = .035, z = 0
-      if (role === 'authority') { [x,z] = centers.get(node.id); y = 1.45 }
-      else if (role === 'aggregator') { [x,z] = grid(index, values.length, 1.4, 1.4); y = 3.15 }
+      let x = 0, z = 0
+      if (role === 'authority') { [x,z] = centers.get(node.id); z -= .75 }
+      else if (role === 'aggregator') { [x,z] = cloudGrid[index]; z += clusterBack-cloudFront-1.8 }
       else if (role === 'client' && authorityIds.has(node.authority_id)) {
         const clients = owned.get(node.authority_id), localIndex = clients.findIndex(client => client.id === node.id)
-        const columns = Math.min(clientColumns, clients.length), rows = Math.ceil(clients.length/columns), row = Math.floor(localIndex/columns)
+        const columns = Math.min(clientColumns, clients.length), row = Math.floor(localIndex/columns)
         const rowCount = Math.min(columns, clients.length-row*columns), [centerX,centerZ] = centers.get(node.authority_id)
-        x = centerX+(localIndex%columns-(rowCount-1)/2)*.9; z = centerZ+(row-(rows-1)/2)*.9+.55
-      } else { [x,z] = grid(index, values.length, .95, .95); z += groupDepth*Math.ceil(groups.authority.length/6)/2+1.2 }
-      const angle = Math.atan2(x, z)+Math.PI
+        x = centerX+(localIndex%columns-(rowCount-1)/2)*clientGap; z = centerZ+row*clientGap+.65
+      } else { [x,z] = unassignedGrid.get(node.id); z += clusterFront-unassignedBack+1.5 }
       placed.push({ ...node, role, state: nodeState(node, preview, connected), label: compactNodeId(node),
-        position: [x,y,z], yaw: angle, height: role === 'authority' ? .86 : role === 'aggregator' ? .66 : .55 })
+        position: [x,.035,z], yaw: 0, height: role === 'authority' ? .86 : role === 'aggregator' ? .66 : .55 })
     })
+  }
+  // Center the complete footprint so the platform and orbit stay balanced for any role counts.
+  if (placed.length) {
+    const centerZ = (Math.min(...placed.map(node => node.position[2]))+Math.max(...placed.map(node => node.position[2])))/2
+    for (const node of placed) node.position[2] -= centerZ
   }
   const roleNodes = role => placed.filter(node => node.role === role)
   const edges = []
@@ -87,11 +100,6 @@ export function topologyScene(nodes, preview = false, connected = true) {
   authorities.forEach((a, index) => authorities.slice(index + 1).forEach(b => connect(a, b)))
   for (const authority of authorities) for (const aggregator of roleNodes('aggregator')) connect(authority, aggregator)
   const radius = Math.max(4.3, ...placed.map(node => Math.hypot(node.position[0],node.position[2])+.7))
-  const layerGap = placed.length > 40 ? Math.max(1.45, radius*.32) : 1.45
-  for (const node of placed) {
-    if (node.role === 'authority') node.position[1] = layerGap
-    if (node.role === 'aggregator') node.position[1] = layerGap*2+.25
-  }
   return { nodes: placed, edges, radius, preview }
 }
 
@@ -99,7 +107,7 @@ export function sceneFingerprint(scene, selected = '') {
   return JSON.stringify([scene.nodes.map(node => [node.id, node.role, node.state.tone, node.position, node.authority_id]), scene.edges, selected])
 }
 
-export const DEFAULT_CAMERA = Object.freeze({ yaw: -.5, pitch: .86, zoom: 1 })
+export const DEFAULT_CAMERA = Object.freeze({ yaw: -.22, pitch: 1.02, zoom: 1 })
 
 export function clampCamera(camera) {
   return { yaw: Number.isFinite(camera.yaw) ? camera.yaw : DEFAULT_CAMERA.yaw,

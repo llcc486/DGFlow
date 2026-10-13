@@ -223,18 +223,21 @@ test('deployment defaults, reset and all presets retain only LegoGroth16', () =>
   const harness = formHarness(registered())
   try {
     assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
+    assert.equal(harness.form.form.mode, 'dgflow')
     assert.ok(harness.form.presets.some(preset => preset.id === 'lego'))
     assert.ok(harness.form.presets.every(preset => preset.id !== '5b'))
     for (const preset of harness.form.presets) {
       harness.form.form.proof_suite = 'legacy'
       harness.form.applyPreset(preset)
       assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
+      assert.equal(harness.form.form.mode, 'dgflow')
     }
     harness.form.applyPreset({ id: 'saved-preset', apply: { proof_suite: 'compact_norm_v1' } })
     assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
     harness.form.form.proof_suite = 'compact_range_v1'
     harness.form.reset()
     assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
+    assert.equal(harness.form.form.mode, 'dgflow')
     assert.equal(harness.form.form.proof_crs_hash, null)
     const template = parse(source).descriptor.template.content
     // The suite is pinned by the backend, so the form must not offer a choice:
@@ -396,9 +399,9 @@ test('baseline modes explain and disable robustness thresholds while preserving 
   const harness = formHarness(registered())
   try {
     harness.form.form.min_norm_ratio = 0.8
-    for (const mode of ['plain', 'encrypted', 'dgflow', 'optimized']) {
+    for (const mode of ['plain', 'dgflow']) {
       harness.form.form.mode = mode
-      assert.equal(harness.form.robustnessEnabled.value, ['dgflow', 'optimized'].includes(mode))
+      assert.equal(harness.form.robustnessEnabled.value, mode === 'dgflow')
       assert.equal(harness.form.runConfiguration().min_norm_ratio, 0.8)
     }
     for (const field of ['min_cosine', 'max_norm_ratio', 'min_norm_ratio', 'max_norm_squared']) {
@@ -406,7 +409,10 @@ test('baseline modes explain and disable robustness thresholds while preserving 
       assert.match(input, /:disabled="!robustnessEnabled"/)
     }
     assert.match(format.MODES.find(mode => mode.id === 'plain').description, /不执行密码保护或鲁棒筛选/)
-    assert.match(format.MODES.find(mode => mode.id === 'encrypted').description, /不启用.*筛选/)
+    for (const mode of ['encrypted', 'optimized']) {
+      harness.form.form.mode = mode
+      assert.match(harness.form.blockedReason.value, /请选择无密码保护基线或 DGFlow 完整协议/)
+    }
     assert.match(format.ATTACKS.find(attack => attack.value === 'free_rider').description, /不保证能被筛除/)
   } finally { harness.close() }
 })
@@ -416,7 +422,7 @@ test('old proof schemes injected into current form state cannot reach the run AP
   let requests = 0
   api.startRun = async () => { requests += 1; assert.fail('obsolete proof suite reached API') }
   try {
-    for (const mode of ['plain', 'encrypted', 'dgflow', 'optimized']) {
+    for (const mode of ['plain', 'dgflow']) {
       harness.form.form.mode = mode
       for (const suite of ['legacy', 'compact_range_v1', 'compact_norm_v1', null]) {
         harness.form.form.proof_suite = suite
@@ -431,7 +437,7 @@ test('old proof schemes injected into current form state cannot reach the run AP
 test('every secure mode requires matching 8-bit CRS and explicit Lego node capability', async () => {
   const harness = formHarness(registered())
   try {
-    for (const mode of ['encrypted', 'dgflow', 'optimized']) {
+    for (const mode of ['dgflow']) {
       harness.form.form.mode = mode
       harness.form.proofParametersAvailable.value = false
       assert.match(harness.form.blockedReason.value, /Lego.*原生扩展/)
@@ -585,7 +591,7 @@ test('attack identity input has one explicit label and a valid nonlabel field wr
   }
   const input = find(template.ast)
   assert.ok(input)
-  assert.match(template.content, /<div v-if="advanced \|\| form.attack_client_ids != null" class="nb-field">\s*<label for="attack-client-ids">/)
+  assert.match(template.content, /<div class="nb-field">\s*<label for="attack-client-ids">/)
   assert.equal((template.content.match(/for="attack-client-ids"/g) ?? []).length, 1)
 })
 

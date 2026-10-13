@@ -155,6 +155,7 @@ def _verify_submission(job):
         raise ValueError('invalid public verification job')
     ctx,cid,packet,public,reference,materials,verification=job[:7]
     suite,_=p.proof_settings(ctx)
+    rejection=None
     parameters=None; parameters_load_s=0.
     if suite==_LEGO_SUITE:
         if len(job) not in (8,9):
@@ -175,16 +176,26 @@ def _verify_submission(job):
     start=time.perf_counter(); checked=None
     valid=isinstance(packet,dict) and packet.get('context')==ctx and packet.get('client_id')==cid
     if valid:
-        if parameters is not None:
-            from dgfl.crypto.lego import verify_checked
-            valid,checked=verify_checked(ctx,cid,packet.get('ciphertext',[]),packet.get('norm_squared'),
-                                        packet.get('proof',{}),public,parameters,verification=verification)
-        else:
-            valid=p.verify(ctx,cid,packet.get('ciphertext',[]),packet.get('norm_squared'),
-                           packet.get('proof',{}),public,**options)
+        # A rejected proof must report WHICH check failed. Without this the
+        # console can only show "not proved", which hides whether the norm
+        # binding, the ciphertext linkage or the context binding was violated.
+        # The message names a relation; it never echoes witness material.
+        try:
+            if parameters is not None:
+                from dgfl.crypto.lego import verify_checked
+                valid,checked=verify_checked(ctx,cid,packet.get('ciphertext',[]),packet.get('norm_squared'),
+                                            packet.get('proof',{}),public,parameters,verification=verification)
+            else:
+                valid=p.verify(ctx,cid,packet.get('ciphertext',[]),packet.get('norm_squared'),
+                               packet.get('proof',{}),public,**options)
+        except ValueError as exc:
+            valid=False; checked=None
+            rejection=str(exc)[:160]
     timings={'proof_verify_s':time.perf_counter()-start,'parameters_load_s':parameters_load_s}
     timings['checked_ciphertext_reused']=checked is not None
     if parameters is not None: timings['native_threads']=threads
+    # Recorded here and lifted out by the caller before metrics are stored.
+    if rejection is not None: timings['rejection_reason']=rejection
     if not valid:
         return False,None,timings
     start=time.perf_counter()
@@ -192,7 +203,11 @@ def _verify_submission(job):
         inner=p.validate_inner_product(ctx,packet['ciphertext'],reference,materials,role_topology(ctx)['authority_threshold'],
                                        norm_squared=packet['norm_squared'],checked=checked,client_id=cid)
         return True,cosine(inner,packet['norm_squared'],sum(z*z for z in reference)),timings
-    except ValueError:
+    except ValueError as exc:
+        # The proof held but the authorized function could not be evaluated:
+        # either the norm/inner-product relation is inconsistent or the decoded
+        # value fell outside the authorized interval.
+        rejection=str(exc)[:160]
         return True,None,timings
     finally:
         timings['inner_product_s']=time.perf_counter()-start
@@ -406,6 +421,10 @@ class RoleWorker:
         self._proof_registry=None; self._public_proof_job=None
         self._proof_metrics=None; self._proof_parameters_evidence=None
         self._combine_metrics=None
+        # Public material this owner can republish for independent verification.
+        self._published_validation_keys={}; self._material_note=None
+        # One-shot guard for the owner's own verification of this round.
+        self._owned_verification=None
         self.task_state_path=self.folder/'task-state.json'
         self.task_state=json.loads(self.task_state_path.read_text('utf8')) if self.task_state_path.exists() else {}
 
@@ -531,6 +550,7 @@ class RoleWorker:
         workers=settings['verification_workers']
         if settings['proof_suite']==_LEGO_SUITE: workers=min(workers,settings['verification_threads'])
         jobs=[]; submitted=list(packets)
+        self._published_validation_keys={}
         for cid in submitted:
             materials=[]; seen=set()
             for envelope in all_keys[cid]:
@@ -548,12 +568,14 @@ class RoleWorker:
                 materials.append(value['material'])
             if len(materials)<topology['authority_threshold']:
                 raise ValueError('validation key threshold not met')
+            self._published_validation_keys[cid]=list(materials)
             job=(self.ctx,cid,packets[cid],self.auth.public_keys(cid),self.reference,materials,settings['verification'])
             if settings['proof_suite']==_LEGO_SUITE:
                 if self._public_proof_job is None: raise ValueError('Lego round has no trusted public parameters')
                 job=(*job,self._public_proof_job,max(1,settings['verification_threads']//workers))
             jobs.append(job)
         results=self._verify_jobs(jobs,workers); records={}; metrics={}
+        published_keys={}
         for cid,result in zip(submitted,results):
             valid,score=result[:2]; packet=packets[cid]
             if not isinstance(packet,dict) or packet.get('context')!=self.ctx or packet.get('client_id')!=cid:
@@ -561,10 +583,39 @@ class RoleWorker:
             core=submission_core(packet)
             records[cid]={'core':core,'packet_hash':b.digest(core),'proof_valid':valid,'score':score}
             if len(result)==3: metrics[cid]=result[2]
+            published_keys[cid]=self._published_validation_keys.get(cid,[])
         self._proof_metrics=metrics
+        self._own_verification_material(packets,published_keys)
         self._owned_verification={'context_hash':b.digest(self.ctx),'topology':topology,
                                   'owner':self.node_id,'owned_clients':owned,'submissions':records}
         return self.identity.sign_public('client-verification',self._owned_verification)
+
+    def _own_verification_material(self,packets,published_keys):
+        """Persist the public material this owner alone can open, when opted in.
+
+        Only the assigned owner ever holds a submitted packet in the clear, so it
+        is the only actor able to write material an independent verifier can
+        replay. Persistence is off unless the operator sets the flag, and a
+        failure here is reported rather than allowed to change the round's
+        cryptographic outcome.
+        """
+        from dgfl import verification_materials as vm
+        if not vm.persistence_enabled():
+            return
+        try:
+            material=vm.build(self.ctx['round_id'],self.ctx,self.reference,packets,
+                              {cid:self.auth.public_keys(cid) for cid in packets},
+                              published_keys,role_topology(self.policy)['authority_threshold'])
+            folder=self.folder/'verification-materials'
+            # The key epoch is task level, so the file name carries its digest to
+            # keep two epochs of the same round number apart.
+            name=f"round-{int(self.ctx['round_id'])}-{b.digest(self.ctx['key_epoch'])[:12]}.bin"
+            vm.write(folder/name,material)
+            self._material_note=f"verification material written to {name}"
+        except (ValueError,OSError) as exc:
+            # Never fail a verified round because a diagnostic artefact could not
+            # be written; the signed verdict already stands.
+            self._material_note=f'verification material not written: {exc}'
 
     def _authorize_shared(self,payload):
         """Trust authenticated owner verdicts, then independently apply screening.
@@ -605,11 +656,16 @@ class RoleWorker:
                     raise ValueError('owner ciphertext core differs from signed manifest')
                 packets[cid]=core; results[cid]=(row['proof_valid'],row['score'])
         if senders!=set(authorities): raise ValueError('complete owner verification results are required')
-        return self._complete_authorization(packets,results)
+        return self._complete_authorization(packets,results,{})
 
-    def _complete_authorization(self,packets,results):
+    def _complete_authorization(self,packets,results,rejections=None):
+        rejections=rejections or {}
         scores={}; valid_clients=set(); validations=[]
-        suite=self.policy.get('proof_suite'); crs=self.policy.get('proof_crs_hash')
+        # Record the suite the round actually verified with. `proof_settings` is
+        # the authority on the default, so an omitted field means the legacy
+        # suite rather than "unknown"; the CRS fingerprint exists only for Lego.
+        suite,_=p.proof_settings(self.ctx)
+        crs=self.ctx.get('proof_crs_hash') if suite==_LEGO_SUITE else None
         for cid in self.auth.clients:
             valid=False; score=None; reason='客户端未在本轮提交'
             if cid in results:
@@ -630,6 +686,9 @@ class RoleWorker:
                 proof_hash=(core['proof_hash'] if 'proof_hash' in core
                             else b.digest(core['proof']) if 'proof' in core else None)
             validations.append({'client_id':cid,'proof_valid':valid,'score':score,'decision':'pending','reason':reason,
+                                # Which cryptographic check failed. Null when the
+                                # row was not rejected by a failed verification.
+                                'rejection_reason':rejections.get(cid),
                                 'proof_suite':suite,
                                 'proof_crs_hash':crs,
                                 'norm_squared':core['norm_squared'] if core is not None else None,
@@ -866,8 +925,13 @@ class RoleWorker:
                     job=(*job,self._public_proof_job,threads)
                 jobs.append(job)
             results=dict(zip(submitted,self._verify_jobs(jobs,workers)))
+            # Lift the rejection reason out of `timings` before it is stored as
+            # proof metrics, whose keys are all expected to be numeric.
+            rejections={cid:result[2].pop('rejection_reason')
+                        for cid,result in results.items()
+                        if len(result)==3 and 'rejection_reason' in result[2]}
             self._proof_metrics={cid:result[2] for cid,result in results.items() if len(result)==3}
-            return self._complete_authorization(packets,results)
+            return self._complete_authorization(packets,results,rejections)
         if action in ('aggregate_key','aggregate_keys'):
             required={'certificates','cloud_id' if action=='aggregate_key' else 'cloud_ids'}
             if set(payload) not in (required,required|{'compact_materials'}): raise ValueError('invalid aggregate key request')

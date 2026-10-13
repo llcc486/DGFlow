@@ -6,7 +6,7 @@ param(
     [ValidateRange(2, 32)][Nullable[int]]$AggregatorCount = $null,
     [ValidateRange(2, 32)][Nullable[int]]$AuthorityThreshold = $null,
     [ValidateRange(2, 32)][Nullable[int]]$AggregatorThreshold = $null,
-    [ValidateSet('local', 'A', 'B', 'C')][string]$Machine = '',
+    [ValidatePattern('^(local|[A-Z]{1,2})$')][string]$Machine = '',
     [switch]$Offline,
     [switch]$SetupOnly,
     [string]$MnistSource = '',

@@ -14,6 +14,7 @@ import { MODES, modeName, modeProtection, proofSuiteName, proofSuiteShort } from
 const byId = id => MODES.find(mode => mode.id === id)
 
 test('every mode states its cryptographic protection explicitly', () => {
+  assert.deepEqual(MODES.map(mode => mode.id), ['plain', 'dgflow'])
   for (const mode of MODES) {
     assert.equal(typeof mode.protection, 'string', `${mode.id} needs a protection statement`)
     assert.ok(mode.protection.length >= 12, `${mode.id} protection statement is too short to be informative`)
@@ -26,19 +27,17 @@ test('the plain baseline says the controller can read individual client models',
   assert.match(byId('plain').protection, /完整模型/)
 })
 
-test('encrypted is named for encryption plus the norm proof, and excludes filtering', () => {
-  assert.match(byId('encrypted').name, /加密/)
-  assert.match(byId('encrypted').name, /范数证明/)
-  assert.match(byId('encrypted').protection, /不执行/)
+test('historical encrypted records retain their name and absence of filtering', () => {
+  assert.match(modeName('encrypted'), /加密/)
+  assert.match(modeName('encrypted'), /范数证明/)
+  assert.match(modeProtection('encrypted'), /不执行/)
 })
 
-test('optimized states that its cryptography is identical to dgflow', () => {
-  const optimized = byId('optimized')
-  assert.match(optimized.name, /并行调度/)
-  assert.match(optimized.protection, /完全相同/)
-  assert.match(optimized.description, /密码学/)
+test('historical optimized records state that their cryptography is identical to dgflow', () => {
+  assert.match(modeName('optimized'), /并行调度/)
+  assert.match(modeProtection('optimized'), /完全相同/)
   // It must not claim any additional guarantee.
-  assert.doesNotMatch(optimized.protection, /更强|增强|额外安全/)
+  assert.doesNotMatch(modeProtection('optimized'), /更强|增强|额外安全/)
 })
 
 test('mode display names differ from each other so the comparison page cannot confuse them', () => {

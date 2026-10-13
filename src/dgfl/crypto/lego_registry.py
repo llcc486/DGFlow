@@ -196,6 +196,42 @@ class Registry:
         public_parameters({'manifest': manifest, 'verifying_key': vk})
         return {'manifest': manifest, 'verifying_key': vk}
 
+    def export_to(self, runtime):
+        """Copy verified public CRS material; never copy arbitrary runtime files."""
+        target = Registry(runtime)
+        manifests = []
+        if not self.root.exists():
+            return manifests
+        # Validate links before enumeration, too (including an empty linked root).
+        self._folder('0'*64)
+        for entry in sorted(self.root.iterdir()):
+            if _HASH.fullmatch(entry.name) is None:
+                continue
+            folder, manifest, vk = self._material(entry.name, None, None)
+            # Keep exports bounded in memory even for large CNN proving keys.
+            source = folder/'pk.bin'
+            if (source.is_symlink() or (hasattr(source, 'is_junction') and source.is_junction())
+                    or not source.resolve().is_relative_to(folder.resolve())
+                    or source.stat().st_size != manifest['pk_bytes']):
+                raise ValueError('invalid public Lego proving key for export')
+            destination = target._folder(entry.name)
+            destination.mkdir(parents=True, exist_ok=False)
+            digest = hashlib.sha256()
+            size = 0
+            with source.open('rb') as reader, (destination/'pk.bin').open('xb') as writer:
+                while block := reader.read(1024*1024):
+                    size += len(block)
+                    if size > manifest['pk_bytes']:
+                        raise ValueError('Lego proving key changed during export')
+                    digest.update(block)
+                    writer.write(block)
+            if size != manifest['pk_bytes'] or digest.hexdigest() != manifest['pk_sha256']:
+                raise ValueError('Lego proving key hash mismatch during export')
+            (destination/'vk.bin').write_bytes(vk)
+            (destination/'manifest.json').write_text(json.dumps(manifest), encoding='utf8')
+            manifests.append(manifest)
+        return manifests
+
     def load_verifier(self, crs_hash, dimension, bits, *, workers=1):
         start = time.perf_counter()
         _, manifest, vk = self._material(crs_hash, dimension, bits)

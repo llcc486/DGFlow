@@ -129,6 +129,92 @@ def _host(value):
     return value
 
 
+def _machine_name(index):
+    name = ''
+    while index:
+        index, digit = divmod(index - 1, 26)
+        name = chr(65 + digit) + name
+    return name
+
+
+MACHINE_GROUPS = tuple(_machine_name(index) for index in range(
+    1, MAX_CLIENT_COUNT + MAX_AUTHORITY_COUNT + MAX_AGGREGATOR_COUNT + 1))
+
+
+def validate_machine(value):
+    if not isinstance(value, str) or value not in MACHINE_GROUPS:
+        raise ValueError(f'machine must be a group name from A to {MACHINE_GROUPS[-1]}')
+    return value
+
+
+def _hosts_document(source, ports):
+    """Validate a hosts document and return {name: {host, machine}} plus coordinator.
+
+    Accepts the grouped YAML shape (`nodes:` + optional `coordinator:`) that the
+    CLI reads, or an already-parsed dict carrying the same keys. Errors list the
+    offending nodes by name.
+    """
+    if isinstance(source, dict):
+        document = source
+    else:
+        document = yaml.safe_load(Path(source).read_text('utf8'))
+    if not isinstance(document, dict) or set(document) - {'nodes', 'coordinator'}:
+        raise ValueError('hosts must contain nodes and an optional coordinator')
+    entries = document.get('nodes')
+    if not isinstance(entries, dict) or set(entries) != set(ports):
+        raise ValueError(f'hosts must explicitly list all {len(ports)} configured nodes')
+    for name, entry in entries.items():
+        if not isinstance(entry, dict) or set(entry) != {'host', 'machine'} or entry['machine'] not in MACHINE_GROUPS:
+            raise ValueError(f'{name}: specify host and machine A through {MACHINE_GROUPS[-1]}')
+        _host(entry['host'])
+    a_hosts = [entry['host'] for entry in entries.values() if entry['machine'] == 'A']
+    if not a_hosts:
+        raise ValueError('LAN deployment requires machine A for the coordinator')
+    coordinator = document.get('coordinator', {'host': a_hosts[0], 'machine': 'A'})
+    if not isinstance(coordinator, dict) or set(coordinator) != {'host', 'machine'} or coordinator['machine'] != 'A':
+        raise ValueError('coordinator must specify host and machine A')
+    return entries, _host(coordinator['host'])
+
+
+def lan_hosts_document(nodes, ports):
+    """Validate the console's per-node IP form and group it for `init_cluster`.
+
+    `nodes` maps every configured node name to `{"host": <ip-or-name>,
+    "machine": <group name A, B, ..., Z, AA, ...>}`: the shape an operator fills in when each terminal
+    is a separate computer. It is rewritten into the grouped document, so both
+    entry points share one validator and one error vocabulary.
+    """
+    if not isinstance(nodes, dict) or not nodes:
+        raise ValueError('multi-machine deployment requires one host per node')
+    missing = sorted(set(ports) - set(nodes))
+    extra = sorted(set(nodes) - set(ports))
+    if missing or extra:
+        detail = []
+        if missing:
+            detail.append('missing ' + ', '.join(missing))
+        if extra:
+            detail.append('unknown ' + ', '.join(extra))
+        raise ValueError('hosts must list exactly the configured nodes (' + '; '.join(detail) + ')')
+    document = {'nodes': {name: dict(entry) if isinstance(entry, dict) else entry
+                          for name, entry in nodes.items()}}
+    entries, coordinator = _hosts_document(document, ports)
+    return entries, coordinator
+
+
+def init_lan_cluster(runtime=DEFAULT_RUNTIME, *, nodes,
+                     client_count=DEFAULT_CLIENT_COUNT, authority_count=DEFAULT_AUTHORITY_COUNT,
+                     aggregator_count=DEFAULT_AGGREGATOR_COUNT,
+                     authority_threshold=DEFAULT_AUTHORITY_THRESHOLD,
+                     aggregator_threshold=DEFAULT_AGGREGATOR_THRESHOLD):
+    """Initialize a multi-machine cluster from the console's per-node IP form."""
+    ports = node_ports(client_count, authority_count, aggregator_count)
+    entries, coordinator = lan_hosts_document(nodes, ports)
+    grouped = {'nodes': entries, 'coordinator': {'host': coordinator, 'machine': 'A'}}
+    return init_cluster(runtime, grouped, client_count=client_count, authority_count=authority_count,
+                        aggregator_count=aggregator_count, authority_threshold=authority_threshold,
+                        aggregator_threshold=aggregator_threshold)
+
+
 def init_cluster(runtime=DEFAULT_RUNTIME, hosts_file=None, *, client_count=DEFAULT_CLIENT_COUNT,
                  authority_count=DEFAULT_AUTHORITY_COUNT, aggregator_count=DEFAULT_AGGREGATOR_COUNT,
                  authority_threshold=DEFAULT_AUTHORITY_THRESHOLD,
@@ -145,23 +231,7 @@ def init_cluster(runtime=DEFAULT_RUNTIME, hosts_file=None, *, client_count=DEFAU
         entries = {name: {'host': '127.0.0.1', 'machine': 'local'} for name in ports}
         coordinator_host = '127.0.0.1'
     else:
-        source = yaml.safe_load(Path(hosts_file).read_text('utf8'))
-        if not isinstance(source, dict) or set(source) - {'nodes', 'coordinator'}:
-            raise ValueError('hosts YAML must contain nodes and optional coordinator')
-        entries = source.get('nodes')
-        if not isinstance(entries, dict) or set(entries) != set(ports):
-            raise ValueError(f'hosts YAML must explicitly list all {len(ports)} configured nodes')
-        for name, entry in entries.items():
-            if not isinstance(entry, dict) or set(entry) != {'host', 'machine'} or entry['machine'] not in ('A', 'B', 'C'):
-                raise ValueError(f'{name}: specify host and machine A/B/C')
-            _host(entry['host'])
-        a_hosts = [entry['host'] for entry in entries.values() if entry['machine'] == 'A']
-        if not a_hosts:
-            raise ValueError('LAN deployment requires machine A for the coordinator')
-        coordinator = source.get('coordinator', {'host': a_hosts[0], 'machine': 'A'})
-        if not isinstance(coordinator, dict) or set(coordinator) != {'host', 'machine'} or coordinator['machine'] != 'A':
-            raise ValueError('coordinator must specify host and machine A')
-        coordinator_host = _host(coordinator['host'])
+        entries, coordinator_host = _hosts_document(hosts_file, ports)
         deployment = 'lan'
     config = {'deployment': deployment, **topology,
               'client_authorities': client_authorities(client_count, authority_count), 'nodes': {
@@ -201,7 +271,7 @@ def load_cluster(runtime=DEFAULT_RUNTIME):
         _host(url.hostname)
         if url.port != item['port'] or item['bind'] not in ('127.0.0.1', '0.0.0.0'):
             raise ValueError(f'{name}: inconsistent port or bind address')
-        allowed = ('local',) if config['deployment'] == 'single_host' else ('A', 'B', 'C')
+        allowed = ('local',) if config['deployment'] == 'single_host' else MACHINE_GROUPS
         if item['machine'] not in allowed:
             raise ValueError(f'{name}: invalid machine for deployment')
         endpoint = (url.hostname.lower(), url.port)
@@ -219,9 +289,9 @@ def selected_nodes(runtime=DEFAULT_RUNTIME, machine=None):
         machine = json.loads(marker.read_text('utf8'))['machine']
     if machine is None:
         if config['deployment'] == 'lan':
-            raise ValueError('LAN runtime requires --machine A/B/C or a machine-specific bundle')
+            raise ValueError('LAN runtime requires --machine <group name> or a machine-specific bundle')
         machine = 'local'
-    allowed = ('local',) if config['deployment'] == 'single_host' else ('A', 'B', 'C')
+    allowed = ('local',) if config['deployment'] == 'single_host' else MACHINE_GROUPS
     if machine not in allowed:
         raise ValueError('machine does not match this deployment')
     topology = cluster_topology(config)
@@ -691,13 +761,17 @@ def stop_nodes(runtime=DEFAULT_RUNTIME, machine=None, *, _nodes=None):
     return result
 
 
-def bundle_cluster(runtime, output):
+def bundle_cluster(runtime, output, *, machine=None):
     """Export an allowlist of public files plus only each machine's own keys."""
     runtime, output = Path(runtime).resolve(), Path(output).resolve()
     config = load_cluster(runtime)
     if output.exists():
         raise FileExistsError('bundle output already exists; choose a new empty destination')
-    machines = sorted({item['machine'] for item in config['nodes'].values()})
+    machines = sorted({item['machine'] for item in config['nodes'].values()}, key=lambda value: (len(value), value))
+    if machine is not None:
+        if machine not in machines:
+            raise ValueError(f'machine {machine} has no nodes in this deployment')
+        machines = [machine]
     plans = {}
     for machine in machines:
         names = selected_nodes(runtime, machine)
@@ -720,6 +794,28 @@ def bundle_cluster(runtime, output):
             destination.mkdir()
             for filename in PRIVATE_FILES:
                 shutil.copyfile(runtime/'keys'/name/filename, destination/filename)
+        from dgfl.crypto.lego_registry import Registry
+        parameters = Registry(runtime).export_to(folder)
+        ports = ', '.join(str(config['nodes'][name]['port']) for name in names if name != 'coordinator')
+        instructions = (
+            f'# DGFlow 电脑 {machine} 配置包\n\n'
+            '这是配置包，包含本机身份、集群配置和已安装的公共 CRS，不包含源码、依赖、数据集或实验记录。\n'
+            '每台电脑先安装同一版本源码与依赖并准备数据（Windows: scripts/start_demo.ps1 -SetupOnly；'
+            'Linux: bash scripts/start_demo.sh --setup-only）。不要复制其他电脑的私钥。\n\n'
+            '在源码目录新建 lan-deployment 文件夹，将本包 runtime 放入其中，'
+            '将已准备的数据目录复制为 lan-deployment/data；不要覆盖原有 runtime。\n'
+            '以下命令在源码根目录、已激活项目虚拟环境时执行：\n\n'
+            '    python -m dgfl.cli start --runtime lan-deployment/runtime\n'
+            + ('    python -m dgfl.cli serve --runtime lan-deployment/runtime\n'
+               '    python -m dgfl.cli doctor --runtime lan-deployment/runtime --data-dir lan-deployment/data/mnist\n'
+               '\n仅 A 启动控制页 http://127.0.0.1:8765；如旧控制页占用 8765，先正常退出旧控制服务。\n'
+               if machine in ('A', 'local') else '\n本机只启动角色节点；在 A 的控制页创建实验。\n')
+            + f'\n本机节点端口：{ports}（TCP）；需要各机双向可达，IP 与证书一致。'
+            '同机旧角色占用这些端口时，请先使用其原运行目录执行 stop。\n'
+            f'本包公共 CRS 数量：{len(parameters)}。各机须使用来自同一份部署计划的参数；不要独立重新生成替代。\n'
+            '停止本机节点：python -m dgfl.cli stop --runtime lan-deployment/runtime\n'
+        )
+        (output/machine/'README.txt').write_text(instructions, encoding='utf8')
         exported[machine] = str(output/machine)
     return exported
 

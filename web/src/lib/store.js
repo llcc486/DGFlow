@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { api, errorText } from './api.js'
 import { isActiveRun } from './format.js'
 import { cacheRunRecord, reconcileRunCache } from './runRecords.js'
-import { deploymentConfig, deploymentState, deployedTopology, runCompatibilityError, sameDeployment, TOPOLOGY_FIELDS } from './deployment.js'
+import { deploymentConfig, deploymentPayloadError, deploymentState, deployedTopology, deployedHosts, lanHosts, runCompatibilityError, sameDeployment, sameLanHosts, TOPOLOGY_FIELDS } from './deployment.js'
 import { trainingBackendError, trainingBackendStatus } from './trainingBackends.js'
 import { datasetName, datasetReady as isDatasetReady, modelConfigurationError, withPreparedDataset } from './datasets.js'
 import { trainingEligibility } from './trainingEligibility.js'
@@ -178,7 +178,13 @@ async function refreshStatus(signal) {
 }
 
 async function deployNodes(configuration, startNodes = true) {
-  const config = deploymentConfig(configuration, deployedTopology(status.value) || undefined)
+  const defaults = deployedTopology(status.value) || undefined
+  // One object carries the counts, the mode and (for multi-machine) the entered
+  // addresses, so the form and the request can never disagree.
+  const config = { ...deploymentConfig(configuration, defaults), deployment: configuration?.deployment === 'lan' ? 'lan' : 'single_host',
+    ...(configuration?.deployment === 'lan' ? { hosts: lanHosts(deploymentConfig(configuration, defaults), configuration.hosts) } : {}) }
+  const payloadError = deploymentPayloadError(config, defaults)
+  if (payloadError) { operationError.value = payloadError; return false }
   const state = deploymentState(status.value, config, connected.value, hasActiveRun.value,
     deploying.value || submitting.value || preparing.value || stopping.value)
   if (state.reason) { operationError.value = state.reason; return false }
@@ -192,8 +198,11 @@ async function deployNodes(configuration, startNodes = true) {
     if (TOPOLOGY_FIELDS.some(field => response[field] !== undefined && response[field] !== config[field])) throw new Error('后端返回的部署拓扑与所选配置不一致。')
     await refreshStatus(controller.signal)
     if (!sameDeployment(deployedTopology(status.value), config)) throw new Error('实际部署的节点数量或门限与所选配置不一致。')
+    if (config.deployment === 'lan' && (status.value?.deployment !== 'lan'
+      || !sameLanHosts(config.hosts, deployedHosts(status.value, config)))) throw new Error('实际机器归属或地址与所选配置不一致。')
     notification.value = startNodes
-      ? `已应用 ${config.client_count} 个客户端、${config.authority_count} 个边缘服务器、${config.aggregator_count} 个云服务器；节点在线情况以后端状态为准。`
+      ? config.deployment === 'lan' ? `已请求启动本机 ${status.value?.local_machine || 'A'} 节点；远端需在各电脑启动，在线情况以后端状态为准。`
+        : `已应用 ${config.client_count} 个客户端、${config.authority_count} 个边缘服务器、${config.aggregator_count} 个云服务器；节点在线情况以后端状态为准。`
       : `已初始化三层拓扑的真实身份；启动节点后可运行实验。`
     return true
   } catch (error) {

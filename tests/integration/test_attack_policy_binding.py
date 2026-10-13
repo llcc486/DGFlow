@@ -13,6 +13,7 @@ import pytest
 from dgfl.crypto import backend as b
 from dgfl.crypto import protocol as p
 from dgfl.services import roles
+from dgfl.topology import client_authorities
 from dgfl.training import datasets
 from dgfl.transport.security import Identity, create_cluster
 
@@ -32,6 +33,32 @@ def proof_parameters(request):
 
 @pytest.fixture
 def cluster(tmp_path,monkeypatch,proof_parameters):
+    cluster=_make_cluster(tmp_path,monkeypatch,proof_parameters)
+    try:
+        yield cluster
+    finally:
+        for worker in cluster[2].values():
+            worker.close()
+
+
+@pytest.fixture
+def started(tmp_path,monkeypatch,proof_parameters):
+    """The round's real DKG, client keys, ciphertexts and proofs, with a pinned topology.
+
+    Own verification is a one-shot guard, so this fixture stops BEFORE the owner
+    verification and authorization steps. A test that needs owner material runs
+    `verify_owned`; a test that needs a signed verdict runs `_authorize`.
+    """
+    cluster=_make_cluster(tmp_path,monkeypatch,proof_parameters,pinned=True)
+    try:
+        authorities,packets,keys=_run_round(cluster)
+        yield cluster,authorities,packets,keys
+    finally:
+        for worker in cluster[2].values():
+            worker.close()
+
+
+def _make_cluster(tmp_path,monkeypatch,proof_parameters,*,pinned=False):
     names=['coordinator',*roles.AUTHORITIES,'aggregator1','aggregator2',*CLIENTS]
     create_cluster(tmp_path/'keys',dict.fromkeys(names,'127.0.0.1'))
     identities={name:Identity(tmp_path/'keys',name) for name in names}
@@ -40,6 +67,12 @@ def cluster(tmp_path,monkeypatch,proof_parameters):
     spec={'mode':'dgflow','scale':16,'bits':5,'dimension':2,'members':list(CLIENTS),
           'batch_size':2,'batch_strategy':'fixed','min_norm_ratio':.75,
           'max_norm_ratio':2.0,'min_cosine':0.0,'verification_threads':1}
+    if pinned:
+        # A complete pinned topology is what routes verification through the
+        # owner path; without it the legacy single-process path is used.
+        spec.update(client_count=len(CLIENTS),authority_count=len(roles.AUTHORITIES),
+                    aggregator_count=2,authority_threshold=2,aggregator_threshold=2,
+                    client_authorities=client_authorities(len(CLIENTS),len(roles.AUTHORITIES)))
     if proof_parameters is not None:
         from dgfl.crypto import lego_registry
         _prover,parameters=proof_parameters
@@ -66,16 +99,23 @@ def cluster(tmp_path,monkeypatch,proof_parameters):
     reference=[4,0]
     context={'task_id':'attack-policy','round_id':1,'key_epoch':'attack-policy-epoch',
              'model_hash':b.digest(reference),'bits':5,'scale':16,'dimension':2}
+    if pinned:
+        # The round context must carry the same pinned topology as the policy,
+        # otherwise the role rejects the round as a topology mismatch.
+        context.update({name:spec[name] for name in
+                        ('client_count','authority_count','aggregator_count',
+                         'authority_threshold','aggregator_threshold','client_authorities')})
     if proof_parameters is not None:
         context.update(proof_suite=spec['proof_suite'],proof_crs_hash=spec['proof_crs_hash'])
-    try:
-        yield tmp_path,identities,workers,spec,context,reference,proof_parameters
-    finally:
-        for worker in workers.values():
-            worker.close()
+    return tmp_path,identities,workers,spec,context,reference,proof_parameters
 
 
-def _start_round(cluster):
+def _run_round(cluster):
+    """DKG, client keys, ciphertexts and proofs. It does not authorize.
+
+    Authorization is a separate, individually invoked step because own
+    verification is a one-shot guard.
+    """
     _,identities,workers,spec,context,reference,proof_parameters=cluster
     authorities=[workers[name] for name in roles.AUTHORITIES]
     begin={'context':context,'reference':reference,'clients':len(CLIENTS),
@@ -124,8 +164,144 @@ def _finish(cluster,authorities,packets,certificates,decision):
     return confirmations[0]
 
 
+def test_each_validation_row_records_the_public_cryptographic_objects(cluster):
+    """A verdict must carry the objects it is bound to, not just a boolean.
+
+    Without these fields the console can only show "proved / not proved", which
+    is exactly the information loss that made the cryptography invisible in use.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    _,decision=_authorize(cluster,authorities,packets,keys)
+    rows={row['client_id']:row for row in decision['validations']}
+    for cid,row in rows.items():
+        assert set(row)>= {'proof_suite','proof_crs_hash','norm_squared','proof_hash','packet_hash'}
+        if cid not in packets: continue
+        # The row must describe the very bytes that were verified.
+        assert row['norm_squared']==packets[cid]['norm_squared']
+        assert row['packet_hash']==b.digest(roles.submission_core(packets[cid]))
+        assert row['proof_hash']==(packets[cid].get('proof_hash')
+                                   or b.digest(packets[cid]['proof']))
+    # The approved rows must agree with the separately signed manifest, so a
+    # displayed fingerprint can be checked against the authorization itself.
+    for cid in decision['approved']:
+        assert rows[cid]['packet_hash']==decision['packet_hashes'][cid]
+    # A client that never submitted carries nulls, not zeros.
+    present=set(packets)
+    for cid,row in rows.items():
+        if cid in present: continue
+        assert row['norm_squared'] is None and row['proof_hash'] is None and row['packet_hash'] is None
+
+
+def test_validation_rows_name_the_proof_suite_that_actually_ran(cluster,proof_parameters):
+    """The recorded suite must match the fixture, never a default."""
+    authorities,packets,keys=_run_round(cluster)
+    _,decision=_authorize(cluster,authorities,packets,keys)
+    expected='lego_norm_v1' if proof_parameters is not None else 'legacy'
+    suites={row['proof_suite'] for row in decision['validations']}
+    assert suites=={expected}
+    if expected=='lego_norm_v1':
+        crs={row['proof_crs_hash'] for row in decision['validations']}
+        assert crs=={proof_parameters[1].crs_hash}
+    else:
+        assert {row['proof_crs_hash'] for row in decision['validations']}=={None}
+
+
+def test_a_forged_proof_is_rejected_per_client_instead_of_aborting_the_round(cluster):
+    """A bad proof is expected input, not an integrity failure.
+
+    One forged norm must produce a per-client rejection rather than tearing down
+    the shared verification pool, so the remaining clients are still decided and
+    the round can continue.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    packets['client1']['norm_squared']=16
+    _,decision=_authorize(cluster,authorities,packets,keys)
+    rows={row['client_id']:row for row in decision['validations']}
+    assert rows['client1']['proof_valid'] is False
+    assert rows['client1']['decision'] in ('rejected','collateral')
+    assert decision['approved']
+    assert 'client1' not in decision['approved']
+
+
+def test_the_owner_writes_no_material_unless_opted_in(cluster,monkeypatch):
+    """The default must not change the size or contents of a run directory."""
+    from dgfl import verification_materials as vm
+    monkeypatch.delenv(vm.ENVIRONMENT_FLAG, raising=False)
+    authorities,packets,keys=_run_round(cluster)
+    _authorize(cluster,authorities,packets,keys)
+    for authority in authorities:
+        folder=authority.folder/'verification-materials'
+        assert list(folder.glob('*.bin')) == []
+        assert list(folder.glob('*.json')) == []
+    # The owner still verified and still published its signed verdict.
+    assert all(keys[cid] for cid in CLIENTS)
+
+
+def test_owner_material_is_replayable_by_the_published_verifier(started,monkeypatch):
+    """End to end: the owner writes, the published verifier replays, tampering fails.
+
+    `verify_owned` is the only step that holds a submitted packet in the clear,
+    so it is where persistence happens. The other two authorities only ever see
+    sealed or hashed material and must therefore write nothing.
+    """
+    from dgfl import verification_materials as vm
+    from dgfl.topology import client_authorities
+
+    monkeypatch.setenv(vm.ENVIRONMENT_FLAG, '1')
+    cluster_bound,authorities,packets,keys=started
+    _,_,_,_spec,context,_,_=cluster_bound
+    owners=client_authorities(len(CLIENTS),len(roles.AUTHORITIES))
+    owner=authorities[0]
+    assert owner.node_id=='authority1'
+    owned=[cid for cid in CLIENTS if owners[cid]==owner.node_id]
+    assert owned, 'authority1 must own at least one client'
+
+    sealed={}
+    for cid in owned:
+        sealed[cid]=cluster_bound[1][cid].seal(owner.node_id,'client-submission',packets[cid],
+                                              roles.envelope_context(context))
+    signed=owner.execute('verify_owned',{'packets':sealed,'validation_keys':{cid:keys[cid] for cid in owned}})
+    verdict=owner.identity.verify_public(signed,'client-verification',owner.node_id)
+    assert set(verdict['submissions'])==set(owned)
+
+    written=sorted((owner.folder/'verification-materials').glob('*.bin'))
+    assert written, 'the owner must write material when opted in'
+    material=vm.load(written[0])
+    assert material['authority_threshold']==2
+    assert set(material['clients'])==set(owned)
+    assert 'no DKG share' in material['scope']
+    native=proof_parameters is not None
+    if native:
+        # This fixture installs a synthetic registry, so the published verifier
+        # cannot resolve the trusted parameters here. Replaying the numeric
+        # relations is covered end to end by test_verification_materials.py,
+        # which installs a real registry.
+        for cid in owned:
+            entry=material['clients'][cid]
+            assert set(entry)=={'packet','public','validation_keys'}
+            assert len(entry['validation_keys'])>=2
+        assert list((authorities[0].folder/'verification-materials').glob('*.bin'))
+    else:
+        for cid in owned:
+            entry=material['clients'][cid]
+            # Public objects only: the packet, the enrolled key row, published keys.
+            assert set(entry)=={'packet','public','validation_keys'}
+            assert len(entry['validation_keys'])>=2
+            result=vm.verify_client(material,cid)
+            assert result['proof_valid'] is True,result
+            assert all(item['ok'] for item in result['relations'])
+        # A tampered norm must fail; that is the artefact's whole purpose.
+        material['clients'][owned[0]]['packet']['norm_squared']=999
+        tampered=vm.verify_client(material,owned[0])
+        assert tampered['proof_valid'] is False
+        assert tampered['inner_product'] is None
+    # A non-owner sees only sealed submissions, so it writes nothing.
+    for other in authorities[1:]:
+        assert list((other.folder/'verification-materials').glob('*.bin'))==[]
+
+
 def test_verified_lower_norm_and_fixed_batches_are_signed_and_agreed_by_all_edges(cluster):
-    authorities,packets,keys=_start_round(cluster)
+    authorities,packets,keys=_run_round(cluster)
     certificates,decision=_authorize(cluster,authorities,packets,keys)
     coordinator=cluster[1]['coordinator']
     assert all(coordinator.verify_public(cert,'authorization',authority.node_id)==decision
@@ -144,7 +320,7 @@ def test_verified_lower_norm_and_fixed_batches_are_signed_and_agreed_by_all_edge
 
 @pytest.mark.parametrize('field,value',[('min_norm_ratio',None),('batch_strategy','regroup')])
 def test_unresigned_screening_changes_fail_authorization_signature(cluster,field,value):
-    authorities,packets,keys=_start_round(cluster)
+    authorities,packets,keys=_run_round(cluster)
     certificates,_=_authorize(cluster,authorities,packets,keys)
     altered=deepcopy(certificates)
     altered[0]['payload']['screening'][field]=value
@@ -153,7 +329,7 @@ def test_unresigned_screening_changes_fail_authorization_signature(cluster,field
 
 
 def test_one_edge_cannot_authorize_a_conflicting_lower_norm_rule(cluster):
-    authorities,packets,keys=_start_round(cluster)
+    authorities,packets,keys=_run_round(cluster)
     certificates,decision=_authorize(cluster,authorities,packets,keys)
     conflicting=deepcopy(decision)
     conflicting['screening']['min_norm_ratio']=None
@@ -165,7 +341,7 @@ def test_one_edge_cannot_authorize_a_conflicting_lower_norm_rule(cluster):
 @pytest.mark.parametrize('field,value',[('min_norm_ratio',None),('min_norm_ratio',.5),
                                        ('batch_strategy','regroup'),('batch_size',4),('members',CLIENTS[::-1])])
 def test_next_round_cannot_change_registered_norm_or_batch_policy(cluster,field,value):
-    authorities,packets,keys=_start_round(cluster)
+    authorities,packets,keys=_run_round(cluster)
     certificates,decision=_authorize(cluster,authorities,packets,keys)
     final=_finish(cluster,authorities,packets,certificates,decision)
     root,identities,_,spec,context,_,_=cluster
@@ -189,7 +365,7 @@ def test_next_round_cannot_change_registered_norm_or_batch_policy(cluster,field,
 
 
 def test_forging_a_larger_claimed_norm_cannot_bypass_the_lower_norm_gate(cluster):
-    authorities,packets,keys=_start_round(cluster)
+    authorities,packets,keys=_run_round(cluster)
     assert packets['client1']['norm_squared']==4
     packets['client1']['norm_squared']=16
     _,decision=_authorize(cluster,authorities,packets,keys)
@@ -197,6 +373,12 @@ def test_forging_a_larger_claimed_norm_cannot_bypass_the_lower_norm_gate(cluster
     assert rows['client1']['proof_valid'] is False
     assert rows['client1']['reason']=='证明未通过'
     assert 'client1' not in decision['approved']
+    # The per-check failure text is not carried across the signed owner
+    # verification schema, so the reason field stays null on this path. It is
+    # reported on the single-process path only; see the local harness test.
+    assert rows['client1']['rejection_reason'] is None
+    assert rows['client3']['proof_valid'] is True
+    assert rows['client3']['rejection_reason'] is None
 
 
 @pytest.mark.parametrize('field,value',[('min_norm_ratio',None),('min_norm_ratio',.5),

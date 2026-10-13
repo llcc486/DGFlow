@@ -3,12 +3,11 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import LabIcon from '../components/LabIcon.vue'
 import StepCard from '../components/StepCard.vue'
 import TopologyGraph from '../components/TopologyGraph.vue'
-import PageHead from '../components/PageHead.vue'
 import { consoleStore as store } from '../lib/store'
 import { ATTACKS, MODES, attackName, modeName, proofSuiteName } from '../lib/format'
 import { computeDeviceError, computeDeviceStatus } from '../lib/computeDevices'
 import { api, errorText } from '../lib/api'
-import { DEFAULT_TOPOLOGY, TOPOLOGY_FIELDS, deployedTopology, deploymentState, deploymentConfigError, runCompatibilityError, validClientCount } from '../lib/deployment.js'
+import { DEFAULT_TOPOLOGY, MACHINE_GROUPS, TOPOLOGY_FIELDS, deployedHosts, deployedTopology, deploymentConfigError, deploymentState, deploymentMachines, spreadMachines, lanHosts, lanHostsError, runCompatibilityError, topologyNodeNames, usedMachines, validClientCount } from '../lib/deployment.js'
 import { nodesWithAuthorities, previewNodes } from '../lib/topology.js'
 import { trainingBackendError, trainingBackendStatus } from '../lib/trainingBackends.js'
 import { supportsCloudStrategy, withCloudStrategy } from '../lib/cloudStrategies.js'
@@ -47,7 +46,6 @@ const availableBatchSizes = computed(() => batchSizeOptions(form.client_count))
 const groupingConfiguration = computed(() => ({ ...form, batch_size: form.batch_strategy === 'regroup' ? 2 : form.batch_size }))
 const groupingError = computed(() => batchConfigurationError(groupingConfiguration.value))
 const plannedBatches = computed(() => fixedBatchPreview(form))
-const advanced = ref(false)
 const selectedDataset = computed(() => datasetInfo(form.dataset))
 const selectedDatasetReady = computed(() => datasetReady(store.status.value, form.dataset))
 const selectedArchitecture = computed(() => modelInfo(form.model_name))
@@ -83,8 +81,64 @@ const gpuPreparing = ref(false)
 const gpuPreparationError = ref('')
 const topologyTouched = ref(false)
 const topologyView = ref('live')
-const deployment = computed(() => deploymentState(store.status.value, form, store.connected.value,
-  store.hasActiveRun.value, store.deploying.value || store.submitting.value || store.preparing.value || gpuPreparing.value))
+/**
+ * Physical layout: every role on this computer, or one computer per terminal.
+ *
+ * A multi-machine cluster is created from the addresses typed below. Once the
+ * certificates exist the addresses are fixed, so the table becomes read-only;
+ * `layoutLocked` carries that reason into the UI.
+ */
+const deploymentMode = ref('single_machine')
+const hosts = ref({})
+const deploymentPlan = ref(null)
+const planning = ref(false)
+const planError = ref('')
+const selectedMachineCount = ref(2)
+const machineCountInput = ref(2)
+const machineRows = computed(() => {
+  const rows = deploymentMachines(hosts.value, store.nodes.value)
+  const groups = layoutLocked.value ? usedMachineGroups.value : MACHINE_GROUPS.slice(0, selectedMachineCount.value)
+  return groups.map(machine => rows.find(row => row.machine === machine) ??
+    { machine, host: '', nodes: [], clients: 0, authorities: 0, aggregators: 0, online: 0 })
+})
+const hostNames = computed(() => topologyNodeNames(form.client_count, form.authority_count, form.aggregator_count))
+const usedMachineGroups = computed(() => usedMachines(lanHosts(form, hosts.value)))
+const maxMachineCount = computed(() => Math.min(MACHINE_GROUPS.length, hostNames.value.length))
+// Keep incomplete input separate from the last valid layout; clearing the field
+// must not silently regroup nodes or discard the entered addresses.
+const machineCountError = computed(() => !layoutLocked.value
+  && (!Number.isInteger(machineCountInput.value) || machineCountInput.value < 2 || machineCountInput.value > maxMachineCount.value)
+  ? `电脑数量需为 2–${maxMachineCount.value} 的整数，且每台至少分配一个节点。` : '')
+const machineCount = computed({
+  get: () => layoutLocked.value ? usedMachineGroups.value.length : machineCountInput.value,
+  set: (value) => {
+    if (topologyLocked.value) return
+    machineCountInput.value = value
+    if (machineCountError.value) return
+    selectedMachineCount.value = value
+    hosts.value = spreadMachines(lanHosts(form, hosts.value), value)
+  },
+})
+const deployment = computed(() => {
+  const state = deploymentState(store.status.value, form, store.connected.value,
+    store.hasActiveRun.value, planning.value || store.deploying.value || store.submitting.value || store.preparing.value || gpuPreparing.value)
+  const matchesMode = (deploymentMode.value === 'multi_machine') === (store.status.value?.deployment === 'lan')
+  return { ...state, ready: state.ready && matchesMode, configured: state.configured && matchesMode }
+})
+const hostsError = computed(() => {
+  if (deploymentMode.value !== 'multi_machine') return ''
+  return machineCountError.value || lanHostsError(lanHosts(form, hosts.value), hostNames.value)
+    || (machineRows.value.some(row => !row.nodes.length) ? '每台参与电脑至少需要一个节点，请调整高级分配。' : '')
+})
+/**
+ * Once the certificates exist the layout is fixed: every address is bound into
+ * the issued identity, so changing one would silently break mutual TLS.
+ */
+const layoutLocked = computed(() => store.status.value?.deployment === 'lan' && store.nodes.value.length > 0)
+const layoutLockReason = '多机部署的 IP 地址已写入身份证书；更改地址需重建运行时后重新初始化。'
+const topologyLocked = computed(() => layoutLocked.value || deployment.value.locked)
+const planReady = computed(() => layoutLocked.value || Boolean(deploymentPlan.value))
+
 const compatibilityError = computed(() => store.connected.value ? runCompatibilityError(store.status.value, form.mode) : '')
 const participants = computed(() => trainingEligibility(store.status.value, groupingConfiguration.value, store.connected.value))
 const showPreview = computed(() => topologyView.value === 'plan' || !store.nodes.value.length)
@@ -101,14 +155,75 @@ watch(() => TOPOLOGY_FIELDS.map(field => form[field]), () => {
   if (validClientCount(form.client_count)) form.malicious_clients = form.attack === 'none' ? 0 : Math.min(form.client_count, Math.max(0, form.malicious_clients))
   if (Number.isInteger(form.aggregator_count)) form.offline_aggregators = Math.min(form.offline_aggregators, form.aggregator_count)
 })
+// Node names follow the counts, so keep one address row per configured node and
+// carry over what was already typed. New rows start on the coordinator machine:
+// the terminal count is what spreads nodes, not the default.
+watch(hostNames, names => {
+  const current = hosts.value
+  hosts.value = Object.fromEntries(names.map(name => [name, current[name]
+    ? { host: current[name].host, machine: current[name].machine }
+    : { host: Object.values(current).find(entry => entry.machine === 'A')?.host ?? '', machine: 'A' }]))
+}, { immediate: true })
+// Open on the addresses the running deployment already uses, when it is a LAN one.
+watch(() => store.status.value, value => {
+  if (value?.deployment !== 'lan') return
+  deploymentMode.value = 'multi_machine'
+  const found = deployedHosts(store.status.value, form)
+  if (Object.values(found).some(entry => entry.host)) hosts.value = found
+}, { immediate: true })
+watch(deploymentMode, value => {
+  if (value === 'multi_machine' && !layoutLocked.value && usedMachineGroups.value.length < 2) machineCount.value = 2
+}, { flush: 'sync' })
+watch(() => JSON.stringify([hosts.value, machineCountInput.value, TOPOLOGY_FIELDS.map(field => form[field])]), () => {
+  deploymentPlan.value = null
+  planError.value = ''
+}, { flush: 'sync' })
+function bundleUrl(machine) {
+  if (!layoutLocked.value) return deploymentPlan.value
+    ? `/api/deployment/plans/${deploymentPlan.value.plan_id}/bundle/${machine}` : null
+  return `/api/deployment/bundle/${machine}`
+}
+function setMachineHost(machine, value) {
+  for (const entry of Object.values(hosts.value)) if (entry.machine === machine) entry.host = value.trim()
+}
+function assignMachine(name, machine) {
+  const host = machineRows.value.find(row => row.machine === machine)?.host ?? ''
+  hosts.value[name] = { machine, host }
+}
+async function prepareDeployment() {
+  if (deployment.value.reason || hostsError.value || planning.value) return
+  if (store.status.value?.lan_deployment_plans !== true) {
+    planError.value = '请重启控制服务以加载新版多机配置包接口。'
+    return
+  }
+  if (usedMachineGroups.value.some(machine => MACHINE_GROUPS.indexOf(machine) >= (store.status.value?.max_machine_count ?? 3))) {
+    planError.value = '请更新并重启控制服务，以支持自定义电脑数量。'
+    return
+  }
+  planning.value = true
+  planError.value = ''
+  try {
+    deploymentPlan.value = await api.prepareDeployment({ ...form, deployment: 'lan', hosts: hosts.value })
+  } catch (error) { planError.value = errorText(error) }
+  finally { planning.value = false }
+}
 function chooseClientCount(count) {
-  if (deployment.value.locked) return
+  if (topologyLocked.value) return
   topologyTouched.value = true
   form.client_count = count
 }
+function switchDeploymentMode(direction) {
+  if (topologyLocked.value) return
+  if (direction < 0) deploymentMode.value = 'single_machine'
+  else if (direction > 0) deploymentMode.value = 'multi_machine'
+}
 async function applyDeployment(startNodes = true) {
-  if (deployment.value.reason) return
-  if (await store.deployNodes(form, startNodes)) topologyView.value = 'live'
+  if (deployment.value.reason || hostsError.value) return
+  // The mode and the entered addresses travel with the topology counts, so the
+  // request can never describe a different layout from the one on screen.
+  const configuration = { ...form, deployment: deploymentMode.value === 'multi_machine' ? 'lan' : 'single_host',
+    hosts: lanHosts(form, hosts.value) }
+  if (await store.deployNodes(configuration, startNodes)) topologyView.value = 'live'
 }
 let parametersController = null
 let gpuController = null
@@ -152,17 +267,16 @@ onMounted(refreshProofParameters)
 onUnmounted(() => { parametersController?.abort(); gpuController?.abort() })
 
 const presets = [
-  { id: 'smoke', name: '快速验证', apply: { rounds: 1, train_limit: 1200, test_limit: 400, local_epochs: 1, mode: 'optimized' } },
+  { id: 'smoke', name: '快速验证', apply: { rounds: 1, train_limit: 1200, test_limit: 400, local_epochs: 1, mode: 'dgflow' } },
   { id: 'standard', name: '标准实验', apply: { rounds: 5, train_limit: 6000, test_limit: 1000, local_epochs: 1, mode: 'dgflow' } },
-  { id: 'full', name: '完整数据', apply: { rounds: 3, train_limit: 60000, test_limit: 10000, local_epochs: 2, mode: 'optimized' } },
+  { id: 'full', name: '完整数据', apply: { rounds: 3, train_limit: 60000, test_limit: 10000, local_epochs: 2, mode: 'dgflow' } },
   { id: 'lego', name: 'LegoGroth16 实验', apply: { rounds: 1, train_limit: 1200, test_limit: 400,
-    local_epochs: 1, mode: 'optimized', execution: 'parallel', rpc_workers: 6,
+    local_epochs: 1, mode: 'dgflow', execution: 'parallel', rpc_workers: 6,
     proof_suite: 'lego_norm_v1', verification: 'deterministic', verification_workers: 2 } },
 ]
 function applyPreset(preset) {
   Object.assign(form, preset.apply, { proof_suite: 'lego_norm_v1' })
   form.train_limit = Math.min(form.train_limit, selectedDataset.value.trainCount)
-  if (preset.id === 'lego') advanced.value = true
   if (form.attack !== 'none') form.malicious_clients = Math.max(1, form.malicious_clients)
 }
 
@@ -175,7 +289,7 @@ const attackClientIdsText = computed({
 })
 
 const currentAttack = computed(() => ATTACKS.find(a => a.value === form.attack))
-const robustnessEnabled = computed(() => ['dgflow', 'optimized'].includes(form.mode))
+const robustnessEnabled = computed(() => form.mode === 'dgflow')
 const attackClasses = computed(() => form.dataset === 'cifar10'
   ? ['飞机', '汽车', '鸟', '猫', '鹿', '狗', '青蛙', '马', '船', '卡车']
   : Array.from({ length: 10 }, (_, index) => `数字 ${index}`))
@@ -213,6 +327,7 @@ async function prepareGpu() {
 
 const formErrors = computed(() => {
   const errors = []
+  if (!MODES.some(mode => mode.id === form.mode)) errors.push('请选择无密码保护基线或 DGFlow 完整协议。')
   const modelError = modelConfigurationError(form)
   if (modelError) errors.push(modelError)
   if (backendError.value) errors.push(backendError.value)
@@ -271,9 +386,11 @@ const blockedReason = computed(() => {
   if (compatibilityError.value) return compatibilityError.value
   if (store.deploying.value) return '正在应用节点部署。'
   if (store.hasActiveRun.value) return '当前任务结束后可创建下一场实验。'
+  if (deploymentMode.value === 'multi_machine' && !layoutLocked.value) return '生成配置包并在各电脑部署后，在 A 的控制页创建实验。'
   if (deployment.value.error) return `部署配置异常：${deployment.value.error}`
   if (backendError.value) return backendError.value
   if (!deployment.value.configured) return '请先应用并启动所选客户端、边缘、云数量及门限的真实部署。'
+  if (hostsError.value) return hostsError.value
   if (!participants.value.ready) return participants.value.reason
   if (!selectedDatasetReady.value) return `请先准备 ${selectedDataset.value?.name ?? '所选'} 实验数据。`
   if (!store.nodes.value.length) return '请先初始化并启动实验节点。'
@@ -332,14 +449,7 @@ function exportConfig() {
 </script>
 
 <template>
-  <div class="nb-page">
-    <PageHead
-      eyebrow="DEPLOY"
-      title="部署"
-      subtitle="使用 DGFlow 部署场景"
-      center
-    />
-
+  <div class="nb-page nb-deployment-page">
     <div v-if="compatibilityError" class="nb-notice warning" role="alert"><LabIcon name="alert" :size="18" /><div>{{ compatibilityError }}</div></div>
 
     <div v-if="store.operationError.value" class="nb-notice danger">
@@ -353,28 +463,10 @@ function exportConfig() {
       <button class="nb-dismiss" @click="store.notification.value = ''" aria-label="关闭">×</button>
     </div>
 
-    <div class="nb-grid split-wide">
+    <form class="nb-grid split-wide nb-deployment-layout" aria-label="部署实验" @submit.prevent="launch">
       <!-- ── Numbered configuration column (NEBULA deployment idiom) ── -->
-      <form class="nb-steps" @submit.prevent="launch">
-        <StepCard no="1" title="参与方与部署" icon="nodes" :badge="deployment.ready ? '实际节点已就绪' : '配置真实拓扑'">
-          <div class="nb-client-count-heading"><label for="deployment-client-count">训练客户端数量 n</label><span>2–100 个 · 支持奇数</span></div>
-          <div class="nb-client-count-input">
-            <button type="button" aria-label="减少一个客户端" :disabled="deployment.locked || !validClientCount(form.client_count) || form.client_count <= 2" @click="chooseClientCount(form.client_count - 1)">−</button>
-            <input id="deployment-client-count" v-model.number="form.client_count" type="number" min="2" max="100" step="1" :disabled="deployment.locked" required @input="topologyTouched = true" />
-            <span>客户端</span><button type="button" aria-label="增加一个客户端" :disabled="deployment.locked || !validClientCount(form.client_count) || form.client_count >= 100" @click="chooseClientCount(form.client_count + 1)">+</button>
-          </div>
-          <div class="nb-client-count-presets" aria-label="客户端数量快捷选择"><button v-for="count in [2, 6, 10, 20]" :key="count" type="button" :class="{ selected: form.client_count === count }" :aria-pressed="form.client_count === count" :disabled="deployment.locked" @click="chooseClientCount(count)">{{ count }} 个</button></div>
-          <div class="nb-grid cols-2 nb-topology-fields">
-            <label class="nb-field" for="deployment-authority-count"><span>边缘服务器数量 w</span><input id="deployment-authority-count" v-model.number="form.authority_count" type="number" min="2" max="32" step="1" :disabled="deployment.locked" required @input="topologyTouched = true" /><small>2–32 个 · 分布式建钥与验证</small></label>
-            <label class="nb-field" for="deployment-aggregator-count"><span>云服务器数量 v</span><input id="deployment-aggregator-count" v-model.number="form.aggregator_count" type="number" min="2" max="32" step="1" :disabled="deployment.locked" required @input="topologyTouched = true" /><small>2–32 个 · 门限聚合与部分解密</small></label>
-            <label class="nb-field" for="deployment-authority-threshold"><span>边缘门限 ς</span><input id="deployment-authority-threshold" v-model.number="form.authority_threshold" type="number" min="2" :max="form.authority_count" step="1" :disabled="deployment.locked" required @input="topologyTouched = true" /><small>2–{{ form.authority_count }} 份边缘结果</small></label>
-            <label class="nb-field" for="deployment-aggregator-threshold"><span>云门限 ϵ</span><input id="deployment-aggregator-threshold" v-model.number="form.aggregator_threshold" type="number" min="2" :max="form.aggregator_count" step="1" :disabled="deployment.locked" required @input="topologyTouched = true" /><small>2–{{ form.aggregator_count }} 份部分解密</small></label>
-          </div>
-          <div class="nb-deployment-state"><LabIcon name="layers" :size="16" /><div><strong>{{ form.authority_count }} 个边缘服务器 · {{ form.aggregator_count }} 个云服务器</strong><small>{{ deployment.actualTopology ? `实际部署 ${deployment.actualTopology.client_count} / ${deployment.actualTopology.authority_count} / ${deployment.actualTopology.aggregator_count} 个客户端 / 边缘 / 云` : '尚未读取到真实拓扑' }}{{ !store.connected.value && deployment.actual ? '（最近状态）' : '' }}</small></div></div>
-          <div v-if="deployment.error" class="nb-notice danger" role="alert"><LabIcon name="alert" :size="16" /><div>部署配置异常：{{ deployment.error }}。请检查配置后重新应用部署。</div></div>
-          <p class="nb-note" :class="{ 'text-warn': deployment.reason || deployment.changed }">{{ deployment.reason || (deployment.changed ? '当前展示待应用规划。应用部署后，真实节点、单归属关系与门限才会更新。' : deployment.ready ? '所选三层拓扑与真实部署一致，全部节点在线。' : deployment.configured ? '拓扑已登记，当前存在离线节点；训练按下方在线门槛判断。' : '初始化身份或直接应用并启动，然后等待实际节点就绪。') }}</p>
-          <div class="nb-deployment-actions"><button type="button" class="nb-btn outline small" :disabled="Boolean(deployment.reason)" @click="applyDeployment(false)">初始化身份</button><button type="button" class="nb-btn primary small" :disabled="Boolean(deployment.reason)" @click="applyDeployment(true)"><span v-if="store.deploying.value" class="nb-spinner"></span><LabIcon v-else name="play" :size="13" />{{ store.deploying.value ? '正在部署…' : '应用并启动三层拓扑' }}</button></div>
-        </StepCard>
+      <div class="nb-steps" role="region" aria-label="实验参数" tabindex="0">
+
 
         <StepCard no="2" title="实验策略" icon="sliders" :badge="MODES.find(m => m.id === form.mode)?.tag">
           <div class="nb-mode-grid">
@@ -390,7 +482,7 @@ function exportConfig() {
               </div>
               <h3>{{ mode.name }}</h3>
               <p>{{ mode.description }}</p>
-              <p class="nb-mode-protection" :class="{ same: mode.id === 'optimized' }">{{ mode.protection }}</p>
+              <p class="nb-mode-protection">{{ mode.protection }}</p>
             </button>
           </div>
           <div v-if="form.mode === 'plain'" class="nb-notice warning" style="margin:0">
@@ -399,7 +491,7 @@ function exportConfig() {
           </div>
           <div v-else class="nb-notice info" style="margin:0">
             <LabIcon name="lock" :size="16" />
-            <div>{{ robustnessEnabled ? '启用密码学验证及范数、余弦相似度和聚类筛选。筛选效果需以实际实验指标判断。' : modeName('encrypted') + '：校验密文与证明，鲁棒筛选关闭；下方范数倍率和最低余弦相似度设置不生效。' }}</div>
+            <div>启用密码学验证及范数、余弦相似度和聚类筛选。筛选效果需以实际实验指标判断。</div>
           </div>
         </StepCard>
 
@@ -522,7 +614,7 @@ function exportConfig() {
               </select>
               <small>攻击客户端使用此目标标签训练；该配置随实验记录保存。</small>
             </label>
-            <div v-if="advanced || form.attack_client_ids != null" class="nb-field">
+            <div class="nb-field">
               <label for="attack-client-ids">攻击客户端身份（可选）</label>
               <input id="attack-client-ids" v-model="attackClientIdsText" type="text" placeholder="client1, client3" />
               <small>留空使用前 {{ form.malicious_clients }} 个客户端；填写时用逗号或空格分隔，数量须与异常客户端数量一致。这里只设置实验注入位置，不参与防御筛选。</small>
@@ -544,7 +636,7 @@ function exportConfig() {
             <div><dt>实验引擎</dt><dd>{{ store.connected.value ? '已连接' : '未连接' }}</dd></div>
             <div><dt>{{ selectedDataset.name }} 数据</dt><dd>{{ store.preparing.value ? '准备中…' : selectedDatasetReady ? '后端已确认就绪' : '未准备' }}</dd></div>
             <div><dt>在线节点</dt><dd>{{ onlineCount ?? '—' }} / {{ store.nodes.value.length || '—' }}</dd></div>
-            <div v-if="advanced"><dt>训练后端</dt><dd>{{ form.backend }}</dd></div>
+            <div><dt>训练后端</dt><dd>{{ form.backend }}</dd></div>
           </div>
           <p class="nb-note">数据由后端在节点本地准备与划分，原始样本不上传控制服务。</p>
           <p v-if="form.dataset === 'cifar10'" class="nb-note">首次准备会下载并校验约 162 MB 的 CIFAR-10 文件，请等待完成。线性模型保留 RGB 池化输入；CNN 明文对照使用完整 RGB 原图。</p>
@@ -614,7 +706,7 @@ function exportConfig() {
           <p class="nb-note" style="margin:0">此选项控制密码计算。模型训练仍使用所选训练后端；选择 GPU 密码计算不要求安装 PyTorch。GPU 模式需要加密实验策略，启动时会再次检查设备能力。</p>
         </StepCard>
 
-        <StepCard v-if="advanced" no="7" title="高级设置" icon="bolt" badge="ADVANCED">
+        <StepCard no="7" title="高级设置" icon="bolt" badge="默认展开">
           <div class="nb-grid cols-2" style="gap:18px">
             <label class="nb-field">
               <label>执行方式</label>
@@ -706,42 +798,6 @@ function exportConfig() {
             <small v-if="backendError" class="text-err">{{ backendError }}；已保留所选后端，请明确选择可用后端后再运行。</small>
           </label>
         </StepCard>
-      </form>
-
-      <div class="nb-stage nb-deploy-stage">
-        <div class="nb-topology-switch" aria-label="拓扑数据来源">
-          <button type="button" :class="{ selected: !showPreview }" :aria-pressed="!showPreview" :disabled="!store.nodes.value.length" @click="topologyView = 'live'"><LabIcon name="signal" :size="14" />实际部署 <span>{{ deployment.actual ?? '—' }} 客户端</span></button>
-          <button type="button" :class="{ selected: showPreview }" :aria-pressed="showPreview" @click="topologyView = 'plan'"><LabIcon name="layers" :size="14" />规划预览 <span>{{ validClientCount(form.client_count) ? form.client_count : '—' }} 客户端</span></button>
-          <span v-if="deployment.changed" class="nb-topology-pending">拓扑与门限变更待应用</span>
-        </div>
-        <TopologyGraph :nodes="topologyNodes" :preview="showPreview" :connected="store.connected.value" />
-        <details class="nb-ownership"><summary>客户端的边缘归属 <span>每个客户端仅连接所属边缘</span></summary><div v-for="group in ownershipGroups" :key="group.id"><strong>{{ group.id }}</strong><span>{{ group.clients.length ? group.clients.join('、') : '暂无归属客户端' }}</span></div><p>边缘服务器协作建钥，并与全部云服务器协作。连线表示协议关系，非实时流量。<template v-if="showPreview">规划采用项目默认的轮流分配策略；论文仅要求客户端单归属边缘。</template></p></details>
-
-        <div class="nb-stage-toolbar">
-          <button type="button" class="nb-btn primary small" @click="advanced = !advanced">
-            <LabIcon name="sliders" :size="14" />{{ advanced ? '收起高级' : '高级模式' }}
-          </button>
-          <button type="button" class="nb-btn ghost small" @click="reset">
-            <LabIcon name="refresh" :size="14" />重置
-          </button>
-          <span class="nb-spacer"></span>
-          <button
-            v-for="preset in presets" :key="preset.id" type="button"
-            class="nb-btn outline small" @click="applyPreset(preset)"
-          >{{ preset.name }}</button>
-          <button type="button" class="nb-icon-btn" title="导出配置 JSON" @click="exportConfig">
-            <LabIcon name="download" :size="16" />
-          </button>
-          <button type="button" class="nb-btn primary" :disabled="Boolean(blockedReason) || store.submitting.value" @click="launch">
-            <span v-if="store.submitting.value" class="nb-spinner"></span>
-            <LabIcon v-else name="play" :size="16" />
-            {{ store.submitting.value ? '正在创建…' : '运行 DGFlow' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="nb-grid split-wide" style="margin-top:20px">
       <div class="nb-card">
         <div class="nb-card-head"><h2>本次实验清单</h2></div>
         <div class="nb-card-body">
@@ -771,8 +827,112 @@ function exportConfig() {
           </details>
         </div>
       </div>
+      </div>
 
-      <div class="nb-card">
+      <div class="nb-stage nb-deploy-stage" role="region" aria-label="拓扑与部署" tabindex="0">
+        <div class="nb-topology-switch" aria-label="拓扑数据来源">
+          <button type="button" :class="{ selected: !showPreview }" :aria-pressed="!showPreview" :disabled="!store.nodes.value.length" @click="topologyView = 'live'"><LabIcon name="signal" :size="14" />实际部署 <span>{{ deployment.actual ?? '—' }} 客户端</span></button>
+          <button type="button" :class="{ selected: showPreview }" :aria-pressed="showPreview" @click="topologyView = 'plan'"><LabIcon name="layers" :size="14" />规划预览 <span>{{ validClientCount(form.client_count) ? form.client_count : '—' }} 客户端</span></button>
+          <span v-if="deployment.changed" class="nb-topology-pending">拓扑与门限变更待应用</span>
+        </div>
+        <TopologyGraph :nodes="topologyNodes" :preview="showPreview" :connected="store.connected.value" scroll-friendly />
+        <StepCard class="nb-participant-deployment" no="1" title="参与方与部署" icon="nodes" :badge="deployment.ready ? '实际节点已就绪' : '配置真实拓扑'">
+          <div class="nb-participant-counts"><div class="nb-client-settings"><div class="nb-client-count-heading"><label for="deployment-client-count">训练客户端数量 n</label><span>2–100 个 · 支持奇数</span></div>
+          <div class="nb-client-count-input">
+            <button type="button" aria-label="减少一个客户端" :disabled="topologyLocked || !validClientCount(form.client_count) || form.client_count <= 2" @click="chooseClientCount(form.client_count - 1)">−</button>
+            <input id="deployment-client-count" v-model.number="form.client_count" type="number" min="2" max="100" step="1" :disabled="topologyLocked" required @input="topologyTouched = true" />
+            <span>客户端</span><button type="button" aria-label="增加一个客户端" :disabled="topologyLocked || !validClientCount(form.client_count) || form.client_count >= 100" @click="chooseClientCount(form.client_count + 1)">+</button>
+          </div>
+          <div class="nb-client-count-presets" aria-label="客户端数量快捷选择"><button v-for="count in [2, 6, 10, 20]" :key="count" type="button" :class="{ selected: form.client_count === count }" :aria-pressed="form.client_count === count" :disabled="topologyLocked" @click="chooseClientCount(count)">{{ count }} 个</button></div>
+          </div><div class="nb-grid cols-2 nb-topology-fields">
+            <label class="nb-field" for="deployment-authority-count"><span>边缘服务器数量 w</span><input id="deployment-authority-count" v-model.number="form.authority_count" type="number" min="2" max="32" step="1" :disabled="topologyLocked" required @input="topologyTouched = true" /><small>2–32 个 · 分布式建钥与验证</small></label>
+            <label class="nb-field" for="deployment-aggregator-count"><span>云服务器数量 v</span><input id="deployment-aggregator-count" v-model.number="form.aggregator_count" type="number" min="2" max="32" step="1" :disabled="topologyLocked" required @input="topologyTouched = true" /><small>2–32 个 · 门限聚合与部分解密</small></label>
+            <label class="nb-field" for="deployment-authority-threshold"><span>边缘门限 ς</span><input id="deployment-authority-threshold" v-model.number="form.authority_threshold" type="number" min="2" :max="form.authority_count" step="1" :disabled="topologyLocked" required @input="topologyTouched = true" /><small>2–{{ form.authority_count }} 份边缘结果</small></label>
+            <label class="nb-field" for="deployment-aggregator-threshold"><span>云门限 ϵ</span><input id="deployment-aggregator-threshold" v-model.number="form.aggregator_threshold" type="number" min="2" :max="form.aggregator_count" step="1" :disabled="topologyLocked" required @input="topologyTouched = true" /><small>2–{{ form.aggregator_count }} 份部分解密</small></label>
+          </div>
+          </div><div class="nb-deployment-mode" data-testid="deployment-mode">
+            <div class="nb-deployment-carousel" role="group" aria-label="部署方式切换"
+                 @keydown.left.prevent="switchDeploymentMode(-1)" @keydown.right.prevent="switchDeploymentMode(1)">
+              <button type="button" class="nb-mode-arrow previous" aria-label="切换到单机部署"
+                      :disabled="topologyLocked || deploymentMode === 'single_machine'" @click="switchDeploymentMode(-1)">
+                <LabIcon name="chevron" :size="20" />
+              </button>
+              <div class="nb-mode-current" aria-live="polite" aria-atomic="true">
+                <span>部署方式 · {{ deploymentMode === 'single_machine' ? '1 / 2' : '2 / 2' }}</span>
+                <strong>{{ deploymentMode === 'single_machine' ? '单机部署' : '多机部署' }}</strong>
+                <small>{{ deploymentMode === 'single_machine' ? '全部节点在本机运行' : '通过 IP 连接多台电脑' }}</small>
+              </div>
+              <button type="button" class="nb-mode-arrow" aria-label="切换到多机部署"
+                      :disabled="topologyLocked || deploymentMode === 'multi_machine'" @click="switchDeploymentMode(1)">
+                <LabIcon name="chevron" :size="20" />
+              </button>
+            </div>
+            <p v-if="layoutLocked" class="nb-note text-warn">{{ layoutLockReason }}</p>
+          </div>
+
+          <div v-if="deploymentMode === 'multi_machine'" class="nb-multi-machine" data-testid="multi-machine-hosts">
+            <div class="nb-multi-machine-head">
+              <label class="nb-field" for="deployment-machine-count">
+                <span>{{ layoutLocked ? '已部署电脑' : '1 · 配置电脑' }}</span>
+                <div class="nb-machine-count-input">
+                  <input id="deployment-machine-count" v-model.number="machineCount" type="number" inputmode="numeric"
+                         :min="layoutLocked ? 1 : 2" :max="maxMachineCount" step="1" required :disabled="topologyLocked"
+                         :aria-invalid="Boolean(machineCountError)" aria-describedby="deployment-machine-count-help" />
+                  <span>台电脑</span>
+                </div>
+                <small id="deployment-machine-count-help">{{ layoutLocked ? '数量随已部署配置锁定' : `可输入 2–${maxMachineCount} 台` }}</small>
+              </label>
+              <span class="nb-note">A 负责主控 · 节点自动均分</span>
+            </div>
+            <div class="nb-machine-cards">
+              <label v-for="row in machineRows" :key="row.machine" class="nb-machine-card nb-field">
+                <span><strong>电脑 {{ row.machine }}</strong><small>{{ row.machine === 'A' ? '主控 + 节点' : '节点' }}<template v-if="layoutLocked"> · {{ row.online }}/{{ row.nodes.length }} 在线</template></small></span>
+                <input :value="row.host" type="text" :disabled="topologyLocked" :aria-label="`电脑 ${row.machine} 的 IP 地址`"
+                       :placeholder="row.multipleAddresses ? '多个地址，展开高级分配查看' : '局域网 IP，例如 192.168.1.10'"
+                       @input="setMachineHost(row.machine, $event.target.value)" />
+                <small>客户端 {{ row.clients }} · 边缘 {{ row.authorities }} · 云 {{ row.aggregators }}</small>
+              </label>
+            </div>
+            <details class="nb-machine-details">
+              <summary>高级分配 · {{ hostNames.length }} 个节点</summary>
+              <div class="nb-host-scroll"><table class="nb-host-table">
+                <thead><tr><th>节点</th><th>电脑</th><th v-if="layoutLocked">地址</th></tr></thead>
+                <tbody><tr v-for="name in hostNames" :key="name">
+                  <td class="mono">{{ name }}</td>
+                  <td><select :value="hosts[name].machine" :disabled="topologyLocked" :aria-label="`${name} 所在电脑`" @change="assignMachine(name, $event.target.value)">
+                    <option v-for="row in machineRows" :key="row.machine" :value="row.machine">{{ row.machine }}</option>
+                  </select></td>
+                  <td v-if="layoutLocked">{{ hosts[name].host }}</td>
+                </tr></tbody>
+              </table></div>
+            </details>
+            <p v-if="hostsError" class="nb-note text-warn" data-testid="hosts-error">{{ hostsError }}</p>
+            <p v-if="planError" class="nb-note text-warn" role="alert">{{ planError }}</p>
+            <button v-if="!layoutLocked" type="button" class="nb-btn primary small nb-generate-plan" :disabled="Boolean(deployment.reason || hostsError)" @click="prepareDeployment">
+              <span v-if="planning" class="nb-spinner"></span>{{ planning ? '正在生成…' : planReady ? '重新生成配置包' : '2 · 生成部署配置包' }}
+            </button>
+            <div v-if="planReady" class="nb-bundle-downloads">
+              <a v-for="machine in usedMachineGroups" :key="machine" class="nb-btn outline small" :href="bundleUrl(machine)" download :data-testid="`bundle-${machine}`">下载电脑 {{ machine }} 包</a>
+            </div>
+            <p v-if="deploymentPlan" class="nb-note">已生成 {{ deploymentPlan.proof_parameters.length }} 套公共 CRS；当前部署和实验记录保留。</p>
+            <p v-if="deploymentPlan && !deploymentPlan.proof_parameters.length" class="nb-note text-warn">当前没有可分发的 CRS；这些配置包暂只能运行明文实验。安装所需参数后重新生成。</p>
+            <details class="nb-machine-details" :open="planReady && !layoutLocked">
+              <summary>3 · 各机启动与连接检查</summary>
+              <p class="nb-note">各电脑使用同一版本源码并安装依赖、准备数据。将各自配置包放入独立运行目录，按包内 README 启动本机节点；仅 A 启动控制页。</p>
+              <p class="nb-note">配置包包含本机身份和共用 CRS。源码、环境和数据另行准备；防火墙需允许节点端口双向通信。启动后在 A 检查各机在线数量。</p>
+            </details>
+            <button v-if="layoutLocked" type="button" class="nb-btn primary small nb-generate-plan" :disabled="Boolean(deployment.reason || hostsError)" @click="applyDeployment(true)">
+              {{ store.deploying.value ? '正在启动…' : `启动本机 ${store.status.value?.local_machine || 'A'} 节点` }}
+            </button>
+          </div>
+          <div v-if="deploymentMode === 'single_machine'" class="nb-deployment-state"><LabIcon name="layers" :size="16" /><div><strong>{{ form.authority_count }} 个边缘服务器 · {{ form.aggregator_count }} 个云服务器</strong><small>{{ deployment.actualTopology ? `实际部署 ${deployment.actualTopology.client_count} / ${deployment.actualTopology.authority_count} / ${deployment.actualTopology.aggregator_count} 个客户端 / 边缘 / 云` : '尚未读取到真实拓扑' }}{{ !store.connected.value && deployment.actual ? '（最近状态）' : '' }}</small></div></div>
+          <div v-if="deployment.error" class="nb-notice danger" role="alert"><LabIcon name="alert" :size="16" /><div>部署配置异常：{{ deployment.error }}。请检查配置后重新应用部署。</div></div>
+          <p v-if="deploymentMode === 'single_machine' || layoutLocked" class="nb-note" :class="{ 'text-warn': deployment.reason || deployment.changed }">{{ deployment.reason || (deployment.changed ? '当前展示待应用规划。应用部署后，真实节点、单归属关系与门限才会更新。' : deployment.ready ? '所选三层拓扑与真实部署一致，全部节点在线。' : deployment.configured ? '拓扑已登记，当前存在离线节点；训练按下方在线门槛判断。' : '初始化身份或直接应用并启动，然后等待实际节点就绪。') }}</p>
+          <div v-if="deploymentMode === 'single_machine'" class="nb-deployment-actions"><button type="button" class="nb-btn outline small" :disabled="Boolean(deployment.reason)" @click="applyDeployment(false)">初始化身份</button><button type="button" class="nb-btn primary small" :disabled="Boolean(deployment.reason)" @click="applyDeployment(true)"><span v-if="store.deploying.value" class="nb-spinner"></span><LabIcon v-else name="play" :size="13" />{{ store.deploying.value ? '正在部署…' : '应用并启动三层拓扑' }}</button></div>
+        </StepCard>
+        <details class="nb-ownership"><summary>客户端的边缘归属 <span>每个客户端仅连接所属边缘</span></summary><div v-for="group in ownershipGroups" :key="group.id"><strong>{{ group.id }}</strong><span>{{ group.clients.length ? group.clients.join('、') : '暂无归属客户端' }}</span></div><p>边缘服务器协作建钥，并与全部云服务器协作。连线表示协议关系，非实时流量。<template v-if="showPreview">规划采用项目默认的轮流分配策略；论文仅要求客户端单归属边缘。</template></p></details>
+
+      <div class="nb-card nb-launch-checks">
         <div class="nb-card-head"><h2>启动前检查</h2></div>
         <div class="nb-card-body">
           <div class="nb-checkline">
@@ -812,12 +972,59 @@ function exportConfig() {
           </div>
         </div>
       </div>
-    </div>
+
+        <div class="nb-stage-toolbar">
+          <button type="button" class="nb-btn ghost small" @click="reset">
+            <LabIcon name="refresh" :size="14" />重置
+          </button>
+          <span class="nb-spacer"></span>
+          <button
+            v-for="preset in presets" :key="preset.id" type="button"
+            class="nb-btn outline small" @click="applyPreset(preset)"
+          >{{ preset.name }}</button>
+          <button type="button" class="nb-icon-btn" title="导出配置 JSON" @click="exportConfig">
+            <LabIcon name="download" :size="16" />
+          </button>
+          <button type="button" class="nb-btn primary" :disabled="Boolean(blockedReason) || store.submitting.value" @click="launch">
+            <span v-if="store.submitting.value" class="nb-spinner"></span>
+            <LabIcon v-else name="play" :size="16" />
+            {{ store.submitting.value ? '正在创建…' : '运行 DGFlow' }}
+          </button>
+        </div>
+      </div>
+    </form>
+
+
   </div>
 </template>
 
 <style scoped>
-.nb-deploy-stage { max-height: none !important; gap: 12px; }
+.nb-page.nb-deployment-page { padding: 16px 0; }
+.nb-deploy-stage { gap: 12px; }
+.nb-deployment-layout > .nb-deploy-stage { position: static; margin-top: 0; }
+.nb-deployment-layout > [role="region"]:focus-visible { outline: 2px solid #426997; outline-offset: 3px; }
+@media (min-width: 1181px) {
+  .nb-page.nb-deployment-page { height: calc(100dvh - var(--nb-header-h)); min-height: 384px; display: flex; flex-direction: column; }
+  .nb-deployment-page > .nb-notice { flex-shrink: 0; }
+  .nb-grid.nb-deployment-layout { flex: 1; min-height: 0; align-items: stretch; }
+  .nb-deployment-layout > .nb-steps,
+  .nb-deployment-layout > .nb-deploy-stage {
+    height: 100%; min-height: 0; max-height: none; min-width: 0;
+    overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain;
+    scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #b0bed0 transparent;
+    padding: 2px 6px 2px 2px;
+  }
+  .nb-deployment-layout > .nb-steps > *,
+  .nb-deployment-layout > .nb-deploy-stage > * { flex-shrink: 0; }
+  .nb-deployment-layout .nb-stage-toolbar { position: sticky; bottom: -2px; z-index: 5; padding: 12px; background: #f8fafc; border: 1px solid #dce4ee; border-radius: 8px; box-shadow: 0 -3px 12px #263c640a; }
+}
+.nb-participant-deployment { container-type: inline-size; min-width: 0; }
+.nb-participant-counts { display: grid; gap: 18px; min-width: 0; }
+.nb-participant-counts > * { min-width: 0; }
+.nb-participant-counts .nb-topology-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+@container (min-width: 720px) {
+  .nb-participant-counts { grid-template-columns: minmax(0, .85fr) minmax(0, 1.4fr); gap: 24px; }
+}
 .nb-topology-fields { gap: 12px; margin-top: 16px; }.nb-topology-fields .nb-field > span { font-size: 11px; color: #425674; }
 .nb-ownership { padding: 12px 16px; background: #fff; border: 1px solid #e1e7f0; border-radius: 9px; font-size: 11px; color: #697e99; }.nb-ownership summary { cursor: pointer; }.nb-ownership summary span { margin-left: 8px; font-size: 10px; color: #95a0b1; }.nb-ownership > div { display: flex; gap: 12px; margin-top: 10px; }.nb-ownership strong { flex: 0 0 85px; }.nb-ownership > div > span { overflow-wrap: anywhere; }.nb-ownership p { margin: 12px 0 0; font-size: 10px; }
 .nb-client-count-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
@@ -828,18 +1035,58 @@ function exportConfig() {
 .nb-client-count-input span { margin-right: auto; color: #8191a6; font-size: 11px; }.nb-client-count-input:focus-within { box-shadow: 0 0 0 2px #dbe9f6; }
 .nb-client-count-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 10px; }.nb-client-count-presets button { padding: 6px; border-radius: 5px; font-size: 10px; background: #fff; border: 1px solid #e2e8f1; color: #8290a6; }.nb-client-count-presets button.selected { color: #426997; border-color: #b9cce2; background: #edf4fb; }.nb-client-count-presets button:disabled { opacity: .55; }
 .nb-deployment-state { display: flex; gap: 10px; align-items: center; padding: 13px 0 0; color: #7d91ac; }.nb-deployment-state strong { display: block; font-size: 11px; font-weight: 500; color: #667b97; }.nb-deployment-state small { display: block; margin-top: 4px; font-size: 10px; color: #9aa6b7; }
+/* Physical layout: one computer, or several terminals joined by entered IPs. */
+.nb-deployment-mode { margin-top: 16px; }
+.nb-deployment-carousel { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 14px; align-items: center; padding: 14px; background: #fff; border: 1px solid #dce4ee; border-radius: 10px; }
+.nb-mode-current { display: grid; gap: 4px; text-align: center; }
+.nb-mode-current > span { font-size: 10px; color: #8290a6; }
+.nb-mode-current strong { font-size: 16px; color: #2d456c; }
+.nb-mode-current small { font-size: 11px; line-height: 1.5; color: #74859b; }
+.nb-mode-arrow { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: #f4f7fb; color: #426997; border: 1px solid #dce4ee; border-radius: 8px; cursor: pointer; }
+.nb-mode-arrow.previous svg { transform: rotate(180deg); }
+.nb-mode-arrow:hover:enabled { background: #e9f1fb; border-color: #aac1de; }
+.nb-mode-arrow:focus-visible { outline: 2px solid #426997; outline-offset: 3px; }
+.nb-mode-arrow:disabled { opacity: .35; cursor: default; }
+.nb-multi-machine { margin-top: 12px; padding: 14px; border: 1px solid #e2e8f1; border-radius: 8px; background: #fbfcfe; }
+.nb-machine-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.nb-machine-card { padding: 12px; border: 1px solid #e2e8f1; border-radius: 8px; background: #fff; min-width: 0; }
+.nb-machine-card > span { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.nb-machine-card small { color: #74859b; font-size: 11px; }
+.nb-machine-card input { min-width: 0; width: 100%; box-sizing: border-box; }
+.nb-machine-details { margin-top: 14px; font-size: 12px; color: #596f8c; }
+.nb-machine-details summary { cursor: pointer; }
+.nb-host-scroll { max-height: 260px; overflow: auto; margin-top: 10px; }
+.nb-generate-plan { width: 100%; margin-top: 14px; }
+.nb-bundle-downloads { margin-top: 12px; }
+.nb-multi-machine-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.nb-machine-count-input { display: flex; align-items: center; gap: 10px; }
+.nb-machine-count-input input { width: 110px; min-width: 0; }
+.nb-machine-count-input span { white-space: nowrap; color: var(--nb-muted); font-size: 13px; }
+.nb-bundle-downloads { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 10px; color: #8290a6; }
+.nb-host-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.nb-host-table th { padding: 6px 8px; text-align: left; font-weight: 500; color: #8290a6; border-bottom: 1px solid #e6ecf4; }
+.nb-host-table td { padding: 5px 8px; border-bottom: 1px solid #f0f4f9; color: #4a5f7d; }
+.nb-host-table input { width: 100%; min-width: 130px; padding: 5px 7px; border: 1px solid #dfe6f0; border-radius: 5px; font-size: 11px; }
+.nb-host-table input:disabled, .nb-host-table select:disabled { background: #f5f7fa; color: #9aa6b7; }
+.nb-host-table select { padding: 5px 7px; border: 1px solid #dfe6f0; border-radius: 5px; font-size: 11px; }
+.nb-multi-machine code { padding: 1px 4px; background: #eef2f8; border-radius: 4px; font-size: 10px; }
 .nb-deployment-actions { display: flex; gap: 8px; }.nb-deployment-actions .primary { flex: 1; }
 .nb-topology-switch { display: flex; align-items: center; gap: 5px; padding: 5px; border: 1px solid #e1e7f0; border-radius: 10px; background: #f9fbfd; }
 .nb-topology-switch button { border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; display: flex; gap: 6px; align-items: center; color: #8091a9; font-size: 11px; }.nb-topology-switch button span { font-size: 9px; margin-left: 3px; color: #9aa8bc; }.nb-topology-switch button.selected { background: #fff; color: #425f89; box-shadow: 0 1px 5px #263c640d; }.nb-topology-switch button:disabled { opacity: .5; }
 .nb-topology-pending { margin-left: auto; padding-right: 9px; color: #b39363; font-size: 10px; }
 .nb-compute-devices .nb-mode-card:disabled { opacity: .65; }
 .nb-compute-devices .nb-mode-card:disabled:hover { border-color: var(--nb-line); background: var(--nb-surface); }
-/* State the cryptographic obligation of each mode; `optimized` must read as
-   "same cryptography as dgflow" rather than as an additional protection. */
+/* Explain the cryptographic protection supplied by the selected strategy. */
 .nb-mode-protection { margin: 8px 0 0; font-size: 10px; line-height: 1.55; color: #4d6b96; padding-top: 8px; border-top: 1px dashed #dbe4ef; }
-.nb-mode-protection.same { color: #7c6a4e; }
 .nb-readonly-value { display: flex; align-items: center; gap: 7px; margin: 0; height: 49px; padding: 0 13px; border: 1px solid #dce4ee; border-radius: 9px; background: #f4f7fb; color: #3f5a80; font-size: 12px; font-weight: 500; }
 .nb-compute-state { margin-left: 6px; color: var(--nb-muted); font-size: 11px; font-weight: 400; }
+@media (max-width: 1180px) {
+  .nb-grid.nb-deployment-layout { display: flex; flex-direction: column; align-items: stretch; }
+  .nb-deployment-layout > .nb-deploy-stage { display: contents; }
+  .nb-deployment-layout > .nb-steps { order: 1; }
+  .nb-deployment-layout .nb-launch-checks { order: 2; }
+  .nb-deployment-layout .nb-stage-toolbar { order: 3; }
+}
 @media (max-width: 600px) {
   .nb-deploy-stage { width: 100%; }
   .nb-topology-switch { flex-wrap: wrap; }
@@ -847,6 +1094,7 @@ function exportConfig() {
   .nb-topology-switch button span { margin-left: 0; }
   .nb-topology-pending { flex-basis: 100%; margin-left: 0; padding: 2px 6px 4px; text-align: center; }
   .nb-client-count-heading { flex-wrap: wrap; gap: 4px; }
+  .nb-deployment-carousel { gap: 8px; padding: 12px 8px; }
   .nb-deployment-actions { flex-wrap: wrap; }
   .nb-deployment-actions .primary { min-width: 190px; }
 }

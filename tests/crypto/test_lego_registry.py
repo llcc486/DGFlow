@@ -19,6 +19,20 @@ def installed(tmp_path):
     return registry,manifest
 
 
+def test_public_export_checks_pk_and_excludes_other_files(installed, tmp_path):
+    registry, manifest = installed
+    source = registry.root/manifest['crs_hash']
+    (source/'private.txt').write_text('not public material')
+    target = tmp_path/'export'
+    assert registry.export_to(target) == [{key: value for key, value in manifest.items() if key != 'setup_wall_s'}]
+    assert {p.name for p in (target/'proof-parameters'/manifest['crs_hash']).iterdir()} == {'manifest.json','pk.bin','vk.bin'}
+    raw = bytearray((source/'pk.bin').read_bytes())
+    raw[-1] ^= 1
+    (source/'pk.bin').write_bytes(raw)
+    with pytest.raises(ValueError, match='hash mismatch'):
+        registry.export_to(tmp_path/'invalid-export')
+
+
 def test_saved_pk_shared_between_clients_and_dispatched_through_protocol(installed):
     registry,manifest=installed; fingerprint=manifest['crs_hash']
     first,params,evidence=registry.load_prover(fingerprint,3,3,workers=2)

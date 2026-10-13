@@ -6,11 +6,14 @@ import { exportUrl } from '../lib/api.js'
 const props = defineProps({
   runId: { type: String, default: '' },
   runs: { type: Array, default: () => [] },
+  active: { type: Boolean, default: true },
 })
 const emit = defineEmits(['deploy'])
 const selectedRun = computed(() => props.runId)
-const { busy, frameUrl, frameLoaded, frameFailed, syncFailed, frameKey, message, confirmFrame, refresh } = useTensorBoard(selectedRun)
-useTensorBoardHistory(computed(() => props.runs), selectedRun)
+const active = computed(() => props.active)
+const { busy, frameUrl, frameLoaded, frameFailed, syncFailed, frameKey, message, confirmFrame, refresh } = useTensorBoard(selectedRun, { active })
+// Exporting all history should not compete with the selected panel's first load.
+useTensorBoardHistory(computed(() => props.runs), selectedRun, { enabled: computed(() => active.value && frameLoaded.value) })
 
 function loaded(event) {
   // An iframe load also fires for HTTP error pages; inspect the same-origin page.

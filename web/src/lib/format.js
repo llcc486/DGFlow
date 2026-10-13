@@ -10,26 +10,24 @@ export const NAVIGATION = [
   { id: 'comparison', label: '对照' },
 ]
 
-/**
- * Mode names state what the cryptography does, because the four modes differ
- * only in their cryptographic obligations and filtering, not in training.
- * `optimized` deliberately says it has the SAME cryptography as `dgflow`: in
- * `roles.py` the two take the same branch, so presenting it as a stronger or
- * additional protection would be false.
- */
+/** Strategies offered by the deployment page; execution is configured separately. */
 export const MODES = [
   { id: 'plain', number: '01', name: '无密码保护基线', tag: 'PLAIN',
     protection: '主控可见每个客户端的完整模型；不生成密文、不生成证明、不做异常筛选。',
     description: '不执行密码保护或鲁棒筛选，聚合端可读取本地模型，仅用于对照。', icon: 'info' },
-  { id: 'encrypted', number: '02', name: '加密 + 范数证明', tag: 'ENCRYPTED',
-    protection: '密文上传，LegoGroth16 把平方范数绑定到密文；不执行相似度与范数筛选。',
-    description: '校验密文与证明，不启用范数倍率、余弦相似度及聚类筛选。', icon: 'lock' },
-  { id: 'dgflow', number: '03', name: 'DGFlow 完整协议', tag: 'DGFLOW',
-    protection: '在上述证明之上，由归属边缘解出授权内积并按范数/余弦筛选，再按分组策略接纳。',
+  { id: 'dgflow', number: '02', name: 'DGFlow 完整协议', tag: 'DGFLOW',
+    protection: '密文上传，LegoGroth16 将平方范数绑定到密文；归属边缘验证并按范数、余弦筛选，再按分组策略接纳。',
     description: '执行密文验证、范数与相似度筛选，按所选分组策略接纳成员。', icon: 'shield' },
-  { id: 'optimized', number: '04', name: 'DGFlow（并行调度）', tag: 'OPTIMIZED',
+]
+
+// Resolve old records without putting retired choices back into deployment.
+const RECORDED_MODES = [
+  ...MODES,
+  { id: 'encrypted', name: '加密 + 范数证明', tag: 'ENCRYPTED',
+    protection: '密文上传，LegoGroth16 把平方范数绑定到密文；不执行相似度与范数筛选。' },
+  { id: 'optimized', name: 'DGFlow（并行调度）', tag: 'OPTIMIZED',
     protection: '密码学与「DGFlow 完整协议」完全相同；仅调度与传输优化，不增加任何密码学保证。',
-    description: '密码学与 DGFlow 完整协议相同，仅调度与传输优化，可调整并行参数进行实验。', icon: 'bolt' },
+  },
 ]
 
 /** Proof suites are pinned per task; the new-run entry accepts only the Lego suite. */
@@ -123,9 +121,9 @@ export const STAGE_LABELS = {
   training_wall_sum_s: '本地训练', encryption_wall_sum_s: '模型加密', proof_wall_sum_s: '证明生成',
 }
 
-export const modeName = id => MODES.find(m => m.id === id)?.name || id || '—'
-export const modeTag = id => MODES.find(m => m.id === id)?.tag || String(id || '—').toUpperCase()
-export const modeProtection = id => MODES.find(m => m.id === id)?.protection || '—'
+export const modeName = id => RECORDED_MODES.find(m => m.id === id)?.name || id || '—'
+export const modeTag = id => RECORDED_MODES.find(m => m.id === id)?.tag || String(id || '—').toUpperCase()
+export const modeProtection = id => RECORDED_MODES.find(m => m.id === id)?.protection || '—'
 
 /**
  * Historical records did not store the proof suite at all. Reporting a modern

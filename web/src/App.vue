@@ -1,7 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import NebulaHeader from './components/NebulaHeader.vue'
-import NebulaFooter from './components/NebulaFooter.vue'
 import PageBackdrop from './components/PageBackdrop.vue'
 import LabIcon from './components/LabIcon.vue'
 import Home from './views/Home.vue'
@@ -11,14 +10,34 @@ import Monitor from './views/Monitor.vue'
 import Validation from './views/Validation.vue'
 import Comparison from './views/Comparison.vue'
 import { consoleStore as store } from './lib/store'
-import { clockTime } from './lib/format'
 
 const VIEWS = ['home', 'dashboard', 'deploy', 'monitor', 'validation', 'comparison']
 const initial = window.location.hash.slice(1)
 const page = ref(VIEWS.includes(initial) ? initial : 'home')
+const monitorMounted = ref(page.value === 'monitor')
+let preloadHandle = null, idlePreload = false
+
+function cancelPreload() {
+  if (preloadHandle === null) return
+  if (idlePreload) window.cancelIdleCallback?.(preloadHandle)
+  else window.clearTimeout(preloadHandle)
+  preloadHandle = null
+}
+
+// Mount once after the foreground has its initial data. Keep the actual iframe
+// alive across navigation so its native zoom, smoothing and loaded JS survive.
+watch([page, store.initialLoading, store.connected], () => {
+  if (page.value === 'monitor') {
+    cancelPreload()
+    monitorMounted.value = true
+  } else if (!monitorMounted.value && !store.initialLoading.value && store.connected.value && preloadHandle === null) {
+    const preload = () => { preloadHandle = null; monitorMounted.value = true }
+    idlePreload = typeof window.requestIdleCallback === 'function'
+    preloadHandle = idlePreload ? window.requestIdleCallback(preload, { timeout: 1500 }) : window.setTimeout(preload, 500)
+  }
+}, { immediate: true })
 
 const activeRunId = computed(() => store.status.value?.active_run_id || '')
-const lastUpdated = computed(() => (store.lastUpdated.value ? clockTime(store.lastUpdated.value) : ''))
 const onlineNodes = computed(() => store.nodes.value.filter(n => n.status === 'online').length)
 
 function navigate(id) {
@@ -38,6 +57,7 @@ onMounted(() => {
   store.start()
 })
 onBeforeUnmount(() => {
+  cancelPreload()
   window.removeEventListener('hashchange', syncHash)
   store.stop()
 })
@@ -67,18 +87,18 @@ onBeforeUnmount(() => {
         <Home v-if="page === 'home'" @navigate="navigate" />
         <Dashboard v-else-if="page === 'dashboard'" @navigate="navigate" @open="navigate" />
         <Deploy v-else-if="page === 'deploy'" @deployed="navigate('monitor')" />
-        <Monitor v-else-if="page === 'monitor'" @navigate="navigate" />
         <Validation v-else-if="page === 'validation'" @navigate="navigate" />
         <Comparison v-else-if="page === 'comparison'" @navigate="navigate" />
+        <Monitor v-if="monitorMounted" :active="page === 'monitor'" :class="{ 'monitor-preloading': page !== 'monitor' }"
+                 :aria-hidden="page !== 'monitor'" :inert="page !== 'monitor'" @navigate="navigate" />
       </div>
     </main>
 
-    <NebulaFooter
-      v-if="page !== 'monitor'"
-      :connected="store.connected.value"
-      :version="store.status.value?.version"
-      :last-updated="lastUpdated"
-      @navigate="navigate"
-    />
   </div>
 </template>
+
+<style scoped>
+/* Preserve a real viewport while loading charts, without occupying page space
+   or exposing the background frame to pointer, keyboard or screen readers. */
+.monitor-preloading { position: fixed; inset: var(--nb-header-h) 0 0; width: 100%; height: calc(100dvh - var(--nb-header-h)); visibility: hidden; pointer-events: none; z-index: -1; }
+</style>

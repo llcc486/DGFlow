@@ -49,7 +49,7 @@ export function tensorBoardFrameUrl(base, runId, selection, nodes) {
 }
 
 export function useTensorBoard(runId, {
-  selection = ref({ kind: 'run' }), nodes = ref([]), schedule = setTimeout, cancel = clearTimeout,
+  selection = ref({ kind: 'run' }), nodes = ref([]), active = ref(true), schedule = setTimeout, cancel = clearTimeout,
 } = {}) {
   ensureTensorBoardAutoReload()
   const expanded = ref(true), busy = ref(false), baseUrl = ref(''), frameLoaded = ref(false)
@@ -111,7 +111,7 @@ export function useTensorBoard(runId, {
         timeout = null
         busy.value = false
         controller = null
-        if (expanded.value) timer = schedule(() => synchronize(), 10000)
+        if (expanded.value && active.value) timer = schedule(() => synchronize(), 10000)
       }
     }
   }
@@ -138,6 +138,13 @@ export function useTensorBoard(runId, {
     if (expanded.value) void synchronize()
   }, { flush: 'sync' })
   watch(frameUrl, () => { frameLoaded.value = false; frameFailed.value = false }, { flush: 'sync' })
+  watch(active, visible => {
+    if (timer !== null) cancel(timer)
+    timer = null
+    // Finish an initial preload in the background, then pause console polling.
+    // Returning resumes synchronization without replacing the loaded iframe.
+    if (visible && !busy.value && expanded.value) void synchronize()
+  }, { flush: 'sync' })
   onScopeDispose(() => { disposed = true; cancelWork() })
   return { expanded, busy, frameUrl, frameLoaded, frameFailed, syncFailed, frameKey, syncedRun, message, confirmFrame,
     refresh: () => synchronize(true) }
@@ -146,7 +153,7 @@ export function useTensorBoard(runId, {
 // Prepare historical runs for TensorBoard's native Runs selector. Export one at
 // a time, only while this view exists; completed exports never navigate the frame.
 export function useTensorBoardHistory(runs, selectedRun, {
-  schedule = setTimeout, cancel = clearTimeout,
+  enabled = ref(true), schedule = setTimeout, cancel = clearTimeout,
 } = {}) {
   const exported = new Set()
   const attempts = new Map()
@@ -157,12 +164,12 @@ export function useTensorBoardHistory(runs, selectedRun, {
       .sort((left, right) => (attempts.get(left.run_id) || 0) - (attempts.get(right.run_id) || 0))[0]?.run_id
   }
   function queue(delay = 500) {
-    if (disposed || timer !== null || controller || !pending()) return
+    if (disposed || !enabled.value || timer !== null || controller || !pending()) return
     timer = schedule(() => { timer = null; void next() }, delay)
   }
   async function next() {
     const id = pending()
-    if (disposed || !id) return
+    if (disposed || !enabled.value || !id) return
     attempts.set(id, (attempts.get(id) || 0) + 1)
     controller = new AbortController()
     const active = controller
@@ -170,7 +177,7 @@ export function useTensorBoardHistory(runs, selectedRun, {
     let success = false
     try {
       const result = await api.syncTensorBoard(id, active.signal)
-      if (!disposed && result.available && tensorBoardUrl(result.url)) {
+      if (!disposed && !active.signal.aborted && result.available && tensorBoardUrl(result.url)) {
         exported.add(id)
         success = true
       }
@@ -182,7 +189,14 @@ export function useTensorBoardHistory(runs, selectedRun, {
       queue(success ? 500 : 10000)
     }
   }
-  watch([runs, selectedRun], () => queue(), { immediate: true, deep: true })
+  watch([runs, selectedRun, enabled], () => {
+    if (enabled.value) queue()
+    else {
+      if (timer !== null) cancel(timer)
+      timer = null
+      controller?.abort()
+    }
+  }, { immediate: true, deep: true })
   onScopeDispose(() => {
     disposed = true
     if (timer !== null) cancel(timer)

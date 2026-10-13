@@ -76,6 +76,7 @@ def _training_failure_run(tmp_path,monkeypatch,*,failed_clients,error_factory,
                     'client_id':node,'ciphertext':[],'norm_squared':0,'proof':{}}),
                     'training_s':0.,'encrypt_s':0.,'proof_s':0.}
             if action=='validation_keys':
+                # Public authorization envelopes identify the checked signer.
                 assert payload['client_ids'], 'empty batches must stop at the coordinator'
                 return {cid:{'node':node} for cid in payload['client_ids']}
             if action=='verify_owned':
@@ -90,6 +91,9 @@ def _training_failure_run(tmp_path,monkeypatch,*,failed_clients,error_factory,
                 if node==finish_error: raise ValueError('independent edge verification failed')
                 return {'reference':reference}
             if action=='combine_metrics': return {**payload,'actor':node,'combine_timings':timings()}
+            if action=='authorize': return {'sender':node}
+            if action=='transcript': return {'sender':node,'purpose':'dkg-ack',
+                'payload':{'transcript_hash':'ef'*32},'signature':b'fixture-signature'}
             return {'node':node}
     class Monitor:
         def __init__(self,*args): pass
@@ -125,6 +129,51 @@ def _training_failure_run(tmp_path,monkeypatch,*,failed_clients,error_factory,
                       'local_epochs':1,'backend':'numpy','grid':2}}
     runner.RunManager(runtime)._run(record)
     return record,calls
+
+
+def test_public_evidence_follows_completed_checks_and_uses_signed_dkg_payload(tmp_path,monkeypatch):
+    record,_calls=_training_failure_run(tmp_path,monkeypatch,failed_clients=set(),
+        error_factory=lambda node:ValueError('unused'))
+    assert record['status']=='completed',record['error']
+    row=record['rounds'][0]; trace=row['protocol_evidence']
+    assert trace['context']['dkg_transcript_hash']==row['crypto_context']['dkg_transcript_hash']=='ef'*32
+    assert trace['submission']['checked'] is True
+    assert trace['authorization']['signers']==list(runner.AUTHORITIES)
+    assert trace['aggregation']['proofs_verified'] is True
+    assert len(trace['aggregation']['partials'])==3
+    assert trace['confirmation']['all_match'] is True
+    assert trace['confirmation']['coordinator_model_hash']==row['model_hash']
+    assert {item['node_id'] for item in trace['confirmation']['authorities']}==set(runner.AUTHORITIES)
+    assert set(trace)=={'schema_version','round_id','mode','source','active_stage','context',
+                        'submission','authorization','aggregation','confirmation','updated_at'}
+    encoded=json.dumps(trace)
+    for secret in ('ciphertext','private_key','function_key','secret_share','plain_model'):
+        assert secret not in encoded
+    assert record['current_protocol_evidence']==trace
+
+
+@pytest.mark.parametrize('failure',['bad_math','bad_edge'])
+def test_failed_checks_keep_partial_evidence_without_success_confirmation(tmp_path,monkeypatch,failure):
+    record,_=_training_failure_run(tmp_path,monkeypatch,failed_clients=set(),
+        error_factory=lambda node:ValueError('unused'),cloud_strategy='threshold',
+        combine_error='bad math' if failure=='bad_math' else None,
+        finish_error='authority2' if failure=='bad_edge' else None)
+    assert record['status']=='aborted' and not record['rounds']
+    trace=record['current_protocol_evidence']
+    assert trace['authorization']['checked'] is True
+    assert len(trace['aggregation']['partials'])==2
+    assert trace['aggregation']['proofs_verified'] is False
+    assert trace['confirmation'] is None
+    saved=json.loads((tmp_path/'runtime/results/training-failure/result.json').read_text(encoding='utf8'))
+    assert saved['current_protocol_evidence']==trace
+
+
+def test_plain_evidence_never_records_cryptographic_success(tmp_path,monkeypatch):
+    record,_=_training_failure_run(tmp_path,monkeypatch,failed_clients=set(),mode='plain',
+        error_factory=lambda node:ValueError('unused'))
+    trace=record['rounds'][0]['protocol_evidence']
+    assert trace['submission']['checked'] is False
+    assert all(trace[stage] is None for stage in ('authorization','aggregation','confirmation'))
 
 
 @pytest.mark.parametrize('field,value',[('batch_size',3),('screening',{'batch_strategy':'regroup'})])
@@ -412,6 +461,7 @@ def test_runner_pins_proof_policy_and_keeps_all_confirmations(
                     capabilities['ciphertext_only_aggregation']=(
                         transport_capabilities=='all' or node!='aggregator3')
                 return {'capabilities':capabilities}
+            if action=='authorize': return {'sender':node}
             if action=='validation_keys': return {cid:{'node':node} for cid in payload['client_ids']}
             if action=='verify_owned':
                 ctx=next(payload['context'] for _,action,payload in calls if action=='begin')

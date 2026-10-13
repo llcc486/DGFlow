@@ -40,6 +40,33 @@ html[lang="zh-CN"] .card-group > .dgflow-evaluation-legend {
 html[lang="zh-CN"] .card-group:has(> metrics-card-grid .card-grid) > .dgflow-evaluation-legend {
   display: block;
 }
+/* The run dropdown stands in for TensorBoard's native run-filter regex box, so it
+   inherits the same row metrics instead of looking like a foreign control. */
+html[lang="zh-CN"] select.dgflow-run-select {
+  flex-grow: 1;
+  min-width: 0;
+  height: 32px;
+  margin: 8px 8px 8px 16px;
+  padding: 0 6px;
+  border: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, .42);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+html[lang="zh-CN"] select.dgflow-run-select:focus {
+  outline: none;
+  border-bottom: 2px solid #2196f3;
+}
+html[lang="zh-CN"] body.dark-mode select.dgflow-run-select {
+  border-bottom-color: rgba(255, 255, 255, .7);
+}
+html[lang="zh-CN"] body.dark-mode select.dgflow-run-select option {
+  background: #303030;
+  color: #fff;
+}
 @media (max-width: 720px) {
   html[lang="zh-CN"] metrics-main-view,
   html[lang="zh-CN"] metrics-main-view-component {

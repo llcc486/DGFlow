@@ -1,6 +1,7 @@
 import importlib
 import re
 import threading
+import time
 from urllib.parse import urljoin
 
 from fastapi import FastAPI
@@ -46,6 +47,10 @@ def test_native_tensorboard_ui_and_scalar_api_share_the_control_origin(tmp_path)
         assert points.status_code == 200
         assert points.json()[0][1:] == [0, .25]
         logs.sync({'run_id': 'second', 'initial_metrics': {'accuracy': .5}})
+        service.refresh()
+        deadline = time.monotonic() + 3
+        while 'second' not in client.get('/tensorboard/data/plugin/scalars/tags').json() and time.monotonic() < deadline:
+            time.sleep(.02)
         tags = client.get('/tensorboard/data/plugin/scalars/tags').json()
         assert set(tags) == {'history', 'second'}
     service.close()

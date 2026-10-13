@@ -175,6 +175,44 @@ test('a background export failure keeps the loaded TensorBoard and reports the e
   } finally { scope.stop(); globalThis.fetch = original }
 })
 
+test('hidden monitor preloads once, pauses console polling and resumes the same frame', async () => {
+  const original = globalThis.fetch, scope = vue.effectScope(), timers = scheduler(), active = vue.ref(false), calls = []
+  globalThis.fetch = async url => { calls.push(url); return response({ available: true, url: '/tensorboard/' }) }
+  try {
+    const state = scope.run(() => useTensorBoard(vue.ref('run'), { active, ...timers }))
+    await flush()
+    state.confirmFrame(true)
+    const key = state.frameKey.value, url = state.frameUrl.value
+    assert.equal(calls.length, 2)
+    assert.equal(timers.scheduled.size, 0)
+    active.value = true
+    await flush()
+    assert.equal(state.frameKey.value, key)
+    assert.equal(state.frameUrl.value, url)
+    assert.equal(state.frameLoaded.value, true)
+    assert.ok([...timers.scheduled.values()].some(timer => timer.delay === 10000))
+    active.value = false
+    assert.equal(timers.scheduled.size, 0)
+    assert.equal(state.frameLoaded.value, true)
+  } finally { scope.stop(); globalThis.fetch = original }
+})
+
+test('historical export waits for the visible loaded frame and pauses when hidden', async () => {
+  const original = globalThis.fetch, scope = vue.effectScope(), timers = scheduler(), enabled = vue.ref(false), calls = []
+  globalThis.fetch = async url => { calls.push(url); return response({ available: true, url: '/tensorboard/' }) }
+  try {
+    scope.run(() => useTensorBoardHistory(vue.ref([{ run_id: 'history' }]), vue.ref('run'), { enabled, ...timers }))
+    assert.equal(timers.scheduled.size, 0)
+    enabled.value = true
+    await vue.nextTick()
+    assert.equal(timers.scheduled.size, 1)
+    enabled.value = false
+    await vue.nextTick()
+    assert.equal(timers.scheduled.size, 0)
+    assert.deepEqual(calls, [])
+  } finally { scope.stop(); globalThis.fetch = original }
+})
+
 test('node monitoring polls only the dedicated cached endpoint every 5 seconds', async () => {
   const original = globalThis.fetch, calls = []
   globalThis.fetch = async (url, options) => { calls.push({ url, options }); return response({ run_id: 'run/a', nodes: [], machines: [], legacy: true }) }
@@ -282,10 +320,22 @@ test('monitor is a single native TensorBoard surface without summary, node table
   })
   try {
     store.currentRun.value = { run_id: 'historical', config: { dataset: 'mnist' }, rounds: [], events: [] }
+    store.selectedRunId.value = 'historical'
+    store.runs.value = [
+      { run_id: 'historical', mode: 'dgflow', status: 'completed', config: { dataset: 'mnist' } },
+      { run_id: 'other-run', mode: 'optimized', status: 'completed', config: { dataset: 'cifar10' } },
+    ]
     const html = await renderToString(vue.createSSRApp(Monitor))
     assert.match(html, /data-panel="tensorboard"/)
-    assert.doesNotMatch(html, /data-panel="(?:nodes|head|metric|toolbar)"|<details|<table|<svg|协议耗时|执行事件/)
-  } finally { store.currentRun.value = null }
+    // No chrome at all: no node table, heading, metric card, toolbar, and no
+    // page-owned control. Which experiment is shown comes from shared navigation.
+    assert.doesNotMatch(html, /data-panel="(?:nodes|head|metric|toolbar)"|<details|<table|<svg|<select|<button|协议耗时|执行事件/)
+    assert.doesNotMatch(html, /monitor-run-picker|nb-run-picker/)
+  } finally {
+    store.currentRun.value = null
+    store.selectedRunId.value = ''
+    store.runs.value = []
+  }
 })
 
 test('the monitor shell removes the footer and constrained container while preserving shared navigation', async () => {

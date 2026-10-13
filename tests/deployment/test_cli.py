@@ -20,6 +20,19 @@ def fake_serve(*args, _before_serve=None):
         _before_serve()
 
 
+def test_serve_can_open_an_empty_runtime_for_lan_initialization(tmp_path, monkeypatch):
+    c = cli()
+    seen = []
+    def run(app, **kwargs):
+        assert (tmp_path/'control-process.json').exists()
+        assert not (tmp_path/'cluster.json').exists()
+        seen.append(app)
+    monkeypatch.setitem(sys.modules, 'uvicorn', SimpleNamespace(run=run))
+    assert c.main(['serve', '--runtime', str(tmp_path)]) == 0
+    assert len(seen) == 1
+    assert not (tmp_path/'control-process.json').exists()
+
+
 def test_cli_init_is_non_destructive_and_reports_nonzero_on_repeat(tmp_path, capsys):
     main = cli().main
     assert main(['init', '--runtime', str(tmp_path)]) == 0

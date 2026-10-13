@@ -166,8 +166,6 @@ export function sceneGeometry(scene, selected = '') {
   cylinder(mesh, [0,.002,0], scene.radius-.045, .035, color('#f8fafc'), 96)
   ring(mesh, scene.radius-.025, .025, .017, color('#a8b9d3'))
   for (const radius of [1.03, 2.02, scene.radius-.5]) ring(mesh, radius, .024, .012, color('#dce5ef'))
-  cylinder(mesh, [0,.065,0], .38, .09, color('#e2eaf5'), 6)
-  ring(mesh, .255, .12, .014, color('#9ab4d7'), [0,0,0], 40)
   const byId = new Map(scene.nodes.map(node => [node.id, node]))
   // Keep small scenes smooth while bounding curved-link work in dense deployments.
   const edgeSegments = Math.max(2, Math.min(8, Math.floor(512/Math.max(1, scene.edges.length))))
@@ -175,13 +173,13 @@ export function sceneGeometry(scene, selected = '') {
     const a = byId.get(edge.a), b = byId.get(edge.b)
     if (!a || !b) continue
     const highlighted = selected && (a.id === selected || b.id === selected)
-    const tint = color(highlighted ? '#9bb9d7' : '#dce6ed')
+    const tint = color(highlighted ? '#236bc1' : selected ? '#a4b6c9' : '#5d7c9d')
     const from = add(a.position, [0,.055,0]), to = add(b.position, [0,.055,0])
     let previous = from
     for (let segment = 1; segment <= edgeSegments; segment += 1) {
       const t = segment/edgeSegments, point = from.map((value, i) => value*(1-t)+to[i]*t)
       point[1] += Math.sin(t*Math.PI)*(highlighted ? .10 : .045)
-      tube(mesh, previous, point, highlighted ? .009 : .006, tint)
+      tube(mesh, previous, point, highlighted ? .026 : selected ? .012 : .016, tint)
       previous = point
     }
   }

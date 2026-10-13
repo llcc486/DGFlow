@@ -86,9 +86,32 @@ def test_fixed_locale_assets_work_without_initializing_tensorboard():
         labels = http.get('/tensorboard/dgflow-i18n/labels.json').json()
         assert labels['fields']['accuracy']['label'] == '准确率'
         assert labels['groups']['evaluation'] == '全局测试集'
+        # The console adapter reads the run list from this catalog. With no logs
+        # object it must degrade to an empty list, not fail the endpoint.
+        assert labels['runs'] == []
         assert http.get('/tensorboard/dgflow-i18n/not-a-file.js').status_code == 404
         assert http.get('/tensorboard/dgflow-i18n/assets/zh-CN.js').status_code == 404
         assert http.post('/tensorboard/dgflow-i18n/zh-CN.js').status_code == 405
+
+
+def test_run_catalog_lists_exactly_the_native_run_directories(tmp_path):
+    """The dropdown's options come from the server, not from rendered markup.
+
+    `runtime/tensorboard/<run_id>` is the native run name, so listing those
+    directories yields the same set the native Runs selector shows.
+    """
+    from dgfl.experiments.tensorboard import TensorBoardLogs
+    logs = TensorBoardLogs(tmp_path)
+    (logs.logdir / 'run-bbb').mkdir(parents=True)
+    (logs.logdir / 'run-aaa').mkdir()
+    (logs.logdir / 'loose.txt').write_text('x', encoding='utf8')
+    service = EmbeddedTensorBoard(logs)
+    app = FastAPI()
+    app.mount('/tensorboard', service)
+    with TestClient(app) as http:
+        runs = http.get('/tensorboard/dgflow-i18n/labels.json').json()['runs']
+    # Only directories are run names, and the order is stable for the dropdown.
+    assert runs == ['run-aaa', 'run-bbb']
 
 
 def test_ui_translation_dictionary_protects_user_data_and_keeps_native_preferences():
@@ -195,6 +218,140 @@ assert.equal(inserted,1);
 // A detached/native alternate layout stays untouched rather than being forced.
 ui.evaluationLegend({getAttribute(){return 'evaluation';},closest(){return null;}},document);
 assert.equal(inserted,1);
+"""
+    result = subprocess.run([node, '-', str(script)], input=program, capture_output=True,
+                            text=True, encoding='utf8', timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_run_filter_regex_box_is_replaced_by_a_run_dropdown_that_drives_native_state():
+    """The dropdown must speak TensorBoard's own keyup contract, not a private hook.
+
+    TensorBoard 2.21 reads that box on `keyup`: onFilterKeyUp -> emit ->
+    dispatch(IE({regexString})). The replacement therefore has to set the native
+    input's value and dispatch a bubbling keyup, which is what this pins. Run
+    names come from the server catalog, not from scraping rendered cells.
+    """
+    node = shutil.which('node')
+    if node is None:
+        pytest.skip('Node.js is required to execute the packaged browser adapter')
+    script = Path(__file__).resolve().parents[2] / 'src/dgfl/services/assets/zh-CN.js'
+    program = r"""
+const assert = require('node:assert/strict');
+const ui = require(process.argv[2]);
+
+function element(tag, text) {
+  const node = {tagName: tag, textContent: text || '', children: [], attributes: {}, style: {},
+    className: '', value: '', listeners: {}, dispatched: [], parentNode: null,
+    setAttribute(name, value) { this.attributes[name] = String(value); },
+    getAttribute(name) { return name in this.attributes ? this.attributes[name] : null; },
+    addEventListener(name, callback) { (this.listeners[name] = this.listeners[name] || []).push(callback); },
+    dispatchEvent(event) { this.dispatched.push(event.type);
+      for (const callback of this.listeners[event.type] || []) callback(event); return true; },
+    appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
+    removeChild(child) {
+      const index = this.children.indexOf(child);
+      if (index >= 0) this.children.splice(index, 1);
+      return child;
+    },
+    insertBefore(child, next) {
+      child.parentNode = this;
+      const index = this.children.indexOf(next);
+      if (index < 0) this.children.push(child); else this.children.splice(index, 0, child);
+      return child;
+    }};
+  return node;
+}
+
+// Two runs, one of them containing the other's name as a substring, plus a name
+// with regex metacharacters that must still match literally.
+const runs = ['887e7f260038415f8e2081c3c5957ec6',
+              '887e7f260038415f8e2081c3c5957ec6/nodes/client1',
+              'run (seed 42)+x'];
+const input = element('input');
+input.placeholder = 'Filter runs (regex)';
+input.value = '^887e7f';
+const host = element('tb-filter-input');
+host.className = 'run-filter';
+host.appendChild(input);
+host.querySelector = selector => (selector === 'input' ? input : null);
+// The tag filter shares the same component tag and must stay untouched.
+const tagHost = element('tb-filter-input');
+tagHost.className = 'tag-filter';
+const tagInput = element('input');
+tagHost.appendChild(tagInput);
+tagHost.querySelector = selector => (selector === 'input' ? tagInput : null);
+
+const document = {
+  querySelector(selector) { return selector === 'tb-filter-input.run-filter' ? host : null; },
+  createElement(tag) { return element(tag); },
+};
+const window = { Event: class { constructor(type, init) { this.type = type; Object.assign(this, init || {}); } } };
+
+const dropdown = ui.runFilterDropdown(document, window);
+// The control is replaced immediately; the run list fills in when the catalog
+// arrives. Before that it still offers the reset option and the live filter.
+assert.equal(dropdown.apply(), true);
+assert.equal(dropdown.applied(), true);
+assert.equal(dropdown.names().length, 0);
+assert.equal(input.style.display, 'none');
+assert.equal(host.children.length, 2);
+
+assert.equal(dropdown.setRuns(runs), true);
+assert.equal(dropdown.names().length, 3);
+// The native input is hidden but preserved: nothing native is destroyed.
+assert.equal(input.getAttribute('aria-hidden'), 'true');
+assert.equal(input.getAttribute('tabindex'), '-1');
+assert.equal(tagInput.style.display, undefined);
+const select = host.children[1];
+assert.equal(select.tagName, 'select');
+// "all" + three runs + the pending expression, which stays reachable.
+assert.equal(select.children.length, 5, JSON.stringify(select.children.map(c => c.value)));
+assert.equal(select.children[0].value, '');
+assert.equal(select.children[1].textContent, runs[0]);
+// Each option is anchored, so one run's name cannot also match another.
+assert.equal(select.children[1].value, '^' + runs[0] + '$');
+assert.equal(select.children[2].value, '^887e7f260038415f8e2081c3c5957ec6/nodes/client1$');
+// Metacharacters in a run name are escaped, not treated as a pattern.
+assert.equal(select.children[3].value, '^run \\(seed 42\\)\\+x$');
+assert.equal(select.children[4].value, '^887e7f');
+
+// Choosing a run drives the native input through its own keyup contract.
+select.value = select.children[2].value;
+select.dispatchEvent(new window.Event('change'));
+assert.equal(input.value, select.children[2].value);
+assert.deepEqual(input.dispatched, ['keyup']);
+
+// Clearing the dropdown restores the unfiltered view.
+select.value = '';
+select.dispatchEvent(new window.Event('change'));
+assert.equal(input.value, '');
+assert.deepEqual(input.dispatched, ['keyup', 'keyup']);
+
+// The catalog is authoritative, so a different set replaces the options.
+assert.equal(dropdown.setRuns(['887e7f260038415f8e2081c3c5957ec6']), true);
+assert.equal(dropdown.names().length, 1);
+// Re-sending the same set is a no-op, so catalog polling cannot thrash.
+assert.equal(dropdown.setRuns(['887e7f260038415f8e2081c3c5957ec6']), false);
+// Newly finished runs are picked up.
+assert.equal(dropdown.setRuns(runs.concat(['new-run'])), true);
+assert.equal(dropdown.names().length, 4);
+// A missing or malformed catalog is ignored rather than fatal.
+assert.equal(dropdown.setRuns(undefined), false);
+assert.equal(dropdown.setRuns('nope'), false);
+
+// A second apply is a no-op, so re-renders cannot stack duplicate selects.
+assert.equal(dropdown.apply(), true);
+assert.equal(host.children.length, 2);
+
+// Without the native control present, nothing is replaced or fabricated.
+const empty = ui.runFilterDropdown({querySelector() { return null; }}, window);
+assert.equal(empty.setRuns(runs), true);
+assert.equal(empty.apply(), false);
+
+// A minimal document (no querySelector at all) must not throw.
+const minimal = ui.runFilterDropdown({}, window);
+assert.equal(minimal.flush(), false);
 """
     result = subprocess.run([node, '-', str(script)], input=program, capture_output=True,
                             text=True, encoding='utf8', timeout=15)

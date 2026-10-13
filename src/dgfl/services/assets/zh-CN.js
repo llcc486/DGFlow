@@ -207,6 +207,111 @@
     container.insertBefore(note, toolbar.nextSibling);
   }
 
+  /**
+   * Replace TensorBoard's native run-filter regex box with a run dropdown.
+   *
+   * TensorBoard 2.21 binds that control as `<tb-filter-input class="run-filter">
+   * <input placeholder="Filter runs (regex)">` and reads it on `keyup`:
+   * `onFilterKeyUp -> onRegexFilterChange.emit(target.value) -> dispatch(IE)`.
+   * Dispatching a bubbling `keyup` after setting `.value` therefore drives the
+   * native NgRx state, so the dashboard changes through its own action rather
+   * than any private hook.
+   *
+   * The run names come from the server catalog (`labels.json` -> `runs`), which
+   * lists `runtime/tensorboard/<run_id>` — the same names the native Runs
+   * selector shows. Scraping the rendered table would be ambiguous, because
+   * several columns render their own text into the same row.
+   *
+   * Each option is anchored as `^name$` so selecting a run cannot also match a
+   * run whose name contains it. The expression already in the box is offered as
+   * an option too, so a filter authored by hand or arriving from the page URL
+   * never becomes unreachable.
+   */
+  function runFilterDropdown(document, window) {
+    const SELECTOR = 'tb-filter-input.run-filter';
+    let applied = false;
+    let names = [];
+    let attempts = 0;
+    let host = null;
+    let input = null;
+    let select = null;
+
+    // Same escaping the console uses for its own run filter, so an experiment
+    // name containing regex metacharacters still matches literally.
+    function regexLiteral(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    function query(selector) {
+      return typeof document.querySelector === 'function' ? document.querySelector(selector) : null;
+    }
+    function option(value, text) {
+      const node = document.createElement('option');
+      node.value = value;
+      node.textContent = text;
+      return node;
+    }
+    /** Rebuild the option list in place, keeping the current selection. */
+    function options() {
+      if (!select) return;
+      const live = String(input.value || '');
+      while (select.children.length) select.removeChild(select.children[0]);
+      select.appendChild(option('', '全部实验记录（不筛选）'));
+      for (const name of names) select.appendChild(option('^' + regexLiteral(name) + '$', name));
+      const patterns = names.map(function (name) { return '^' + regexLiteral(name) + '$'; });
+      if (live && patterns.indexOf(live) < 0) {
+        // An expression authored by hand or taken from the page URL stays
+        // selectable, so nothing native becomes unreachable.
+        select.appendChild(option(live, '当前筛选：' + live));
+      }
+      select.value = live;
+    }
+    function setRuns(value) {
+      if (!Array.isArray(value)) return false;
+      const cleaned = value.filter(function (name) { return typeof name === 'string' && name.trim(); });
+      // The catalog is authoritative, so any different set replaces the current
+      // one; an identical set is a no-op so polling cannot thrash the options.
+      if (cleaned.join('\u0000') === names.join('\u0000')) return false;
+      names = cleaned;
+      options();
+      return true;
+    }
+    function apply() {
+      if (applied) return true;
+      // A second filter input exists for tags, so the anchor must be `run-filter`.
+      host = query(SELECTOR);
+      input = host && host.querySelector ? host.querySelector('input') : null;
+      if (!input || !input.parentNode) return false;
+      select = document.createElement('select');
+      select.className = 'dgflow-run-select';
+      select.setAttribute('aria-label', '选择要显示的实验记录');
+      select.addEventListener('change', function () {
+        input.value = select.value;
+        // The native control reads its value on keyup and dispatches its own
+        // action; changing `.value` alone would be overwritten by the binding.
+        input.dispatchEvent(new window.Event('keyup', {bubbles: true, cancelable: true}));
+      });
+      options();
+      input.style.display = 'none';
+      input.setAttribute('aria-hidden', 'true');
+      input.setAttribute('tabindex', '-1');
+      input.parentNode.insertBefore(select, input.nextSibling);
+      applied = true;
+      return true;
+    }
+    function flush() {
+      attempts += 1;
+      if (apply()) return true;
+      // The dashboard mounts after this adapter runs, so retry a bounded number
+      // of times instead of observing forever.
+      if (attempts >= 40 || typeof window.setTimeout !== 'function') return false;
+      window.setTimeout(flush, 500);
+      return false;
+    }
+    return {apply: apply, flush: flush, setRuns: setRuns,
+            names: function () { return names.slice(); }, applied: function () { return applied; }};
+  }
+
+
   function start(document, window) {
     if (window.__dgflowTensorBoardChinese) return window.__dgflowTensorBoardChinese;
     let observer;
@@ -214,6 +319,10 @@
     let frame = null;
     let active = false;
     let catalog = null;
+    // The run checkbox list mounts with the dashboard, so the dropdown starts
+    // polling here; the observer alone would never see the first render.
+    const runFilter = runFilterDropdown(document, window);
+    runFilter.flush();
     const options = {subtree: true, childList: true, characterData: true,
                      attributes: true, attributeFilter: attributes};
     document.documentElement.lang = 'zh-CN';
@@ -298,6 +407,10 @@
         const parent = record.target.nodeType === 1 ? record.target : record.target.parentElement;
         queue(parent && parent.closest('tb-truncated-path.tag') || parent);
       }
+      // The native run filter input mounts with the runs panel, which may be
+      // opened long after this adapter started; retry here rather than only on a
+      // timer. `apply` is a no-op once the dropdown exists.
+      runFilter.apply();
     });
     function resume() {
       if (active) return;
@@ -314,7 +427,7 @@
     }
     window.addEventListener('pagehide', close);
     window.addEventListener('pageshow', resume);
-    const controller = {close: close, resume: resume};
+    const controller = {close: close, resume: resume, runFilter: runFilter};
     window.__dgflowTensorBoardChinese = controller;
     resume();
     // A failure affects titles only; controls stay translated and business/TB
@@ -322,14 +435,21 @@
     if (typeof window.fetch === 'function') {
       window.fetch('/tensorboard/dgflow-i18n/labels.json', {credentials: 'same-origin'})
         .then(function (response) { if (!response.ok) throw new Error('catalog'); return response.json(); })
-        .then(function (value) { catalog = value; queue(document.documentElement); })
+        .then(function (value) {
+          catalog = value;
+          // The server catalog carries the authoritative run list; the dropdown
+          // is only built once it is known, so it never offers a partial set.
+          if (runFilter.setRuns(value && value.runs)) runFilter.apply();
+          queue(document.documentElement);
+        })
         .catch(function () {});
     }
     return controller;
   }
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {translate: translate, eligible: eligible, metricLabel: metricLabel,
-                      groupLabel: groupLabel, evaluationLegend: evaluationLegend, start: start};
+                      groupLabel: groupLabel, evaluationLegend: evaluationLegend,
+                      runFilterDropdown: runFilterDropdown, start: start};
   }
   if (root && root.document) {
     if (root.document.readyState === 'loading') {

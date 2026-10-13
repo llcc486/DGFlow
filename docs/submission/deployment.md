@@ -211,7 +211,29 @@ Windows 完整部署对应 `-CifarSource`，Linux 对应 `DGFL_CIFAR_SOURCE`。�
 
 ### 3.2 一次性配置和按主机分包
 
-在受控的初始化环境中复制并编辑配置：
+网页支持输入自定义电脑数量，范围为 2 到当前客户端、边缘与云节点总数（最多 164 台），每台至少分配一个节点。采用“配置电脑 → 生成配置包 → 各机启动并检查”的流程。物理机器分配不改变客户端的单边缘归属，也不改变协议拓扑。
+
+1. 将部署方式切换为「多机部署」，在数字框中输入电脑数量，每台填写一次局域网 IP 或主机名。电脑按 A、B、…、Z、AA、AB…编号。只填地址，不带协议或端口。A 负责主控，节点默认均分；「高级分配」可逐节点调整电脑，节点使用目标电脑的地址。空值、小数或超出节点总数会阻止生成配置包，不会静默改写为其他数量。
+2. 点击「生成部署配置包」，下载各机 A/B/C 包。计划存放在当前运行目录的 `deployment-plans/<plan_id>`，当前单机部署、节点和实验记录均不变。修改地址、数量、门限或归属后，旧下载入口失效，需重新生成。
+3. 每台电脑安装同一版本源码和依赖、准备数据，将自己包内的 `runtime` 放入独立运行目录。按包内 README 启动本机角色；只有 A 启动控制页。配置包不含源码、虚拟环境或数据集。
+4. 在 A 的控制页检查每台机器的在线节点数量，然后创建实验。页面上的「启动本机 A 节点」只启动当前电脑，不会通过 SSH 启动 B/C。远端必须在各自电脑执行启动命令。
+
+配置包只含本机私钥、公共 CA、身份注册表、集群配置、机器标记，以及准备机器已安装且通过尺寸与摘要检查的公共 CRS（manifest、PK、VK）。只有 A 包含 coordinator 身份。额外文件、实验记录、其他机器私钥不分发。所有包使用同一份 CRS，不能在各机独立随机生成替代参数。若准备机器没有 CRS，页面会明确提示这些包只能用于明文实验；加密运行前须补齐并重新分包。
+
+网页计划接口：
+
+```text
+POST /api/deployment/plans
+GET /api/deployment/plans/<plan_id>/bundle/A
+GET /api/deployment/plans/<plan_id>/bundle/B
+GET /api/deployment/plans/<plan_id>/bundle/C
+```
+
+已部署的 LAN 仍可通过 `GET /api/deployment/bundle/<machine>` 下载本机配置包。刷新页面会恢复实际部署方式、电脑归属及地址。地址与机器归属绑定证书和身份包，已部署时数量、门限、地址和归属只读；更换布局应建立新的运行目录，保留原记录。新目录也可以先运行 `python -m dgfl.cli serve --runtime 新目录` 打开空控制页，再生成多机计划。自定义数量需要更新并重启控制服务；所有电脑应使用同版本源码，CLI 的 `--machine` 接受包中实际编号（如 `D`、`AA`）。
+
+2026-10-13 验证：三份独立运行目录、每组仅本机私钥，使用 `127.0.0.2 / .3 / .4` 和动态空闲端口运行六个角色。MNIST 650 维完成明文 1 轮、加密 2 轮、DGFlow 2 轮；加密实验核对了同一 CRS、客户端单归属、授权、两份云解密结果、证明验证和全部边缘确认。测试见 `tests/integration/test_lan_distributed_training.py`。这证明了应用层跨地址和独立包的流程，实体局域网的防火墙、地址、网络延迟与多主机性能仍需现场验收。
+
+命令行方式（等价，便于复现）：复制并编辑配置：
 
 ```powershell
 Copy-Item -LiteralPath .\configs\hosts.example.yaml -Destination .\configs\hosts.lan.yaml
@@ -225,10 +247,11 @@ Copy-Item -LiteralPath .\configs\hosts.example.yaml -Destination .\configs\hosts
 
 ```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli init --runtime provisioning-runtime --hosts configs/hosts.lan.yaml
+.\.venv\Scripts\python.exe scripts/setup_lego_parameters.py --runtime provisioning-runtime --defaults
 .\.venv\Scripts\python.exe -m dgfl.cli bundle --runtime provisioning-runtime --output machine-bundles
 ```
 
-输出 `machine-bundles/A/runtime`、`machine-bundles/B/runtime`、`machine-bundles/C/runtime`。每包包含公共 CA、公开身份注册表、共同集群配置、主机标记，以及**本机角色的私钥/身份文件**。只有 A 包包含 coordinator 的私钥。
+输出 `machine-bundles/A/runtime`、`machine-bundles/B/runtime`、`machine-bundles/C/runtime`。每包包含公共 CA、公开身份注册表、共同集群配置、主机标记、已安装的公共 CRS，以及**本机角色的私钥/身份文件**。只有 A 包包含 coordinator 的私钥。也可在分包前将已核验的同组公共参数安装到准备目录，复用已有 CRS。
 
 此初始化工具是集中式的身份/证书准备工具；它与每轮模型加密用的 DKG 不同。初始化目录暂时持有整套传输身份，因此必须保留在受控离线准备环境，不能作为常规三机运行目录到处分发。**不要把完整 `provisioning-runtime/keys` 或全部 machine-bundles 一起复制给每台机器。**
 
@@ -240,7 +263,7 @@ Copy-Item -LiteralPath .\configs\hosts.example.yaml -Destination .\configs\hosts
 Copy-Item -LiteralPath .\machine-bundles\A\runtime -Destination .\runtime -Recurse
 ```
 
-B/C 仅接收各自的身份包并按同样布局放置。先在 A 执行第 1 节的 `-SetupOnly`（Linux 为 `--setup-only`）完整部署，再将 A 的同组 `runtime/proof-parameters/<crs_hash>/` 公共 PK/VK 和清单复制到 B/C 对应运行目录；随后在 B/C 执行完整部署，让默认参数检查复用这些指纹，避免各机分别随机生成。此部署选项不启动控制服务，适用于 B/C；只分发公开参数，不复制 A 的身份私钥。每台机器都提前准备公开 MNIST 缓存，单独校验命令为：
+B/C 仅接收各自的配置包并按同样布局放置。新版配置包已经携带准备目录中同组公共 CRS，各机安装环境时应保留这些指纹。第 1 节的 `-SetupOnly`（Linux 为 `--setup-only`）只准备环境和数据，不启动控制服务，适用于 B/C。若使用包内 README 的 `lan-deployment/runtime` 布局，数据放在 `lan-deployment/data`；下列根目录 `runtime` 示例对应根目录 `data`。不要把其他机器的私钥复制过来。每台机器都提前准备公开 MNIST 缓存，单独校验命令为：
 
 ```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli prepare-data

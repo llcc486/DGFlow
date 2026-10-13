@@ -4,7 +4,7 @@ import LabIcon from './LabIcon.vue'
 import { clampCamera, DEFAULT_CAMERA, ROLE_COLORS, ROLE_NAMES, sceneFingerprint, topologyScene } from '../lib/topology.js'
 import { WebGLTopology } from '../lib/webglTopology.js'
 
-const props = defineProps({ nodes: { type: Array, default: () => [] }, preview: { type: Boolean, default: false }, connected: { type: Boolean, default: true } })
+const props = defineProps({ nodes: { type: Array, default: () => [] }, preview: { type: Boolean, default: false }, connected: { type: Boolean, default: true }, scrollFriendly: { type: Boolean, default: false } })
 const canvas = ref(null), viewport = ref(null), failure = ref(''), rotating = ref(false), selectedId = ref('')
 // Camera motion and label positions stay outside Vue's component render loop.
 const camera = { ...DEFAULT_CAMERA }, labelElements = new Map()
@@ -13,6 +13,33 @@ const selected = computed(() => scene.value.nodes.find(node => node.id === selec
 const counts = computed(() => Object.keys(ROLE_NAMES).map(role => ({ role, count: scene.value.nodes.filter(node => node.role === role).length })))
 const roleIcon = role => role === 'client' ? 'terminal' : role === 'authority' ? 'key' : 'layers'
 const roleDescription = { client: '端侧训练 · 加密提交', authority: '分布式建钥 · 独立验证', aggregator: '门限聚合 · 部分解密', other: '注册节点' }
+
+/**
+ * The cryptographic profile a node actually reports through `/api/status`.
+ * These fields already arrive in the health response; the console previously
+ * used them only to block a launch, never to show what the node runs. Reading
+ * them back is how "the cryptography is real" becomes visible to the operator.
+ */
+const cryptoProfile = computed(() => {
+  const node = selected.value
+  if (!node || props.preview) return null
+  const capabilities = node.capabilities || {}
+  const artifacts = node.native?.loaded_artifact_sha256 || {}
+  return {
+    lego: capabilities.lego_norm_v1 === true,
+    // Owner verification, single-reference function keys.
+    ownedValidation: capabilities.owned_validation === true,
+    // Aggregation nodes receive ciphertext cores only.
+    ciphertextOnly: capabilities.ciphertext_only_aggregation === true,
+    aggregateVerificationNative: capabilities.aggregate_verification_native === true,
+    // The digest of the native extension this exact process has loaded.
+    artifacts: Object.entries(artifacts).map(([module, digest]) => ({ module, digest })),
+    artifactNames: node.native?.artifact_names || {},
+    evidenceScope: node.native?.evidence_scope || '',
+  }
+})
+const shortDigest = value => typeof value === 'string' && value.length >= 16 ? `${value.slice(0, 16)}…` : (value || '—')
+
 let renderer = null, resizeObserver = null, intersectionObserver = null, motionQuery = null
 let animation = 0, lastFrame = null, dirty = true, inView = true, dragging = false, lastPointer = null, pointerOrigin = null, fingerprint = ''
 let positions = [], viewportWidth = 0, viewportHeight = 0
@@ -98,7 +125,11 @@ function pointerCancel(event) {
   dragging = false; lastPointer = null; pointerOrigin = null
   if (canvas.value.hasPointerCapture?.(event.pointerId)) canvas.value.releasePointerCapture(event.pointerId)
 }
-function wheel(event) { event.preventDefault(); zoom(Math.exp(-event.deltaY*.0008)) }
+function wheel(event) {
+  if (props.scrollFriendly && !event.ctrlKey) return
+  event.preventDefault()
+  zoom(Math.exp(-event.deltaY*.0008))
+}
 function keyboard(event) {
   const actions = { ArrowLeft: () => { camera.yaw -= .13 }, ArrowRight: () => { camera.yaw += .13 },
     ArrowUp: () => { camera.pitch = clampCamera({ ...camera, pitch: camera.pitch-.1 }).pitch }, ArrowDown: () => { camera.pitch = clampCamera({ ...camera, pitch: camera.pitch+.1 }).pitch },
@@ -136,7 +167,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <figure class="topology-figure" :aria-label="preview ? '尚未应用的部署规划' : '实际注册节点拓扑'">
+  <figure class="topology-figure" :class="{ 'scroll-friendly': scrollFriendly }" :aria-label="preview ? '尚未应用的部署规划' : '实际注册节点拓扑'">
     <figcaption class="topology-heading">
       <div><span class="topology-eyebrow">{{ preview ? 'DEPLOYMENT PREVIEW' : 'REGISTERED TOPOLOGY' }}</span>
         <h2>{{ preview ? '部署规划' : '真实节点空间' }}<span>{{ scene.nodes.length }} 个节点</span></h2>
@@ -144,7 +175,7 @@ onBeforeUnmount(() => {
       <span :class="['topology-source', { planned: preview, stale: !connected && !preview }]"><i></i>{{ preview ? '待应用' : connected ? '实时状态' : '最近状态' }}</span>
     </figcaption>
     <div class="topology-legend" aria-label="节点角色图例"><span v-for="item in counts.filter(item => item.count)" :key="item.role"><i :style="{ background: ROLE_COLORS[item.role] }"></i>{{ ROLE_NAMES[item.role] }} <b>{{ item.count }}</b></span></div>
-    <p class="topology-label-note" :class="{ 'density-note': scene.nodes.length > 40 }">{{ scene.nodes.length > 80 ? '节点较多，仅显示选中节点标签；全部身份与边缘归属可在节点列表查看。' : scene.nodes.length > 40 ? '节点较多，显示边缘与选中节点标签；全部身份可在节点列表查看。' : '客户端 S · 边缘 A · 云 R；由下至上为客户端、边缘、云三层，窄屏显示边缘与选中节点标签。' }}</p>
+    <p class="topology-label-note" :class="{ 'density-note': scene.nodes.length > 40 }">{{ scene.nodes.length > 80 ? '节点较多，仅显示选中节点标签；全部身份与边缘归属可在节点列表查看。' : scene.nodes.length > 40 ? '节点较多，显示边缘与选中节点标签；全部身份可在节点列表查看。' : '客户端 S · 边缘 A · 云 R；节点在同一平台按归属平铺，窄屏显示边缘与选中节点标签。' }}</p>
     <div ref="viewport" class="topology-viewport" :class="{ 'has-fallback': failure, 'dense-topology': scene.nodes.length > 40, 'very-dense-topology': scene.nodes.length > 80 }">
       <canvas ref="canvas" class="topology-webgl" :class="{ unavailable: failure }" :tabindex="failure ? -1 : 0" role="img"
         :aria-label="`${preview ? '部署预览' : '真实节点'}三维模型；方向键旋转，加减键缩放，Home 重置。节点另有可访问列表。`"
@@ -164,7 +195,7 @@ onBeforeUnmount(() => {
         <button type="button" title="重置视角" aria-label="重置三维视角" @click="resetView"><LabIcon name="refresh" :size="15" /></button>
         <button type="button" :aria-pressed="rotating" :title="rotating ? '暂停旋转' : '自动旋转'" @click="rotating = !rotating"><LabIcon :name="rotating ? 'stop' : 'play'" :size="13" /></button>
       </div>
-      <span v-if="!failure" class="topology-interaction">拖动旋转 · 滚轮缩放 · 点击节点</span>
+      <span v-if="!failure" class="topology-interaction">拖动旋转 · {{ scrollFriendly ? 'Ctrl + 滚轮缩放' : '滚轮缩放' }} · 点击节点</span>
     </div>
     <div class="topology-details" aria-live="polite">
       <template v-if="selected"><span class="topology-detail-icon" :style="{ color: ROLE_COLORS[selected.role] }"><LabIcon :name="roleIcon(selected.role)" :size="21" /></span>
@@ -172,6 +203,27 @@ onBeforeUnmount(() => {
         <div class="topology-detail-address">{{ preview ? '应用部署后创建身份与地址' : selected.host || selected.url || '后端未提供地址' }}</div>
         <span :class="['topology-node-status', selected.state.tone]"><i></i>{{ selected.state.label }}</span></template>
       <template v-else><LabIcon name="info" :size="18" /><p>选择模型或下方节点，查看身份、职责与实际状态。</p></template>
+    </div>
+    <div v-if="cryptoProfile" class="topology-crypto" data-testid="node-crypto-profile">
+      <span class="nb-eyebrow">NODE CRYPTOGRAPHY · 本节点实际加载</span>
+      <dl>
+        <div><dt>证明套件</dt><dd>{{ cryptoProfile.lego ? 'LegoGroth16（lego_norm_v1）可用' : '未上报 Lego 能力' }}</dd></div>
+        <div v-if="selected.role === 'authority'"><dt>验证函数钥</dt><dd>{{ cryptoProfile.ownedValidation ? '只接受密封给本节点的份额' : '未上报' }}</dd></div>
+        <div v-if="selected.role === 'aggregator'"><dt>聚合输入</dt><dd>{{ cryptoProfile.ciphertextOnly ? '仅接收密文核心，不含证明正文' : '未上报' }}</dd></div>
+        <div v-if="selected.role === 'authority'"><dt>原生聚合核验</dt><dd>{{ cryptoProfile.aggregateVerificationNative ? '已加载原生 PublicAggregateVerifier' : '使用参考核验路径' }}</dd></div>
+        <div v-if="selected.role === 'client'"><dt>提交目标</dt><dd>密封给归属边缘 {{ selected.authority_id || '—' }}</dd></div>
+      </dl>
+      <div v-if="cryptoProfile.artifacts.length" class="topology-crypto-artifacts">
+        <span>已加载的密码学原生扩展指纹</span>
+        <ul>
+          <li v-for="artifact in cryptoProfile.artifacts" :key="artifact.module">
+            <code :title="artifact.digest">{{ cryptoProfile.artifactNames[artifact.module] || artifact.module }}</code>
+            <small class="mono">{{ shortDigest(artifact.digest) }}</small>
+          </li>
+        </ul>
+        <p v-if="cryptoProfile.evidenceScope">{{ cryptoProfile.evidenceScope }}</p>
+      </div>
+      <p v-else class="nb-note">该节点未上报已加载的原生扩展（纯 Python 回退路径）。</p>
     </div>
     <details class="topology-accessible-list"><summary>全部节点 <span>{{ scene.nodes.length }}</span><small>每个客户端单归属边缘；连线表示协议协作关系，非实时流量</small></summary>
       <div class="topology-list-grid"><button v-for="node in scene.nodes" :key="node.id" type="button" :aria-pressed="selectedId === node.id" @click="select(node.id)"><LabIcon :name="roleIcon(node.role)" :size="16" /><strong>{{ node.id }}</strong><span>{{ ROLE_NAMES[node.role] }}</span><small>{{ node.state.label }}</small></button></div>
@@ -193,16 +245,28 @@ onBeforeUnmount(() => {
 .dense-topology .topology-node-label:not(.role-authority):not(.selected), .very-dense-topology .topology-node-label:not(.selected) { display: none; }
 .topology-viewport { position: relative; height: clamp(350px, 49vh, 470px); background: radial-gradient(ellipse at 50% 45%, #f0f5fa 0%, #fbfcfe 67%, #fff 100%); overflow: hidden; }
 .topology-webgl { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }.topology-webgl:active { cursor: grabbing; }.topology-webgl.unavailable { visibility: hidden; }
+.scroll-friendly .topology-webgl { touch-action: pan-y; }
 .topology-node-label { position: absolute; left: 0; top: 0; visibility: hidden; display: flex; gap: 5px; align-items: center; transform: translate(-50%, -100%); will-change: transform; border: 1px solid #dce5ef; padding: 4px 7px; border-radius: 6px; background: #ffffffeb; color: #5d6b7f; box-shadow: 0 2px 5px #31537308; font-size: 9px; font-family: Consolas, monospace; letter-spacing: .4px; }
 .topology-node-label::after { content: ''; position: absolute; top: 100%; left: 50%; height: 9px; width: 1px; background: #b3c3d6; }.topology-node-label i { width: 4px; height: 4px; border-radius: 50%; background: #94a1b3; }.topology-node-label.online i { background: #52a585; }.topology-node-label.planned i { background: #d6a55b; }.topology-node-label.error i { background: #ce796f; }
 .topology-node-label.selected { border-color: var(--role-color); color: var(--role-color); background: #fff; box-shadow: 0 0 0 2px #dce8f67d; }.topology-node-label:hover { background: #fff; border-color: var(--role-color); }
-.topology-center-mark { position: absolute; pointer-events: none; top: 48%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; color: #566e9473; font-weight: 650; letter-spacing: .5px; }.topology-center-mark span { display: block; font-size: 5px; letter-spacing: 1.5px; margin-top: 3px; }
+.topology-center-mark { position: absolute; pointer-events: none; top: 16px; left: 18px; font-size: 16px; color: #566e9473; font-weight: 650; letter-spacing: .5px; }.topology-center-mark span { display: block; font-size: 5px; letter-spacing: 1.5px; margin-top: 3px; }
 .topology-empty { position: absolute; top: 35%; left: 8%; right: 8%; text-align: center; color: #8b97a9; font-size: 12px; }
 .topology-controls { position: absolute; z-index: 50; left: 16px; bottom: 16px; display: flex; border: 1px solid #dce5ef; border-radius: 8px; background: #ffffffea; box-shadow: 0 3px 12px #263c6409; overflow: hidden; }.topology-controls button { display: grid; place-items: center; width: 33px; height: 30px; border: 0; border-right: 1px solid #e6ecf4; background: transparent; color: #5d769a; font-size: 18px; }.topology-controls button:last-child { border-right: 0; }.topology-controls button:hover, .topology-controls button[aria-pressed="true"] { background: #edf3fa; }
 .topology-interaction { position: absolute; right: 18px; bottom: 24px; color: #93a0b1; font-size: 9px; pointer-events: none; }
 .topology-details { display: flex; align-items: center; gap: 12px; padding: 15px 20px; background: #f8fafd; border-top: 1px solid #e7edf5; min-height: 75px; color: #75869e; }.topology-details > p { font-size: 11px; }.topology-detail-icon { background: #fff; padding: 9px; display: grid; place-items: center; border: 1px solid #e4ebf5; border-radius: 10px; }
 .topology-detail-name { min-width: 0; }.topology-detail-name strong { display: block; color: #354c70; font-size: 13px; font-weight: 600; }.topology-detail-name small { display: block; color: #8492a7; font-size: 9px; margin-top: 5px; }.topology-detail-address { margin-left: auto; color: #8694a8; font-size: 9px; max-width: 170px; overflow-wrap: anywhere; }
 .topology-node-status { margin-left: auto; display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 10px; color: #8f9bad; }.topology-node-status.online { color: #478e70; }.topology-node-status.planned { color: #bd945c; }.topology-node-status.error { color: #b36861; }
+.topology-crypto { border-top: 1px solid #e7edf5; padding: 14px 20px 16px; background: #fbfcfe; }
+.topology-crypto dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 18px; margin: 10px 0 0; }
+.topology-crypto dl > div { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }
+.topology-crypto dt { flex: 0 0 88px; color: #8091a9; }
+.topology-crypto dd { margin: 0; color: #3f5a80; }
+.topology-crypto-artifacts { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #dbe4ef; font-size: 10px; color: #8091a9; }
+.topology-crypto-artifacts ul { list-style: none; margin: 7px 0 0; padding: 0; display: grid; gap: 4px; }
+.topology-crypto-artifacts li { display: flex; gap: 10px; align-items: baseline; }
+.topology-crypto-artifacts code { color: #435978; font-size: 10px; }
+.topology-crypto-artifacts small { color: #6f86a8; }
+.topology-crypto-artifacts p { margin: 8px 0 0; color: #98a5b6; line-height: 1.5; }
 .topology-accessible-list { border-top: 1px solid #e7edf5; padding: 12px 20px; }.topology-accessible-list summary { cursor: pointer; color: #63758f; font-size: 10px; }.topology-accessible-list summary span { margin-left: 6px; color: #94a4b8; }.topology-accessible-list summary small { float: right; font-size: 9px; color: #9aa7b8; }
 .topology-list-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding-top: 12px; }.topology-list-grid button { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; text-align: left; background: #f8fafc; border: 1px solid #e8edf5; border-radius: 7px; font-size: 10px; color: #74879f; }.topology-list-grid strong { color: #405879; font-weight: 500; }.topology-list-grid span { font-size: 9px; }.topology-list-grid small { margin-left: auto; font-size: 9px; }.topology-list-grid button[aria-pressed="true"] { background: #edf3fb; border-color: #b6cbe5; }
 .topology-viewport.has-fallback { height: auto; min-height: 350px; }.has-fallback canvas { position: absolute; }.topology-fallback { position: relative; padding: 25px; text-align: center; color: #70849f; }.topology-fallback h3 { font-size: 15px; margin: 10px 0; }.topology-fallback p { font-size: 11px; }.topology-fallback-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 20px 0; }.topology-fallback-grid button { display: grid; justify-items: center; gap: 7px; background: #fff; border: 1px solid #dfe7f1; border-radius: 9px; padding: 12px 5px; font-size: 10px; }.topology-fallback-grid small { font-size: 9px; color: #9ca8b8; }

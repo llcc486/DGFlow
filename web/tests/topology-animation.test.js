@@ -90,6 +90,45 @@ function harness() {
   }
 }
 
+test('selecting a node exposes the cryptography that node actually reports', async () => {
+  const app = harness()
+  try {
+    // Real health payloads: capabilities plus the imported native extension digest.
+    app.props.preview = false
+    app.props.nodes = [
+      { id: 'client1', role: 'client', status: 'online', authority_id: 'authority1',
+        capabilities: { lego_norm_v1: true }, native: null },
+      { id: 'authority1', role: 'authority', status: 'online',
+        capabilities: { lego_norm_v1: true, owned_validation: true, aggregate_verification_native: true },
+        native: { loaded_artifact_sha256: { dgfl_native: 'ab'.repeat(32) },
+                  artifact_names: { dgfl_native: 'dgfl_native.pyd' },
+                  evidence_scope: 'actual imported extension file hashes' } },
+      { id: 'aggregator1', role: 'aggregator', status: 'online',
+        capabilities: { lego_norm_v1: true, ciphertext_only_aggregation: true }, native: null },
+    ]
+    await nextTick()
+    // No selection: no profile is claimed for anyone.
+    assert.equal(app.api.cryptoProfile.value, null)
+    app.api.select('authority1'); await nextTick()
+    const authority = app.api.cryptoProfile.value
+    assert.equal(authority.lego, true)
+    assert.equal(authority.ownedValidation, true)
+    assert.equal(authority.aggregateVerificationNative, true)
+    // Compare fields rather than the object: these cross a vm realm boundary.
+    assert.equal(authority.artifacts.length, 1)
+    assert.equal(authority.artifacts[0].module, 'dgfl_native')
+    assert.equal(authority.artifacts[0].digest, 'ab'.repeat(32))
+    assert.equal(authority.artifactNames.dgfl_native, 'dgfl_native.pyd')
+    assert.match(authority.evidenceScope, /imported extension/)
+    app.api.select('aggregator1'); await nextTick()
+    assert.equal(app.api.cryptoProfile.value.ciphertextOnly, true)
+    // A node without the native extension must not be given one.
+    app.api.select('client1'); await nextTick()
+    assert.equal(app.api.cryptoProfile.value.artifacts.length, 0)
+    assert.equal(app.api.cryptoProfile.value.ownedValidation, false)
+  } finally { app.destroy() }
+})
+
 test('rotation renders every display frame at 60 and 120 Hz with elapsed-time speed', async () => {
   for (const hz of [60, 120]) {
     const app = harness()

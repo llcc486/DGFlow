@@ -145,6 +145,41 @@ def test_two_round_runner_harvests_epochs_and_overhead_without_event_shadow_or_p
     assert all(node['training']['step']==4 for node in monitoring['nodes'] if node['role']=='client')
 
 
+def test_plain_rounds_record_a_crypto_context_with_explicit_nulls(experiment,monkeypatch):
+    """Every round must carry the public cryptographic identifiers.
+
+    The plain baseline performs no cryptography, so it must expose the same
+    field shape with explicit nulls: a consumer can then tell "this round proved
+    nothing" apart from "this record predates the field".
+    """
+    manager,record,_=experiment; shared=shared_state()
+    business=BusinessRPC(shared,telemetry=False)
+    monkeypatch.setattr(runner,'RPCClient',lambda *a:business)
+    manager._run(record)
+    assert record['status']=='completed',record.get('error')
+    assert record['rounds']
+    for row in record['rounds']:
+        context=row['crypto_context']
+        assert set(context)=={'context_hash','key_epoch','dkg_transcript_hash','proof_suite',
+                              'proof_crs_hash','manifest_hash','authority_threshold',
+                              'aggregator_threshold','owner_map'}
+        assert len(context['context_hash'])==64
+        assert context['key_epoch']
+        # Nothing was proven in plain mode; nulls, never zeros or invented names.
+        assert context['dkg_transcript_hash'] is None
+        assert context['proof_suite'] is None
+        assert context['proof_crs_hash'] is None
+        assert context['manifest_hash'] is None
+        # The ownership map is real topology, not a placeholder.
+        assert set(context['owner_map'])=={f'client{i}' for i in range(1,7)}
+        assert all(value.startswith('authority') for value in context['owner_map'].values())
+    for row in record['rounds']:
+        for item in row['validations']:
+            assert item['norm_squared'] is None
+            assert item['proof_hash'] is None
+            assert item['packet_hash'] is None
+
+
 @pytest.mark.parametrize('stage',['construct','start','finish','context','sample_callback'])
 def test_local_monitor_failure_remains_diagnostic_through_real_runner_path(experiment,monkeypatch,stage):
     manager,record,_=experiment

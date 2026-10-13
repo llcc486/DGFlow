@@ -1,24 +1,29 @@
 """Local experiment control and dashboard API."""
+import io
 import json
+import re
+import secrets
+import shutil
 import threading
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 from starlette.datastructures import URL, Headers
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from dgfl import __version__
-from dgfl.deployment import configure_cluster, start_nodes
+from dgfl.deployment import MACHINE_GROUPS, bundle_cluster, configure_cluster, init_lan_cluster, load_cluster, start_nodes, validate_machine
 from dgfl.experiments.runner import RunManager
 from dgfl.services.node import training_backends
 from dgfl.services.tensorboard import EmbeddedTensorBoard
@@ -226,6 +231,15 @@ class DataConfig(BaseModel):
     dataset:Literal['mnist','cifar10']='mnist'
 
 
+MachineName = Annotated[str, Field(strict=True, min_length=1, max_length=2), AfterValidator(validate_machine)]
+
+
+class NodeHost(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    host:str=Field(min_length=1,max_length=253,strict=True)
+    machine:MachineName='A'
+
+
 class DeploymentConfig(BaseModel):
     model_config=ConfigDict(extra='forbid')
     client_count:int=Field(6,ge=2,le=100,strict=True)
@@ -233,6 +247,10 @@ class DeploymentConfig(BaseModel):
     aggregator_count:int|None=Field(None,ge=2,le=32,strict=True)
     authority_threshold:int|None=Field(None,ge=2,le=32,strict=True)
     aggregator_threshold:int|None=Field(None,ge=2,le=32,strict=True)
+    # `single_host` keeps every role on this machine. `lan` places them on the
+    # computers listed in `hosts`, which is how several terminals train together.
+    deployment:Literal['single_host','lan']='single_host'
+    hosts:dict[str,NodeHost]|None=None
 
     @model_validator(mode='after')
     def thresholds_fit(self):
@@ -240,7 +258,22 @@ class DeploymentConfig(BaseModel):
             count=getattr(self,role+'_count'); threshold=getattr(self,role+'_threshold')
             if count is not None and threshold is not None and threshold>count:
                 raise ValueError(f'{role}_threshold cannot exceed {role}_count')
+        if self.deployment=='lan' and not self.hosts:
+            raise ValueError('multi-machine deployment requires one host per node')
+        if self.deployment=='single_host' and self.hosts is not None:
+            raise ValueError('single-machine deployment must not carry hosts')
         return self
+
+    def topology(self):
+        return {name:value for name,value in self.model_dump(exclude_none=True).items()
+                if name not in ('deployment','hosts')}
+
+
+class DeploymentStart(DeploymentConfig):
+    # Which machine's roles to launch. Empty means every node on the machine
+    # recorded by the deployment bundle, which is what a terminal runs after
+    # unpacking its own bundle.
+    machine:MachineName|None=None
 
 
 def create_control_app(runtime, *, auto_prepare_compute=True):
@@ -250,6 +283,10 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
 
     @asynccontextmanager
     async def lifespan(_app):
+        # The first scan of the TensorBoard event tree costs seconds. Starting it
+        # here, while the console is still booting, keeps that cost off the first
+        # visitor's page load.
+        _app.state.tensorboard_warmup = tensorboard.warm()
         if auto_prepare_compute:
             compute_wakeup.set()
             worker=threading.Thread(target=automatic_compute_worker,name='dgflow-gpu-discovery',daemon=True)
@@ -285,12 +322,68 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         with monitor_lock:
             monitor.update(time=0.,nodes=[])
 
+    def _apply_deployment(config):
+        """Create or resize the cluster for either deployment mode.
+
+        A `lan` request carries the operator's per-node IP assignment; a
+        `single_host` request keeps the existing local-only behaviour.
+        """
+        existing=(runtime/'cluster.json').exists()
+        if config.deployment=='single_host':
+            if existing and load_cluster(runtime)['deployment']!='single_host':
+                raise ValueError('当前是多机部署；请使用新的运行目录建立单机部署，保留现有记录')
+            return configure_cluster(runtime,control_locked=True,**config.topology())
+        hosts=None if config.hosts is None else {name:entry.model_dump() for name,entry in config.hosts.items()}
+        if not existing:
+            return init_lan_cluster(runtime,nodes=hosts,**config.topology())
+        # Resizing a LAN cluster would need hosts for node names that do not exist
+        # yet, and every address is already bound into the issued certificates.
+        current=load_cluster(runtime)
+        if current['deployment']!='lan':
+            raise ValueError('当前是单机部署；请先生成多机部署包，在独立运行目录启动')
+        if set(current['nodes'])!=set(hosts):
+            raise ValueError('节点集合与现有集群不一致；请在新的运行目录重新初始化')
+        expected={name:f"https://{entry['host']}:{current['nodes'][name]['port']}" for name,entry in hosts.items()}
+        if any(current['nodes'][name]['url']!=url or current['nodes'][name]['machine']!=hosts[name]['machine']
+               for name,url in expected.items()):
+            raise ValueError('多机部署的地址与机器归属已绑定身份证书和身份包；请在新的运行目录重新初始化')
+        return configure_cluster(runtime,control_locked=True,**config.topology())
+
+    @app.post('/api/deployment/plans')
+    def prepare_deployment(config:DeploymentConfig):
+        """Prepare new identities without replacing or stopping the live deployment."""
+        if config.deployment!='lan':
+            raise HTTPException(422,'部署计划仅用于多机配置')
+        with manager.lock:
+            idle_for_deployment()
+            plan_id=secrets.token_hex(16)
+            root=runtime/'deployment-plans'
+            if root.is_symlink() or (hasattr(root,'is_junction') and root.is_junction()):
+                raise HTTPException(409,'部署计划目录不能是链接')
+            target=root/plan_id
+            try:
+                cluster=init_lan_cluster(target,nodes={name:entry.model_dump() for name,entry in config.hosts.items()},
+                                         **config.topology())
+                from dgfl.crypto.lego_registry import Registry
+                parameters=Registry(runtime).export_to(target)
+                machines=sorted({entry['machine'] for entry in cluster['nodes'].values()},key=lambda value:(len(value),value))
+                result={'plan_id':plan_id,'machines':machines,'topology':config.topology(),
+                        'proof_parameters':[{'crs_hash':entry['crs_hash'],'dimension':entry['dimension']}
+                                            for entry in parameters]}
+                from dgfl.transport.security import atomic_json
+                atomic_json(target/'plan.json',result)
+                return result
+            except (ValueError,OSError,RuntimeError) as exc:
+                if target.resolve().is_relative_to(runtime.resolve()):
+                    shutil.rmtree(target,ignore_errors=True)
+                raise HTTPException(409,str(exc)) from exc
+
     @app.post('/api/deployment/init')
     def deployment_init(config:DeploymentConfig):
         with manager.lock:
             idle_for_deployment()
             try:
-                result=configure_cluster(runtime,control_locked=True,**config.model_dump(exclude_none=True))
+                result=_apply_deployment(config)
             except (ValueError,OSError,RuntimeError) as exc:
                 raise HTTPException(409,str(exc)) from exc
             finally:
@@ -300,13 +393,19 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             return result
 
     @app.post('/api/deployment/start')
-    def deployment_start(config:DeploymentConfig):
+    def deployment_start(config:DeploymentStart):
         with manager.lock:
             idle_for_deployment()
             result=None
             try:
-                result=configure_cluster(runtime,control_locked=True,**config.model_dump(exclude_none=True))
-                result.update(start_nodes(runtime,control_locked=True))
+                result=_apply_deployment(config)
+                # A master runtime is the coordinator. Bundles carry their own
+                # machine marker; never spawn remote groups on this computer.
+                machine=config.machine
+                if machine is None and config.deployment=='lan' and not (runtime/'machine.json').exists():
+                    machine='A'
+                start_options={} if machine is None else {'machine':machine}
+                result.update(start_nodes(runtime,control_locked=True,**start_options))
             except (ValueError,OSError,RuntimeError) as exc:
                 if result is not None:
                     return JSONResponse({'detail':f"节点启动失败；当前部署为 {result['client_count']} 个客户端、"
@@ -329,13 +428,18 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             rpc=RPCClient(runtime,cluster['nodes']); rpc.client.timeout=httpx.Timeout(2,connect=.5)
             def one(item):
                 node,settings=item
-                capabilities={}
+                capabilities={}; native=None
                 try:
                     health=rpc.call(node,'health',retries=0); status='online'
-                    capabilities=health.get('capabilities',{}) if isinstance(health,dict) else {}
+                    if isinstance(health,dict):
+                        capabilities=health.get('capabilities',{})
+                        # Public file digests of the imported native extension.
+                        # Forwarded so the console can show what this process
+                        # actually loaded; it reads no private role state.
+                        native=health.get('native')
                 except Exception: status='offline'
                 return {'id':node,'role':''.join(c for c in node if not c.isdigit()),'status':status,
-                        'host':settings['url'],'capabilities':capabilities,
+                        'host':settings['url'],'machine':settings['machine'],'capabilities':capabilities,'native':native,
                         **({'authority_id':topology['client_authorities'][node]}
                            if node in topology['client_authorities'] else {})}
             try:
@@ -407,6 +511,10 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
                 compute['gpu']={**compute['gpu'],'available':False,'reason':'部署配置不完整：'+cluster_error}
         return {'version':__version__,'backend':'BLS12-381/arkworks','node_count':len(nodes),'active_run_id':manager.active,
                 'deployment_schema_version':DEPLOYMENT_SCHEMA_VERSION,
+                'lan_deployment_plans':True,
+                'max_machine_count':len(MACHINE_GROUPS),
+                'local_machine':(json.loads((runtime/'machine.json').read_text('utf8'))['machine']
+                                 if (runtime/'machine.json').exists() else 'A' if cluster['deployment']=='lan' else 'local'),
                 **topology,'deployment_error':cluster_error,
                 'dataset_ready':ready,'datasets':datasets,'deployment':cluster['deployment'],'nodes':nodes,
                 'data_preparation':{'state':'preparing' if prepare_lock.locked() else 'idle'},
@@ -639,10 +747,61 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def tensorboard_status():
         return tensorboard.status()
 
+    def zipped_bundle(source,machine):
+        """Zip one machine's private keys plus the public cluster configuration.
+
+        Each terminal unpacks its own bundle, so no machine ever receives another
+        machine's private identity.
+        """
+        if not (source/'cluster.json').exists():
+            raise HTTPException(409,'尚未初始化集群')
+        config=load_cluster(source)
+        if config['deployment']!='lan':
+            raise HTTPException(409,'单机部署无需分发密钥包')
+        if machine not in {entry['machine'] for entry in config['nodes'].values()}:
+            raise HTTPException(404,f'机器 {machine} 在此部署中没有节点')
+        staging=runtime/('.bundle-'+secrets.token_hex(8))
+        try:
+            exports=bundle_cluster(source,staging,machine=machine)
+            buffer=io.BytesIO()
+            with zipfile.ZipFile(buffer,'w',zipfile.ZIP_DEFLATED) as archive:
+                root=Path(exports[machine])
+                for path in sorted(root.rglob('*')):
+                    if path.is_file():
+                        archive.write(path,Path(f'dgflow-{machine}')/path.relative_to(root))
+            return Response(buffer.getvalue(),media_type='application/zip',
+                            headers={'Content-Disposition':f'attachment; filename="dgflow-{machine}.zip"',
+                                     'Cache-Control':'no-store'})
+        except (ValueError,OSError) as exc:
+            raise HTTPException(409,str(exc)) from exc
+        finally:
+            shutil.rmtree(staging,ignore_errors=True)
+
+    @app.get('/api/deployment/bundle/{machine}')
+    def deployment_bundle(machine:MachineName):
+        return zipped_bundle(runtime,machine)
+
+    @app.get('/api/deployment/plans/{plan_id}/bundle/{machine}')
+    def deployment_plan_bundle(plan_id:str,machine:MachineName):
+        if re.fullmatch(r'[0-9a-f]{32}',plan_id) is None:
+            raise HTTPException(404,'部署计划不存在')
+        source=runtime/'deployment-plans'/plan_id
+        if (not source.resolve().is_relative_to(runtime.resolve()) or source.is_symlink()
+                or (hasattr(source,'is_junction') and source.is_junction())
+                or not (source/'plan.json').is_file()):
+            raise HTTPException(404,'部署计划不存在或未完成')
+        return zipped_bundle(source,machine)
+
     @app.post('/api/runs/{run_id}/tensorboard')
     def tensorboard_sync(run_id:str):
-        try: return manager.sync_tensorboard(run_id)
+        try: result=manager.sync_tensorboard(run_id)
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+        # Wake the single background scanner; UI requests keep using the loaded
+        # provider while exports are ingested, instead of queueing behind disk IO.
+        # A newly exported run must be discoverable before its first frame loads.
+        # Already indexed runs return immediately while fresh points load in the background.
+        tensorboard.refresh(wait=not tensorboard.has_run(run_id))
+        return result
 
     app.mount('/tensorboard',tensorboard,name='tensorboard')
 

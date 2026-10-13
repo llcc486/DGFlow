@@ -49,7 +49,10 @@ test('running tasks, GPU preparation and pending control actions lock population
   const status = { ...registered(6), capabilities: { compute: { preparation: { state: 'initializing' } } } }
   assert.match(deploymentState(status, 7, true).reason, /GPU/)
   assert.equal(deploymentState(status, 7, true).locked, true)
-  assert.match(deploymentState({ ...registered(6), deployment: 'lan' }, 7, true).reason, /LAN/)
+  // A LAN cluster is created from the console's IP form, so a topology change is
+  // no longer reported as an impossible state; the address form is validated
+  // instead, and a matching deployment stays clean.
+  assert.equal(deploymentState({ ...registered(6), deployment: 'lan' }, 7, true).multiMachine, true)
   assert.equal(deploymentState({ ...registered(6), deployment: 'lan' }, 6, true).reason, '')
 })
 
@@ -72,7 +75,8 @@ test('deployment APIs send all five topology fields and retain the cancellation 
     await api.initializeDeployment(9, controller.signal); await api.startDeployment(9, controller.signal)
     assert.deepEqual(requests.map(row => row.url), ['/api/deployment/init', '/api/deployment/start'])
     for (const { options } of requests) {
-      assert.equal(options.method, 'POST'); assert.deepEqual(JSON.parse(options.body), { ...DEFAULT_TOPOLOGY, client_count: 9 })
+      assert.equal(options.method, 'POST'); assert.deepEqual(JSON.parse(options.body),
+        { ...DEFAULT_TOPOLOGY, client_count: 9, deployment: 'single_host' })
       assert.equal(options.signal, controller.signal); assert.equal(options.headers['Content-Type'], 'application/json')
     }
     assert.throws(() => api.startDeployment('9'), /2–100/)
@@ -147,7 +151,7 @@ test('API preserves custom populations and both independent thresholds', async (
   const previous = globalThis.fetch, config = {client_count:100,authority_count:7,aggregator_count:9,authority_threshold:4,aggregator_threshold:5}
   let body
   globalThis.fetch = async (_url, options) => { body = JSON.parse(options.body); return {ok:true,text:async()=>JSON.stringify(config)} }
-  try { await api.initializeDeployment(config); assert.deepEqual(body,config); assert.throws(()=>api.startDeployment({...config,authority_threshold:8}),/边缘门限/) }
+  try { await api.initializeDeployment(config); assert.deepEqual(body,{...config,deployment:'single_host'}); assert.throws(()=>api.startDeployment({...config,authority_threshold:8}),/边缘门限/) }
   finally {globalThis.fetch=previous}
 })
 
@@ -176,7 +180,7 @@ test('store verifies refreshed custom topology and never accepts a different thr
   globalThis.fetch=async(url,options)=>{requests.push({url,options});return{ok:true,text:async()=>JSON.stringify(url.endsWith('/status')?actual:config)}}
   try {
     assert.equal(await store.deployNodes(config,false),true)
-    assert.deepEqual(JSON.parse(requests[0].options.body),config)
+    assert.deepEqual(JSON.parse(requests[0].options.body),{...config,deployment:'single_host'})
     assert.equal(store.nodes.value.length,25)
     assert.equal(deploymentState(store.status.value,config,true).ready,true)
     actual.aggregator_threshold=3

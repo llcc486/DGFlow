@@ -16,6 +16,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -820,9 +821,14 @@ class RunManager:
             # Round binding for MaMA is untouched: ctx still carries round_id and
             # model_hash, and both are hashed into f = hash_point(ctx) every round.
             epoch=uuid.uuid4().hex; dkg_ready=False
+            # The DKG transcript hash is fixed on the first round and reused for
+            # later rounds of the same task-level key epoch, so it is carried
+            # across rounds rather than recomputed per round.
+            dkg_transcript_hash=None
             for round_id in range(1,cfg['rounds']+1):
                 self._check_stop(); record['current_round']=round_id; round_start=time.perf_counter(); round_cpu_start=time.process_time(); bytes_before=rpc.bytes_sent
                 record['current_validations']=[]; record['current_validations_round']=round_id
+                record['current_cloud_selection']=None
                 times={}
                 ctx={'task_id':record['run_id'],'round_id':round_id,'key_epoch':epoch,'model_hash':b.digest(reference),
                      'bits':bits,'scale':scale,'dimension':dimension,'dataset':cfg['dataset'],**topology}
@@ -831,6 +837,29 @@ class RunManager:
                     ctx.update(proof_suite=policy['proof_suite'],proof_crs_hash=policy['proof_crs_hash'])
                 elif policy['proof_suite']!='legacy' and cfg['mode']!='plain':
                     ctx.update(proof_suite=policy['proof_suite'],proof_block_size=policy['proof_block_size'])
+                # Public observations of checks actually returned by the protocol.
+                # Never persist function keys, shares, ciphertext bodies or local
+                # models here. A checkpoint is not an independent proof audit.
+                protocol_evidence={'schema_version':1,'round_id':round_id,'mode':cfg['mode'],
+                    'source':'runtime_verification','active_stage':'submission',
+                    'context':{'context_hash':b.digest(ctx),'key_epoch':epoch,
+                               'input_model_hash':ctx['model_hash'],'dimension':dimension,
+                               'bits':bits,'scale':scale,
+                               'proof_suite':ctx.get('proof_suite') if cfg['mode']!='plain' else None,
+                               'proof_crs_hash':ctx.get('proof_crs_hash'),
+                               'owner_map':dict(topology['client_authorities']),
+                               'authority_threshold':topology['authority_threshold'],
+                               'aggregator_threshold':topology['aggregator_threshold']},
+                    'submission':None,'authorization':None,'aggregation':None,'confirmation':None}
+
+                def evidence_checkpoint(stage, **updates):
+                    protocol_evidence.update(updates,active_stage=stage)
+                    protocol_evidence['updated_at']=datetime.now(UTC).isoformat()
+                    with self.lock:
+                        record['current_protocol_evidence']=deepcopy(protocol_evidence)
+                        self._save(record)
+
+                evidence_checkpoint('submission')
                 key_messages={cid:[] for cid in members}
                 if cfg['mode']!='plain':
                     t=time.perf_counter(); event('dkg','密钥节点共同建钥，核对同一公开转录',round_id)
@@ -841,6 +870,11 @@ class RunManager:
                         messages=many([(a,'share',{'recipient':r}) for a in authorities for r in authorities])
                         many([(r,'receive_share',{'message':msg}) for (_,r),msg in zip([(a,r) for a in authorities for r in authorities],messages)])
                         many([(a,'finalize',{'acks':acks}) for a in authorities])
+                        # Every authority acknowledged the same transcript, so
+                        # recording one of them records the agreed value.
+                        # transcript returns a signed envelope; finalize above
+                        # verified every envelope and the common payload.
+                        dkg_transcript_hash=acks[0].get('payload',{}).get('transcript_hash') if acks else None
                         dkg_ready=True
                     if batched_client_keys:
                         key_batches=many([(a,'client_keys',{'client_ids':list(key_messages)}) for a in authorities])
@@ -885,6 +919,9 @@ class RunManager:
                 times['encryption_wall_sum_s']=sum(v['encrypt_s'] for v in results)
                 times['proof_wall_sum_s']=sum(v['proof_s'] for v in results)
                 self._check_stop()
+                protocol_evidence['context']['dkg_transcript_hash']=dkg_transcript_hash
+                evidence_checkpoint('submission',submission={
+                    'submitted_clients':list(replies),'checked':False})
                 if not apply_batches(set(replies),len(members),strategy=screening['batch_strategy'],batch_size=batch_size):
                     detail = '；'.join(f'{cid}：{training_failures[cid]}' for cid in members if cid in training_failures)
                     cause = ('本轮未收到任何客户端训练提交' if not replies
@@ -893,13 +930,20 @@ class RunManager:
                     raise ValueError(cause + ('；' + detail if detail else '，请检查客户端状态与掉线配置'))
                 proof_verification_metrics=None
                 combine_verification_metrics=None
+                authorized_manifest_hash=None
                 if cfg['mode']=='plain':
                     approved=apply_batches(set(replies),len(members),strategy=screening['batch_strategy'],batch_size=batch_size)
                     collateral=sorted(set(replies)-set(approved))
+                    # Same row shape as the secure path so a consumer can switch
+                    # on mode without branching; the cryptographic fields are
+                    # explicitly null because plain mode proves nothing.
                     validations=[{'client_id':cid,'proof_valid':None,'score':None,
                                   'decision':'accepted' if cid in approved else 'collateral' if cid in collateral else 'rejected',
                                   'reason':('明文基线，不执行密码证明与异常筛选' if cid in approved else
-                                            '固定批次中其他成员缺席' if cid in collateral else '客户端未在本轮提交')}
+                                            '固定批次中其他成员缺席' if cid in collateral else '客户端未在本轮提交'),
+                                  'rejection_reason':None,
+                                  'proof_suite':None,'proof_crs_hash':None,'norm_squared':None,
+                                  'proof_hash':None,'packet_hash':None}
                                  for cid in members]
                     if not approved: raise ValueError('无完整参与批次，本轮中止')
                     total=np.sum([replies[c]['plain_model'] for c in approved],axis=0).astype(int).tolist()
@@ -925,6 +969,7 @@ class RunManager:
                         'validation_keys':{cid:validation_keys[cid] for cid in replies if topology['client_authorities'][cid]==a}})
                         for a in authorities])
                     packets={}
+                    owner_checks=[]
                     for owner,signed in zip(authorities,owner_results):
                         result=rpc.identity.verify_public(signed,'client-verification',owner)
                         if result['context_hash']!=b.digest(ctx) or result['topology']!=topology or result['owner']!=owner:
@@ -933,7 +978,11 @@ class RunManager:
                             if cid not in replies or topology['client_authorities'][cid]!=owner or cid in packets:
                                 raise ValueError('归属节点验证结果包含错误客户端')
                             packets[cid]=row['core']
+                        owner_checks.append({'node_id':owner,'signature_verified':True,
+                            'context_hash':result['context_hash'],'clients':list(result['submissions'])})
                     if set(packets)!=set(replies): raise ValueError('归属节点验证结果未覆盖本轮提交')
+                    evidence_checkpoint('authorization',submission={
+                        'submitted_clients':list(replies),'checked':True,'owner_checks':owner_checks})
                     authorization_payload=shared_payload({'verification_results':owner_results})
                     certs=many([(a,'authorize',authorization_payload) for a in authorities])
                     decision=authorization(rpc.identity,certs,ctx)
@@ -942,6 +991,14 @@ class RunManager:
                     if decision.get('batch_size')!=batch_size or decision.get('screening')!=screening:
                         raise ValueError('授权签名中的分组大小或筛选策略与实验配置不一致')
                     approved=decision['approved']; collateral=decision['collateral']; validations=decision['validations']
+                    authorized_manifest_hash=decision.get('manifest_hash')
+                    evidence_checkpoint('aggregation',authorization={
+                        'checked':True,'context_hash':decision.get('context_hash'),
+                        'manifest_hash':authorized_manifest_hash,
+                        'signers':[cert['sender'] for cert in certs],
+                        'required_signers':cfg['authority_threshold'],
+                        'approved_clients':list(approved),'packet_hashes':dict(decision.get('packet_hashes',{})),
+                        'batch_size':batch_size,'batch_strategy':screening['batch_strategy']})
                     times['authorization_s']=time.perf_counter()-authorization_start
                     times['validation_s']=time.perf_counter()-t
                     if policy['proof_suite']=='lego_norm_v1':
@@ -1016,6 +1073,13 @@ class RunManager:
                     cloud_selection['selected_cloud_ids']=[part['cloud_id'] for part in parts]
                     cloud_selection['required_authorities']=list(authorities)
                     cloud_selection['coordinator_verifies_before_finish']=strategy=='threshold'
+                    cloud_receipts=[{'node_id':f"aggregator{part['cloud_id']}",
+                        'cloud_id':part['cloud_id'],'signature_verified':True,
+                        'context_hash':part['context_hash'],'manifest_hash':part['manifest_hash']}
+                        for part in parts]
+                    evidence_checkpoint('aggregation',aggregation={
+                        'required_parts':cfg['aggregator_threshold'],'partials':cloud_receipts,
+                        'proofs_verified':False})
                     verification_start=time.perf_counter()
                     verification_certificates=[certificate for part in parts for certificate in part['verification_certificates']]
                     verification_materials=aggregate_verification(rpc.identity,verification_certificates,ctx,decision,
@@ -1044,6 +1108,9 @@ class RunManager:
                         total,confirmations=executor.combine_and_confirm(
                             coordinator_combine,lambda job:rpc.call(*job),finish_jobs)
                     times['combine_and_confirmation_s']=time.perf_counter()-combine_start
+                    evidence_checkpoint('confirmation',aggregation={
+                        'required_parts':cfg['aggregator_threshold'],'partials':cloud_receipts,
+                        'proofs_verified':True,'verifier':'coordinator'})
                     coordinator_metric=combine_metrics({'actor':'coordinator','context_hash':b.digest(ctx),
                                                         'round_id':round_id,'combine_timings':coordinator_timings},
                                                        ctx,'coordinator')
@@ -1069,6 +1136,15 @@ class RunManager:
                             times[name+'_max']=max(seen)
                     times['aggregation_s']=time.perf_counter()-t
                 reference=quantize(np.asarray(total)/(len(approved)*scale),scale,bits)
+                if cfg['mode']!='plain':
+                    confirmation_rows=[{'node_id':authority,'model_hash':b.digest(confirmed['reference']),
+                        'matches':confirmed['reference']==reference}
+                        for authority,confirmed in zip(authorities,confirmations)]
+                    evidence_checkpoint('confirmation',confirmation={
+                        'coordinator_model_hash':b.digest(reference),'authorities':confirmation_rows,
+                        'required_authorities':list(authorities),
+                        'all_match':len(confirmation_rows)==len(authorities)
+                                    and all(item['matches'] for item in confirmation_rows)})
                 if cfg['mode']!='plain' and any(c['reference']!=reference for c in confirmations):
                     raise ValueError('下一轮模型与独立节点计算结果不一致')
                 # Score the attack success rate the paper reports, but only for the
@@ -1085,6 +1161,21 @@ class RunManager:
                      'collateral_clients':collateral,'duration_s':time.perf_counter()-round_start,'bytes_sent':rpc.bytes_sent-bytes_before,
                      'stage_times':times,'controller_cpu_s':time.process_time()-round_cpu_start,
                      'validations':validations,'model_hash':b.digest(reference),
+                     'protocol_evidence':deepcopy(protocol_evidence),
+                     # Public cryptographic identifiers for this round: the bytes
+                     # that identify what was proven and what was authorized.
+                     # These name objects only; they carry no secret material.
+                     'crypto_context':{
+                         'context_hash':b.digest(ctx),
+                         'key_epoch':epoch,
+                         'dkg_transcript_hash':dkg_transcript_hash,
+                         'proof_suite':policy['proof_suite'] if cfg['mode']!='plain' else None,
+                         'proof_crs_hash':policy.get('proof_crs_hash') if cfg['mode']!='plain' else None,
+                         'manifest_hash':authorized_manifest_hash,
+                         'authority_threshold':topology['authority_threshold'],
+                         'aggregator_threshold':topology['aggregator_threshold'],
+                         'owner_map':dict(topology['client_authorities']),
+                     },
                      'client_failures': dict(training_failures),
                      **attack_observations,
                      'reference_norm_squared':sum(x*x for x in reference)}
