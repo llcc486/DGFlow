@@ -27,7 +27,7 @@ test('switching the actual deployment form updates RGB dimensions, CRS selection
   const context = createContext({
     ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {},
     onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })

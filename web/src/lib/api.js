@@ -60,6 +60,8 @@ export const api = {
   // so repeating it cannot create a second continuation.
   getCheckpoints: (id, signal) => request(`/runs/${encodeURIComponent(id)}/checkpoints`, { signal }),
   getRecovery: (id, signal) => request(`/runs/${encodeURIComponent(id)}/recovery`, { signal }),
+  getRegistration: (machine, signal) => request(
+    `/registration/status${machine ? `?machine=${encodeURIComponent(machine)}` : ''}`, { signal }),
   resumeRun: (id, idempotencyKey, signal) => request(`/runs/${encodeURIComponent(id)}/resume`, {
     method: 'POST',
     body: JSON.stringify(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),

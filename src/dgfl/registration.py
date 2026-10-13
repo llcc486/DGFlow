@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import os
 import re
 import secrets
 import time
@@ -185,11 +186,16 @@ def _request_body(request):
 
 
 def _sign_request(folder, request):
+    """Sign the request body with this machine's own signing key.
+
+    The signature is hex-encoded because a registration request travels as a JSON
+    document between machines, where raw bytes have no representation.
+    """
     from dgfl.transport.binary import packb
     private = json.loads((folder/'identity.json').read_text('utf8'))
     key = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private['signing_private']))
     body = packb({key_name: value for key_name, value in request.items() if key_name != 'proof'})
-    return {'node': request['node'], 'signature': key.sign(body)}
+    return {'node': request['node'], 'signature': key.sign(body).hex()}
 
 def _subject_alt_names(host):
     names = [x509.DNSName('localhost')]
@@ -302,13 +308,15 @@ def verify_request(request, *, deployment_id, topology, now=None):
     if proof.get('node') != node:
         # A proof signed by another machine cannot be transplanted onto this node.
         raise RegistrationError(f'{node}：登记请求的密钥持有证明属于 {proof.get("node")}')
+    if not isinstance(proof['signature'], str) or len(proof['signature']) != 128:
+        raise RegistrationError(f'{node}：登记请求的密钥持有证明编码无效')
     # The self-signature is the proof of possession: only a machine holding the
     # private key can produce it, so a request cannot be authored on its behalf.
     from dgfl.transport.binary import packb
     try:
         public = ed25519.Ed25519PublicKey.from_public_bytes(bytes.fromhex(request['signing_public']))
-        public.verify(bytes(proof['signature']), packb({key: value for key, value in request.items()
-                                                        if key != 'proof'}))
+        public.verify(bytes.fromhex(proof['signature']),
+                      packb({key: value for key, value in request.items() if key != 'proof'}))
     except InvalidSignature as exc:
         raise RegistrationError(f'{node}：登记请求签名与本机公钥不符') from exc
     except (ValueError, TypeError) as exc:
@@ -490,3 +498,100 @@ def check_local_identity(root, registry, node):
         if not (folder/name).is_file():
             raise RegistrationError(f'{node}：缺少已签发的证书 {name}')
     return entry
+
+
+# --- the platform's consumed-challenge ledger --------------------------------
+
+LEDGER_SCHEMA = 'dgflow-registration-ledger-v1'
+
+
+def ledger_path(root):
+    return Path(root)/'registration-ledger.json'
+
+
+def _load_ledger(root):
+    path = ledger_path(root)
+    if not path.exists():
+        return {'schema': LEDGER_SCHEMA, 'deployment_id': None, 'consumed': {}, 'by_node': {}}
+    try:
+        ledger = json.loads(path.read_text('utf8'))
+    except (ValueError, OSError) as exc:
+        raise RegistrationError(f'登记账本无法读取：{path}') from exc
+    if not isinstance(ledger, dict) or ledger.get('schema') != LEDGER_SCHEMA:
+        raise RegistrationError('登记账本不是本实现支持的格式')
+    if not isinstance(ledger.get('consumed'), dict) or not isinstance(ledger.get('by_node'), dict):
+        raise RegistrationError('登记账本缺少已消费挑战集合')
+    return ledger
+
+
+def _write_ledger(root, ledger):
+    """Durably persist the ledger, so a consumed challenge stays consumed.
+
+    The write is temp file, flush, `fsync`, atomic replace, then `fsync` of the
+    directory: a consumed challenge that was forgotten after a crash would be a
+    replayable registration request, which is exactly what the ledger exists to
+    prevent.
+    """
+    path = ledger_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps(ledger, ensure_ascii=False, sort_keys=True, indent=2) + '\n').encode('utf8')
+    temporary = path.with_suffix('.json.partial')
+    with temporary.open('wb') as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+    temporary.replace(path)
+    if os.name != 'nt':
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    return path
+
+
+def consume_challenge(root, request, *, deployment_id, allow_reissue=False):
+    """Record one request's challenge as used, refusing a replay.
+
+    A challenge is single use. Repeating a request that was already accepted is
+    refused even while its validity window is still open, because the window bounds
+    how long a captured request is useful but does not by itself make it one-shot.
+    `allow_reissue` exists for the deliberate case of re-registering the same node
+    after a rotation: it requires the same node name and records that an earlier
+    challenge was superseded, so the ledger still shows the history rather than
+    silently forgetting it.
+    """
+    ledger = _load_ledger(root)
+    if ledger['deployment_id'] is None:
+        ledger['deployment_id'] = deployment_id
+    elif ledger['deployment_id'] != deployment_id:
+        raise RegistrationError(f"登记账本属于部署 {ledger['deployment_id']}，"
+                                f'而不是 {deployment_id}')
+    node = request['node']
+    challenge = request['challenge']
+    if challenge in ledger['consumed']:
+        previous = ledger['consumed'][challenge]
+        raise RegistrationError(f"{node}：该登记请求的挑战已被用于 "
+                               f"{previous['node'] if isinstance(previous, dict) else previous}，"
+                               '一次性挑战不能重复使用')
+    if ledger['by_node'].get(node) and not allow_reissue:
+        raise RegistrationError(f'{node}：该节点已登记过；如需轮换密钥请显式重新登记')
+    entry = {'node': node, 'deployment_id': deployment_id, 'role': request['role'],
+             'consumed_at': int(time.time())}
+    ledger['consumed'][challenge] = entry
+    ledger['by_node'].setdefault(node, []).append(challenge)
+    _write_ledger(root, ledger)
+    return ledger
+
+
+def ledger_summary(root):
+    """Read the ledger for a status view, without changing it."""
+    ledger = _load_ledger(root)
+    registered = {}
+    for challenge, value in ledger['consumed'].items():
+        if isinstance(value, dict):
+            registered.setdefault(value['node'], []).append({'challenge': challenge,
+                                                             'consumed_at': value['consumed_at']})
+    return {'deployment_id': ledger['deployment_id'],
+            'registered': {name: sorted(entries, key=lambda item: item['consumed_at'])
+                           for name, entries in sorted(registered.items())}}

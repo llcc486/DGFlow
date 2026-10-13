@@ -29,6 +29,8 @@ const stopping = ref(false)
 const stopRequestedId = ref('')
 const recovery = ref(null)
 const recovering = ref(false)
+const registration = ref(null)
+const registrationMachine = ref(null)
 /** One idempotency key per selected run: repeating the request reuses the execution. */
 const resumeKeys = new Map()
 
@@ -78,6 +80,17 @@ async function loadRecovery(runId, signal) {
     // A missing recovery reading is reported, never rendered as "resumable".
     recovery.value = { run_id: runId, resumable: false, checkpoint: null,
       reason: `无法读取恢复信息：${errorText(error)}` }
+  }
+}
+
+async function loadRegistration(machine = registrationMachine.value) {
+  registrationMachine.value = machine || null
+  try {
+    registration.value = await api.getRegistration(registrationMachine.value)
+  } catch (error) {
+    if (error.name === 'AbortError') return
+    registration.value = { nodes: {}, pending: [], identity_scheme: null,
+      reason: `无法读取登记状态：${errorText(error)}` }
   }
 }
 
@@ -333,7 +346,8 @@ export const consoleStore = {
   lastUpdated, operationError, notification,
   preparing, selectedDataset, submitting, deploying, stopping, stopRequestedId,
   recovery, recovering,
+  registration, registrationMachine,
   hasActiveRun, datasetReady, nodes, runCache,
   start, stop, chooseRun, refreshRuns, refreshStatus, deployNodes, prepareData, startRun, stopRun,
-  resumeRun, loadRecovery, clearMessages,
+  resumeRun, loadRecovery, loadRegistration, clearMessages,
 }

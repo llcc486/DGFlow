@@ -356,6 +356,20 @@ class DeploymentStart(DeploymentConfig):
     machine:MachineName|None=None
 
 
+def _registration_commands(node, state):
+    """The commands this node's machine needs next, for the deployment page.
+
+    A node reports the commands for the state it is actually in, so the page shows
+    one step rather than a list an operator has to interpret.
+    """
+    if state['state'] == 'pending':
+        return [f'python -m dgfl.cli identity-init --node {node} --host <本机地址> --deployment <部署标识>',
+                '把生成的 registration-requests/<节点>.json 交给平台执行 register-accept']
+    if state['state'] == 'registered':
+        return [f'python -m dgfl.cli register-check --node {node}   # 安装本机配置包后核对']
+    return [f'python -m dgfl.cli start --machine {state["machine"]}']
+
+
 def create_control_app(runtime, *, auto_prepare_compute=True):
     runtime=Path(runtime).resolve(); manager=RunManager(runtime)
     tensorboard=EmbeddedTensorBoard(manager.tensorboard)
@@ -811,6 +825,27 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def monitor_detail(run_id:str):
         try: return manager.monitor_snapshot(run_id)
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    @app.get('/api/registration/status')
+    def registration_status(machine:str|None=None):
+        """Pending / registered / startable per node, and the per-machine commands.
+
+        Reported for this runtime: the platform sees which requests it accepted, and
+        a machine sees which of its own nodes can start. Neither is inferred from the
+        other, so the page never claims a node is ready on a machine that has not
+        installed its package.
+        """
+        from dgfl.deployment import pending_registration, trust_environment
+        if machine is not None and machine not in MACHINE_GROUPS:
+            raise HTTPException(422, '机器编号无效')
+        try:
+            status=pending_registration(runtime,machine=machine)
+        except (OSError,ValueError) as exc:
+            raise HTTPException(409,str(exc)) from exc
+        status['trust_environment']=trust_environment(runtime)
+        status['commands']={name:_registration_commands(name,status['nodes'][name])
+                            for name in sorted(status['nodes'])}
+        return status
 
     @app.get('/api/runs/{run_id}/checkpoints')
     def checkpoints(run_id:str):

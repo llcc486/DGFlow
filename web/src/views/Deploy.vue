@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import LabIcon from '../components/LabIcon.vue'
+import RegistrationPanel from '../components/RegistrationPanel.vue'
 import StepCard from '../components/StepCard.vue'
 import TopologyGraph from '../components/TopologyGraph.vue'
 import { consoleStore as store } from '../lib/store'
@@ -183,6 +184,12 @@ function bundleUrl(machine) {
     ? `/api/deployment/plans/${deploymentPlan.value.plan_id}/bundle/${machine}` : null
   return `/api/deployment/bundle/${machine}`
 }
+/** Download this machine's public registration package from the live deployment. */
+function downloadLocalBundle() {
+  const machine = store.status.value?.local_machine
+  if (!machine) return
+  window.location.assign(`/api/deployment/bundle/${encodeURIComponent(machine)}`)
+}
 function setMachineHost(machine, value) {
   for (const entry of Object.values(hosts.value)) if (entry.machine === machine) entry.host = value.trim()
 }
@@ -263,7 +270,12 @@ watch([() => form.mode, () => form.proof_suite, matchingParameters], () => {
   }
 })
 watch(() => store.connected.value, connected => { if (connected) refreshProofParameters() })
-onMounted(refreshProofParameters)
+onMounted(() => {
+  refreshProofParameters()
+  // Registration state is read on entry so a machine sees whether its own nodes
+  // still need a request or a package, without a separate settings surface.
+  store.loadRegistration()
+})
 onUnmounted(() => { parametersController?.abort(); gpuController?.abort() })
 
 const presets = [
@@ -921,6 +933,16 @@ function exportConfig() {
               <p class="nb-note">各电脑使用同一版本源码并安装依赖、准备数据。将各自配置包放入独立运行目录，按包内 README 启动本机节点；仅 A 启动控制页。</p>
               <p class="nb-note">配置包包含本机身份和共用 CRS。源码、环境和数据另行准备；防火墙需允许节点端口双向通信。启动后在 A 检查各机在线数量。</p>
             </details>
+            <!-- Registration state for the machine this page runs on. The page
+                 reports what this runtime can see rather than assuming another
+                 machine has installed its package. -->
+            <RegistrationPanel
+              v-if="layoutLocked && store.registration.value"
+              :registration="store.registration.value"
+              :busy="false"
+              @refresh="store.loadRegistration()"
+              @download="downloadLocalBundle()"
+            />
             <button v-if="layoutLocked" type="button" class="nb-btn primary small nb-generate-plan" :disabled="Boolean(deployment.reason || hostsError)" @click="applyDeployment(true)">
               {{ store.deploying.value ? '正在启动…' : `启动本机 ${store.status.value?.local_machine || 'A'} 节点` }}
             </button>

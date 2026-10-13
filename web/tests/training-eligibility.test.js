@@ -130,7 +130,7 @@ function formHarness(status) {
   const context = createContext({
     ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, onMounted() {}, onUnmounted() {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
   runInContext(executable, context)

@@ -151,7 +151,11 @@ def test_a_request_signed_by_another_key_is_refused(machine, tmp_path):
     # A proof that names this node but is signed with a different key is refused by
     # the signature check itself.
     with pytest.raises(reg.RegistrationError, match='签名与本机公钥不符'):
-        reg.verify_request(dict(request, proof={**request['proof'], 'signature': b'0' * 64}),
+        reg.verify_request(dict(request, proof={**request['proof'], 'signature': '0' * 128}),
+                           deployment_id=DEPLOYMENT, topology=TOPOLOGY)
+    # A proof whose signature is not a valid encoding is refused as malformed.
+    with pytest.raises(reg.RegistrationError, match='编码无效'):
+        reg.verify_request(dict(request, proof={**request['proof'], 'signature': 'not-hex'}),
                            deployment_id=DEPLOYMENT, topology=TOPOLOGY)
 
 

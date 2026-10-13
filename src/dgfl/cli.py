@@ -109,6 +109,41 @@ def _parser():
     resume.add_argument('--check', action='store_true',
                         help='Only report whether the run can be continued, and why not')
     resume.add_argument('--json', action='store_true', help='Emit the result as JSON')
+    # --- registration-based identity ------------------------------------------
+    # Each of these runs on the machine the material belongs to, except
+    # `register-accept`, which is the only command that needs the signing authority.
+    identity_init = commands.add_parser(
+        'identity-init',
+        help='Generate this machine\'s node keys locally and write a registration request')
+    identity_init.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    identity_init.add_argument('--node', required=True)
+    identity_init.add_argument('--host', required=True, help='Address this node will be reachable at')
+    identity_init.add_argument('--deployment', required=True, help='Deployment identifier')
+    identity_init.add_argument('--validity-seconds', type=int, default=3600,
+                               help='Registration request lifetime (60 to 604800 seconds, default 3600)')
+    identity_init.add_argument('--json', action='store_true')
+    register_accept = commands.add_parser(
+        'register-accept',
+        help='Verify one machine\'s request against the intended topology and issue its public material')
+    register_accept.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    register_accept.add_argument('--request', required=True, type=Path)
+    register_accept.add_argument('--authority', required=True, type=Path,
+                                 help='Signing environment, kept outside every runtime directory')
+    register_accept.add_argument('--allow-reissue', action='store_true',
+                                 help='Permit registering a node that already has an entry (key rotation)')
+    register_accept.add_argument('--json', action='store_true')
+    register_check = commands.add_parser(
+        'register-check',
+        help='Confirm before startup that local private keys match the registered public keys')
+    register_check.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    register_check.add_argument('--node', required=True)
+    register_check.add_argument('--json', action='store_true')
+    register_status = commands.add_parser(
+        'register-status',
+        help='Report which nodes are pending, registered or ready to start')
+    register_status.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    register_status.add_argument('--machine', help='Limit the report to one machine group')
+    register_status.add_argument('--json', action='store_true')
     tamper = commands.add_parser('tamper-check',
                                  help='Isolated tamper playground: real crypto, four forgeries, real refusal reasons')
     tamper.add_argument('--mutations', nargs='+', choices=('norm', 'ciphertext', 'reference', 'replay'),
@@ -412,6 +447,91 @@ def _resume(arguments):
     return 1 if payload.get('resumable') is False else 0
 
 
+def _identity_init(arguments):
+    """Generate this machine's keys and write the registration request.
+
+    Two commands rather than one, because they run on different machines and at
+    different times: this one only ever touches this machine's own directory.
+    """
+    from dgfl import registration as reg
+    runtime = Path(arguments.runtime).resolve()
+    created = reg.create_local_identity(runtime/'keys', arguments.node, host=arguments.host)
+    request = reg.build_request(runtime/'keys', arguments.node, host=arguments.host,
+                                deployment_id=arguments.deployment,
+                                validity_seconds=arguments.validity_seconds)
+    request_path = runtime/'registration-requests'/f"{arguments.node}.json"
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    request_path.write_text(json.dumps(request, ensure_ascii=False, sort_keys=True, indent=2) + '\n',
+                            encoding='utf8')
+    result = {**created, 'request': str(request_path), 'deployment_id': arguments.deployment,
+              'expires_at': request['expires_at'], 'challenge': request['challenge'],
+              'note': '私钥留在本机；只有公开材料随请求离开本机'}
+    if arguments.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"已生成本机身份：{created['identity']}")
+        print(f"登记请求：{request_path}")
+        print('私钥留在本机；请把该请求文件交给平台签发，再取回本机配置包。')
+    return result
+
+
+def _register_accept(arguments):
+    """Verify one request and issue its public registration material."""
+    from dgfl.deployment import issue_registration
+    request = json.loads(Path(arguments.request).read_text('utf8'))
+    issued = issue_registration(Path(arguments.runtime).resolve(), request,
+                                authority=Path(arguments.authority).resolve(),
+                                allow_reissue=arguments.allow_reissue)
+    if arguments.json:
+        print(json.dumps(issued, ensure_ascii=False, indent=2))
+    else:
+        entry = issued['entry']
+        print(f"已登记 {entry['node']}（角色 {entry['role']}，地址 {entry['host']}）")
+        print(f"身份登记版本：{entry['registry_version']}")
+        print('签发的材料只含公共信息；请为本机生成配置包后取回。')
+    return issued
+
+
+def _register_check(arguments):
+    """Confirm that this machine's private keys match its registered public keys."""
+    from dgfl import registration as reg
+    runtime = Path(arguments.runtime).resolve()
+    keys = runtime/'keys'
+    registry_path = keys/'registration-registry.json'
+    if not registry_path.exists():
+        raise ValueError('本机运行目录没有登记的公共身份表；请先取回本机配置包')
+    registry = json.loads(registry_path.read_text('utf8'))
+    entry = reg.check_local_identity(keys, registry, arguments.node)
+    result = {'node': arguments.node, 'available': True, 'role': entry['role'],
+              'host': entry['host'], 'registry_version': entry['registry_version'],
+              'detail': '本机私钥与登记公钥一致，可以启动'}
+    if arguments.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"{arguments.node}：本机私钥与登记公钥一致（角色 {entry['role']}），可以启动")
+    return result
+
+
+def _register_status(arguments):
+    """Report the three registration states for the deployment's nodes."""
+    from dgfl.deployment import pending_registration
+    status = pending_registration(Path(arguments.runtime).resolve(), machine=arguments.machine)
+    if arguments.machine and not status['nodes']:
+        raise ValueError(f'机器 {arguments.machine} 在此部署中没有节点')
+    if arguments.json:
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+    else:
+        print(f"信任环境：{status['trust_environment']}"
+              + ('（本机集中初始化）' if not status['individually_registered']
+                 else '（各机器自行生成并登记）'))
+        for name, item in sorted(status['nodes'].items()):
+            state = {'pending': '待登记', 'registered': '已登记', 'startable': '可启动'}[item['state']]
+            print(f"  {name}（机器 {item['machine']}）：{state}")
+        if status['pending']:
+            print('待登记节点：' + '、'.join(status['pending']))
+    return status
+
+
 def _tamper_check(arguments):
     """Run the isolated tamper playground; it never touches a live task."""
     from dgfl import tamper_playground as tp
@@ -502,6 +622,18 @@ def main(argv=None):
             return 0 if result['authentic'] else 1
         elif command == 'resume':
             return _resume(arguments)
+        elif command == 'identity-init':
+            _identity_init(arguments)
+            return 0
+        elif command == 'register-accept':
+            _register_accept(arguments)
+            return 0
+        elif command == 'register-check':
+            _register_check(arguments)
+            return 0
+        elif command == 'register-status':
+            _register_status(arguments)
+            return 0
         elif command == 'tamper-check':
             return _tamper_check(arguments)
         elif command == 'prepare-data':
