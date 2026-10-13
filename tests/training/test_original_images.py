@@ -105,6 +105,7 @@ def test_invalid_limits_rejected_before_file_loading(tmp_path, bad, split):
 
 
 @pytest.mark.parametrize("dataset", ["mnist", "cifar10"])
+@pytest.mark.original_data_cache
 def test_installed_original_cache_prefix_matches_pixel_bits(dataset):
     data_root = Path(os.environ.get("DGFL_TEST_DATA_ROOT", ROOT / "data"))
     if not (data_root / dataset / "raw").is_dir():

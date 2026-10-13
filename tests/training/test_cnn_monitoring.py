@@ -4,9 +4,9 @@ import random
 import numpy as np
 import pytest
 
-from dgfl.training import paper_models as pm
-
 torch = pytest.importorskip("torch")
+
+from dgfl.training import paper_models as pm
 
 MODELS = list(pm.MODEL_SPECS)
 

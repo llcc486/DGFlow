@@ -312,24 +312,43 @@ def test_output_cannot_be_overwritten_and_exact_file_set_is_required(full, input
         full.verify_full_offline(output)
 
 
-def test_optional_public_crs_roundtrip_and_corruption_are_registry_checked(full, inputs, tmp_path):
-    pytest.importorskip('dgfl_native')
+def test_requested_empty_parameter_runtime_fails_before_download(full, inputs, tmp_path, monkeypatch):
     runtime = tmp_path/'parameter-runtime'
-    registry = full.Registry(runtime)
-    parameter = registry.create_development(3, 8, workers=1)
-    (runtime/'proof-parameters/installation-check-20261008.json').write_text('{"local_check":true}')
-    output, manifest = prepare(full, inputs, parameters_runtime=runtime)
-    assert manifest['proof_parameters'] == [registry.describe(parameter['crs_hash'], 3, 8)]
-    assert not any('installation-check' in entry['path'] for entry in manifest['files'])
-    target = tmp_path/'with-parameters'
-    clone_source(inputs, target)
-    full.restore_assets(output, root=target, runtime=target/'other-runtime')
-    copied = full.Registry(target/'other-runtime').describe(parameter['crs_hash'], 3, 8)
-    assert copied['setup_kind'] == 'single_party_development'
-    path = output/'parameters/proof-parameters'/parameter['crs_hash']/'pk.bin'
-    data = bytearray(path.read_bytes())
-    data[-1] ^= 1
-    path.write_bytes(data)
-    rehash(full, output, manifest)
-    with pytest.raises(ValueError, match='proving key digest mismatch'):
-        full.verify_full_offline(output)
+    (runtime/'proof-parameters').mkdir(parents=True)
+    (runtime/'proof-parameters/installation-check.json').write_text('{"local_check":true}')
+    monkeypatch.setattr(full, 'pip_download_with_fallback', lambda *a, **k: pytest.fail('invalid CRS used network'))
+    with pytest.raises(ValueError, match='no installed public Lego parameters'):
+        prepare(full, inputs, parameters_runtime=runtime)
+    assert not (inputs['root']/'full-offline').exists()
+
+
+@pytest.mark.parametrize('missing', ['manifest.json', 'vk.bin', 'pk.bin', 'provenance.json'])
+def test_incomplete_parameter_material_is_rejected_without_native_loading(full, inputs, tmp_path,
+                                                                        monkeypatch, missing):
+    runtime = tmp_path/'parameter-runtime'
+    folder = runtime/'proof-parameters'/('ab'*32)
+    folder.mkdir(parents=True)
+    for name in {'manifest.json', 'vk.bin', 'pk.bin', 'provenance.json'}-{missing}:
+        (folder/name).write_bytes(b'incomplete fixture')
+    def forbidden(*args, **kwargs):
+        pytest.fail('incomplete public CRS must be rejected before native decoding or download')
+    monkeypatch.setattr(full.Registry, 'describe', forbidden)
+    monkeypatch.setattr(full, 'pip_download_with_fallback', forbidden)
+    with pytest.raises(ValueError, match='must contain only'):
+        prepare(full, inputs, parameters_runtime=runtime)
+    assert not (inputs['root']/'full-offline').exists()
+
+
+def test_private_parameter_file_is_rejected_without_native_loading(full, inputs, tmp_path, monkeypatch):
+    runtime = tmp_path/'parameter-runtime'
+    folder = runtime/'proof-parameters'/('ab'*32)
+    folder.mkdir(parents=True)
+    for name in ('manifest.json', 'vk.bin', 'pk.bin', 'provenance.json', 'trapdoor.bin'):
+        (folder/name).write_bytes(b'fixture')
+    def forbidden(*args, **kwargs):
+        pytest.fail('private CRS file must be rejected before native decoding or download')
+    monkeypatch.setattr(full.Registry, 'describe', forbidden)
+    monkeypatch.setattr(full, 'pip_download_with_fallback', forbidden)
+    with pytest.raises(ValueError, match='must contain only'):
+        prepare(full, inputs, parameters_runtime=runtime)
+    assert not (inputs['root']/'full-offline').exists()

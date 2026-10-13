@@ -6,6 +6,7 @@ checkout, so the boundary tool has to detect the difference from the files.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -53,6 +54,21 @@ def test_matching_tree_reports_no_drift(tree, monkeypatch):
     assert record['accurate_for_current_tree'] is True
     assert record['changed'] == [] and record['added_since_freeze'] == []
     assert boundary['stale_records_exist'] is False
+
+
+@pytest.mark.parametrize('frozen_ending', [b'\n', b'\r\n'])
+@pytest.mark.parametrize('checkout_ending', [b'\n', b'\r\n'])
+def test_newline_encodings_do_not_change_source_identity(tree, monkeypatch, frozen_ending, checkout_ending):
+    path = tree / 'src' / 'dgfl' / 'a.py'
+    path.write_bytes(b'one' + frozen_ending + b'two' + frozen_ending)
+    write_record(tree, digests(tree))
+    monkeypatch.setattr(module, 'PINNED_DOCUMENTS', (('docs/record.json', 'source_before', 'source_after'),))
+    path.write_bytes(b'one' + checkout_ending + b'two' + checkout_ending)
+    assert module.build(tree)['records'][0]['changed'] == []
+    assert module.current_files(tree)['src/dgfl/a.py'] == hashlib.sha256(b'one\ntwo\n').hexdigest()
+    # A content edit must still invalidate the historical fingerprint.
+    path.write_bytes(b'one' + checkout_ending + b'changed' + checkout_ending)
+    assert [entry['path'] for entry in module.build(tree)['records'][0]['changed']] == ['src/dgfl/a.py']
 
 
 def test_changed_file_is_reported_with_both_digests(tree, monkeypatch):
@@ -130,7 +146,15 @@ def test_repository_boundary_record_is_present_and_consistent():
         frozen = {module.normalise(name): value for name, value in document['source_before'].items()}
         assert entry['declared_files'] == len(frozen)
         now = module.current_files(root)
-        assert len(entry['changed']) == sum(1 for name in frozen if name in now and frozen[name] != now[name])
+        changed = []
+        for name, expected in frozen.items():
+            if name not in now:
+                continue
+            lf = (root / name).read_bytes().replace(b'\r\n', b'\n')
+            variants = {hashlib.sha256(value).hexdigest() for value in (lf, lf.replace(b'\n', b'\r\n'))}
+            if expected not in variants:
+                changed.append(name)
+        assert sorted(item['path'] for item in entry['changed']) == sorted(changed)
         assert len(entry['absent_from_current_tree']) == sum(1 for name in frozen if name not in now)
         assert len(entry['added_since_freeze']) == sum(1 for name in now if name not in frozen)
         assert entry['accurate_for_current_tree'] is not bool(

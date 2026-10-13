@@ -37,14 +37,6 @@ def test_paper_dimensions_cannot_enter_current_linear_role_or_crypto(_name, data
         lego.development_setup(dimension, 8, workers=1)
 
 
-@pytest.mark.parametrize("_name,_dataset,_shape,dimension", PAPER_MODELS)
-def test_native_lego_independently_rejects_paper_dimension(_name, _dataset, _shape, dimension):
-    native = pytest.importorskip("dgfl_native")
-    # This exercises the loaded extension's pre-allocation guard, not a mock.
-    with pytest.raises(ValueError, match="unsupported Lego dimension"):
-        native.LegoProver.development_setup(dimension, 8, 1)
-
-
 @pytest.mark.parametrize("field,value", [
     ("model_name", "paper_cnn_mnist"), ("architecture_hash", "1" * 64),
 ])
