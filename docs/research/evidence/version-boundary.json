@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "scope": "Maps each frozen acceptance record to the source version it describes. A record with accurate_for_current_tree false is a real result for the version it names and is not evidence about this checkout.",
-  "measured_utc": "2026-10-13T17:29:40.445261+00:00",
-  "commit": "e3118f6b85170b34cc9ac3f2da1327b1a0f5b9b9",
-  "commit_subject": "F 阶段：CRS 来源凭据、电路标识绑定、证明关系规格、密钥生命周期有界",
+  "measured_utc": "2026-10-13T17:55:32.595507+00:00",
+  "commit": "2de5b0b966153958b4a236ee01cb307b9fc2cd22",
+  "commit_subject": "G 阶段：授权一致性门限与密钥门限分离；动态加入边界显式化",
   "working_tree_dirty": true,
   "current_source_files": {
     "src/dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
