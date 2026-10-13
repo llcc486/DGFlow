@@ -24,8 +24,18 @@ def test_public_export_checks_pk_and_excludes_other_files(installed, tmp_path):
     source = registry.root/manifest['crs_hash']
     (source/'private.txt').write_text('not public material')
     target = tmp_path/'export'
-    assert registry.export_to(target) == [{key: value for key, value in manifest.items() if key != 'setup_wall_s'}]
-    assert {p.name for p in (target/'proof-parameters'/manifest['crs_hash']).iterdir()} == {'manifest.json','pk.bin','vk.bin'}
+    # `provenance` is the setup's own report about the credential it wrote; the
+    # exported set carries the credential itself.
+    assert registry.export_to(target) == [
+        {key: value for key, value in manifest.items() if key not in ('setup_wall_s', 'provenance')}]
+    exported = {p.name for p in (target/'proof-parameters'/manifest['crs_hash']).iterdir()}
+    assert exported == {'manifest.json','pk.bin','vk.bin','provenance.json'}
+    # The credential is copied verbatim in content, so the recipient can verify it
+    # independently. Compared as parsed content, not bytes: the export pretty-prints
+    # while the installed copy retains the encoding the signing step produced.
+    exported_credential = json.loads(
+        (target/'proof-parameters'/manifest['crs_hash']/'provenance.json').read_text('utf8'))
+    assert exported_credential == json.loads((source/'provenance.json').read_text('utf8'))
     raw = bytearray((source/'pk.bin').read_bytes())
     raw[-1] ^= 1
     (source/'pk.bin').write_bytes(raw)

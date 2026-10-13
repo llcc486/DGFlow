@@ -441,12 +441,42 @@ def _check_reference(ctx, reference):
         raise ValueError('reference vector does not match the recorded model hash')
 
 
+#: The relations a shareable proof establishes, in the order they are checked.
+#:
+#: A single collapsed verdict was reported before. A reader could see that a proof
+#: failed but not which claim failed, and an auditor had no list of claims to check
+#: against. Each entry names one relation and what its failure would mean.
+PROOF_RELATIONS = (
+    ('context_binding',
+     '提交的上下文与记录一致，且模型摘要与参考向量相符',
+     '上下文或参考向量被换掉：换轮次重放、或改用另一个参考向量'),
+    ('ciphertext_range',
+     '每个密文点都在声明的值域内',
+     '密文含越界值：提交方声称的模型不在约定范围内'),
+    ('squared_norm',
+     '声明的平方范数与密文所对应的值一致',
+     '范数被改写：用更小的范数掩盖更大的实际更新'),
+    ('key_linkage',
+     '密文与注册的公钥行一致',
+     '密文由注册密钥之外的密钥生成'),
+    ('envelope_integrity',
+     '证明自检通过（证明结构与其内部承诺一致）',
+     '证明被截断、拼接或不属于该密文'),
+)
+
+
 def _proof_relations(material, client_id, *, verification, parameters_factory):
     """Re-run the shareable proof relations and report each one.
 
     Returns the result mapping plus the native checked handle that an
     authorization check may reuse. No function key is read here, so this runs on
     the shareable layer alone.
+
+    Every declared relation is reported, each with its own verdict. The suite
+    verifies them together and refuses the whole submission, so the individual
+    verdicts are derived from the same check rather than from separate ones: when it
+    fails, the first relation whose precondition is observably violated is named, and
+    the remaining ones are reported as not established rather than as passed.
     """
     ctx = material['context']
     suite, _ = p.proof_settings(ctx)
@@ -461,7 +491,6 @@ def _proof_relations(material, client_id, *, verification, parameters_factory):
     if not isinstance(public, list) or len(public) != len(packet['ciphertext']):
         raise ValueError('enrolled public key row is absent or has the wrong length')
 
-    relations = []
     checked = None
     if suite == 'lego_norm_v1':
         if parameters_factory is None:
@@ -474,14 +503,53 @@ def _proof_relations(material, client_id, *, verification, parameters_factory):
     else:
         valid = p.verify(ctx, client_id, packet['ciphertext'], packet['norm_squared'],
                          packet['proof'], public, verification=verification)
-    # One row per checked relation; a reader sees which one failed rather than a
-    # single collapsed verdict.
-    relations.append({'relation': '范围与平方范数证明（含密文—注册密钥联动）', 'ok': bool(valid),
-                      'detail': f'suite={suite}'})
+    # One row per declared relation. A reader sees which claim failed rather than a
+    # single collapsed verdict, and the record carries the claim that was checked.
+    failed_at = None if valid else _first_failing_relation(material, packet, public, ctx)
+    relations = []
+    for index, (name, claim, consequence) in enumerate(PROOF_RELATIONS):
+        if valid:
+            ok = True
+        elif failed_at is not None and index < failed_at:
+            # Checked before the failing relation and not contradicted by it.
+            ok = True
+        else:
+            # The check is a single verdict, so once it fails the later relations are
+            # not established. Reporting them as passed would claim more than was
+            # verified.
+            ok = False
+        relations.append({'relation': name, 'ok': ok, 'claim': claim,
+                          'if_broken': consequence, 'detail': f'suite={suite}'})
     result = {'client_id': client_id, 'suite': suite, 'proof_valid': bool(valid),
               'relations': relations, 'inner_product': None, 'cosine': None,
               'reference_norm_squared': sum(z*z for z in material['reference'])}
     return result, checked
+
+
+def _first_failing_relation(material, packet, public, ctx):
+    """Name the earliest relation whose precondition is observably violated.
+
+    This is attribution, not a second verification: the suite returns one verdict for
+    the whole relation set, so a failure is only localised by checking the bindings a
+    reader can see. When none of them is observably broken the failure is attributed
+    to the proof envelope, which is the remaining possibility.
+    """
+    if packet.get('context') is not None and packet['context'] != ctx:
+        return 0
+    if b.digest(material['reference']) != ctx.get('model_hash'):
+        return 0
+    for encoded in packet['ciphertext']:
+        try:
+            point = b.g1_load(encoded)
+        except Exception:
+            return len(PROOF_RELATIONS) - 1
+        if point == b.G1.identity():
+            return 1
+    if not isinstance(packet.get('norm_squared'), int) or packet['norm_squared'] < 0:
+        return 2
+    if len(public) != len(packet['ciphertext']):
+        return 3
+    return len(PROOF_RELATIONS) - 1
 
 
 def verify_proof(material, client_id, *, verification='deterministic', parameters_factory=None):

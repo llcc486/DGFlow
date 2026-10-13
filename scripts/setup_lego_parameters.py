@@ -55,6 +55,11 @@ def _registry(runtime):
     return Registry(runtime)
 
 
+def _provenance():
+    from dgfl.crypto import provenance
+    return provenance
+
+
 def runtime_lifecycle_lock(runtime):
     from dgfl.deployment import runtime_lifecycle_lock as lock
     return lock(runtime)
@@ -104,8 +109,13 @@ def _create_and_publish(registry,dimension,bits,workers):
         manifest=_read_manifest(staged,fingerprint,dimension,bits)
         staged.load_prover(fingerprint,dimension,bits,workers=min(workers,4))
         folder=staged._folder(fingerprint)
-        if {item.name for item in folder.iterdir()}!={'manifest.json','pk.bin','vk.bin'}:
-            raise ValueError('new Lego setup must contain only its public PK/VK and manifest')
+        # The signed provenance credential belongs here: it is public and it is the
+        # only thing that says who produced these keys, so a published set without it
+        # could never be attributed.
+        published={'manifest.json','pk.bin','vk.bin',_provenance().CREDENTIAL_NAME}
+        if {item.name for item in folder.iterdir()}!=published:
+            raise ValueError('new Lego setup must contain only its public PK/VK, '
+                             'manifest and provenance credential')
         for item in folder.iterdir():
             _reject_links(item)
         destination=registry._folder(fingerprint)
@@ -144,12 +154,50 @@ def prepare_parameter(runtime,dimension=650,bits=8,workers=4):
         return _create_and_publish(_registry(runtime),dimension,bits,workers)
 
 
+def _provenance_summary(runtime):
+    """What the deployment can say about its own parameter set's origin.
+
+    Reported by the setup so the operator learns the issuer key here, at the moment it
+    exists, rather than discovering later that nothing can be pinned. Records which
+    parameter sets are verifiable and which are not; a set whose credential cannot be
+    verified is listed as unverified rather than omitted.
+    """
+    provenance=_provenance()
+    registry=_registry(runtime)
+    anchor=provenance.trust_anchor()
+    rows=[]
+    for folder in sorted((runtime/'proof-parameters').iterdir()):
+        if not folder.is_dir():
+            continue
+        try:
+            manifest=json.loads((folder/'manifest.json').read_text('utf8'))
+            report=provenance.verify(manifest,provenance.load(folder/provenance.CREDENTIAL_NAME),
+                                     anchor=anchor)
+        except (OSError,ValueError) as exc:
+            rows.append({'crs_hash':folder.name,'checked':False,'authentic':None,
+                         'reason':f'无法读取该参数集：{type(exc).__name__}'})
+            continue
+        rows.append({'crs_hash':folder.name,'checked':report['checked'],
+                     'authentic':report['authentic'],'issuer':report['issuer'],
+                     'reason':report['reason']})
+    del registry
+    return {'anchor_configured':anchor is not None,
+            'anchor_env':provenance.TRUST_ANCHOR_ENV,
+            'requirement_env':provenance.REQUIRE_ENV,
+            'circuit_identity':provenance.circuit_identity(),
+            'parameters':rows,
+            'note':('来源凭据只证明参数集由哪个签发公钥签署；单方开发设置仍是单方信任假设，'
+                    '凭据不会把它变成可信仪式。')}
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime',type=Path,required=True)
     mode=parser.add_mutually_exclusive_group()
     mode.add_argument('--defaults',action='store_true',help='Validate or create MNIST650/CIFAR1930 8-bit public CRS')
     mode.add_argument('--dimension',type=int,default=None)
+    mode.add_argument('--provenance',action='store_true',
+                      help='Only report the installed parameter sets\' provenance')
     parser.add_argument('--bits',type=int,default=8)
     parser.add_argument('--workers',type=int,default=4)
     parser.add_argument('--native-dir',type=Path)
@@ -159,7 +207,9 @@ def main(argv=None):
     try:
         # Caller can parse stdout as JSON even if a dependency emits diagnostics.
         with contextlib.redirect_stdout(sys.stderr):
-            if args.defaults:
+            if args.provenance:
+                result=_provenance_summary(args.runtime)
+            elif args.defaults:
                 if args.bits!=8:
                     raise ValueError('--defaults uses the fixed 8-bit deployment parameters')
                 result=prepare_defaults(args.runtime,workers=args.workers)

@@ -30,6 +30,10 @@ from dgfl.validation.policy import (
 )
 
 AUTHORITIES=['authority1','authority2','authority3']
+#: How many key-lifecycle records one node keeps. Each accepted epoch writes one and
+#: they are held for the node's lifetime, so the count is bounded rather than left to
+#: grow with the number of epochs a coordinator asks for.
+MAX_KEY_EPOCHS=256
 _LOG=logging.getLogger(__name__)
 TOPOLOGY_FIELDS={'client_count','authority_count','aggregator_count','authority_threshold',
                  'aggregator_threshold','client_authorities'}
@@ -488,6 +492,42 @@ class RoleWorker:
             self._proof_registry=Registry(self.runtime)
         return self._proof_registry
 
+    def _check_epoch_capacity(self):
+        """Refuse a new key epoch once this node holds its bounded number.
+
+        Each accepted epoch writes one `epochs/<digest>.json` record held for the
+        node's lifetime, and the epoch identifier comes from the coordinator. Without
+        a bound the directory grows without limit, and every later lifecycle query
+        scans it afile at a time. The bound is a fixed constant rather than a
+        configuration knob, because the value that matters is "bounded", and an
+        operator who needs more epochs needs a new task, not a larger directory.
+        """
+        folder=self.folder/'epochs'
+        if not folder.exists():
+            return 0
+        try:
+            held=sum(1 for entry in folder.iterdir() if entry.is_file())
+        except OSError as exc:
+            raise ValueError('无法统计密钥周期记录；请检查运行目录可读性') from exc
+        if held>=MAX_KEY_EPOCHS:
+            raise ValueError(
+                f'本节点已保留 {held} 个密钥周期记录，达到上限 {MAX_KEY_EPOCHS}；'
+                '请新建任务而不是继续在同一节点上轮换密钥周期')
+        return held
+
+    def key_lifecycle(self):
+        """Read-only view of the key epochs this node holds, newest name first.
+
+        Reports the count against the bound so a lifecycle question is answered
+        without scanning the directory twice or listing unbounded output.
+        """
+        folder=self.folder/'epochs'
+        names=sorted((entry.name for entry in folder.iterdir() if entry.is_file()),
+                     reverse=True) if folder.exists() else []
+        return {'held':len(names),'limit':MAX_KEY_EPOCHS,
+                'remaining':max(0,MAX_KEY_EPOCHS-len(names)),
+                'records':names[:MAX_KEY_EPOCHS]}
+
     def execute(self,action,payload):
         if action=='prepare_compute':
             if (not self.node_id.startswith('authority') or not isinstance(payload,dict)
@@ -813,8 +853,7 @@ class RoleWorker:
             offset,d=p._bounds(ctx)
             if len(reference)!=d or any(type(x) is not int or not -offset<=x<offset for x in reference) or b.digest(reference)!=ctx['model_hash']:
                 raise ValueError('reference model hash or range mismatch')
-            epoch_path=self.folder/'epochs'/(b.digest(ctx['key_epoch'])+'.json')
-            # The key epoch is task-level, so later rounds reuse the participant
+            epoch_path=self.folder/'epochs'/(b.digest(ctx['key_epoch'])+'.json')            # The key epoch is task-level, so later rounds reuse the participant
             # built on the first one instead of rebuilding it. Reuse keys on the
             # participant's own epoch, so a genuinely new epoch still initialises
             # and the replay guard below still fires for it.
@@ -825,6 +864,13 @@ class RoleWorker:
                 raise ValueError('key epoch already pinned to a different task topology')
             if epoch_path.exists() and not reuse:
                 raise ValueError('epoch already initialized; query cached request or create a new task')
+            # Bound how many key-lifecycle records one node keeps. Each accepted new
+            # epoch writes one, and an epoch is a coordinator-supplied string, so
+            # without a bound a caller could fill a node's disk and make every later
+            # lifecycle query scan an unbounded directory. The refusal is typed and
+            # says what to do, rather than failing later on a full disk.
+            if not epoch_path.exists():
+                self._check_epoch_capacity()
             previous=self.task_state.get(ctx['task_id'])
             if previous and previous.get('policy')!=policy:
                 raise ValueError('task policy already fixed; create a new task')

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from dgfl.crypto import lego, lego_registry
 from dgfl.deployment import runtime_lifecycle_lock
@@ -46,6 +47,13 @@ def fake_registry(helper,monkeypatch):
             folder=self._folder(manifest['crs_hash']); folder.mkdir(parents=True)
             (folder/'manifest.json').write_text(json.dumps(manifest),encoding='utf8')
             (folder/'vk.bin').write_bytes(vk); (folder/'pk.bin').write_bytes(pk)
+            # Mirror the real setup: a parameter set carries a signed provenance
+            # credential, and the publication check requires it alongside the keys.
+            from dgfl.crypto import provenance
+            credential=provenance.build(
+                manifest,ed25519.Ed25519PrivateKey.from_private_bytes(b'k'*32),
+                producer='test-single-party',created_at=manifest['created_at'])
+            provenance.write(folder/provenance.CREDENTIAL_NAME,credential)
             return {**manifest,'setup_wall_s':0.1}
 
         def load_prover(self,fingerprint,dimension,bits,*,workers=4):
@@ -84,7 +92,10 @@ def test_defaults_are_complete_then_idempotent_without_touching_runtime_identity
                        for path in (runtime/'proof-parameters').rglob('*') if path.is_file()}
     assert {path.name for path in runtime.iterdir()}=={'lifecycle.lock','proof-parameters'}
     for folder in (runtime/'proof-parameters').iterdir():
-        assert {path.name for path in folder.iterdir()}=={'manifest.json','pk.bin','vk.bin'}
+        # A published parameter set carries its public keys, its manifest and the
+        # signed provenance credential that attributes them.
+        assert {path.name for path in folder.iterdir()}=={'manifest.json','pk.bin','vk.bin',
+                                                        'provenance.json'}
 
 
 def test_valid_duplicate_default_crs_are_all_retained_and_only_missing_shape_created(helper,fake_registry,tmp_path):

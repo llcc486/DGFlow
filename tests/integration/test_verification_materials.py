@@ -102,7 +102,11 @@ def test_the_cli_reports_the_proof_and_marks_the_inner_product_unverified(tmp_pa
                  '--materials-dir', str(tmp_path/'runtime'/'results'/'cli-run'/SUBDIRECTORY)])
     output = capsys.readouterr().out
     assert code == 0
-    assert '范围与平方范数证明' in output
+    # The report names the individual relations by identifier and states the claim
+    # each one checks, rather than printing one collapsed verdict.
+    assert 'squared_norm' in output
+    assert 'key_linkage' in output
+    assert '平方范数' in output
     assert '通过 2，未通过 0' in output
     assert '未复核' in output
     assert '验证函数钥门限' not in output
@@ -245,7 +249,16 @@ def test_a_tampered_record_fails_instead_of_verifying(tmp_path, field, value):
     loaded = load(path)
     result = verify_proof(loaded, 'client1')
     assert result['proof_valid'] is False
-    assert result['relations'][0]['ok'] is False
+    # The relations that are still observably intact are reported as established, and
+    # everything from the first violation onward is reported as not established. The
+    # suite returns one verdict for the whole set, so nothing after the failure can be
+    # claimed as passed.
+    flags = [item['ok'] for item in result['relations']]
+    assert any(not flag for flag in flags)
+    assert flags == sorted(flags, reverse=True)
+    # Each relation names the claim it checks and what breaking it would mean, so a
+    # reader sees which claim failed rather than a single collapsed verdict.
+    assert all(item['claim'] and item['if_broken'] for item in result['relations'])
     # A failed proof must not be followed by an inner-product claim.
     assert result['inner_product'] is None
     # Tampering with the proof layer also breaks its binding to the function-key

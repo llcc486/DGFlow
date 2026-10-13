@@ -251,13 +251,46 @@
 
 ## F. CRS 来源管理与安全审查材料
 
-1. **来源与可信状态分开记录**。外部导入需核验电路标识、曲线、位宽、PK/VK 一致性、文件摘要、来源凭据。现实漏洞不是 `setup_kind` 中转（只有一个合法值），而是 manifest 未认证 + `created_at` 不被指纹覆盖（`lego_registry.py:73`、`:88-90`）。需要给 manifest 加来源凭据（签名，或至少与 CRS 指纹绑定的外部承诺），并把 `created_at` 纳入指纹。
-2. 补电路身份绑定。现状只做形状检查，Rust 源码自己注明 "Shape equality does not establish circuit identity"（`native/dgfl-native/src/lego.rs:124-127`），`bits` 是可信调用方元数据（`:337-341`）。需要一个能写出来的负面测试：同 `(dimension, bits)` 但不同电路的诚实生成 VK 应被拒绝——目前无法写，因为检查不存在。
-3. 严格部署策略：角色/实验启动已是 fail-closed（`roles.py:765-771`、`runner.py:521-535`），**部署脚本仍会自动补齐开发参数**（`setup_lego_parameters.py:119-135`、`setup_environment.py:164-190`）。严格模式要作为部署期门禁，而不是新增角色期检查。
-4. 完整证明关系的规格与负面测试：密文与数值见证关联、注册密钥关联、上下文绑定、子群检查、可信验证参数来源。数值 SNARK 通过不能替代完整提交验证。
-5. 密钥生命周期：明确区分任务内复用与每轮轮换。每轮轮换作为论文对齐与泄漏边界评估模式，额外 DKG 成本单独测量。现有复用模式必须记录允许的函数查询范围与跨轮累积信息（已知边界见 `paper-gap-analysis.md:41`、`architecture-comparison.md:62`），不能把消息防重放表述为函数钥代数撤销。当前 `aggregate_keys`（`protocol.py:316-403`）没有查询计数与上限。
+**实施状态（2026-10-13）：本机可验证项已完成；独立密码学审查与多方仪式未做。**
 
-**验收**：参数替换、混用、降级、关联关系篡改均被拒绝；设置来源可追溯。组合安全证明、侧信道评估、独立密码审查列为明确外部审查事项，本机测试不替代其结论。
+| 项 | 状态 | 落点 |
+|---|---|---|
+| 来源凭据覆盖清单全部字段 | 已完成 | `crypto/provenance.py`、`provenance.json` |
+| `created_at`／`setup_kind` 不再是无摘要字段 | 已完成 | 二者进入凭据内嵌清单，逐字段可检出改动 |
+| 电路标识绑定 | 已完成 | `circuit_identity()` 进入凭据正文 |
+| 部署期严格闸门（fail-closed） | 已完成 | `Registry._provenance`、`DGFL_CRS_PROVENANCE_KEY`、`DGFL_REQUIRE_CRS_PROVENANCE` |
+| 设置时写入凭据并报告可固定的签发公钥 | 已完成 | `create_development(producer=, signing_key=)`、`setup_lego_parameters.py --provenance` |
+| 导出携带凭据 | 已完成 | `Registry.export_to` |
+| 运行记录记录来源判定 | 已完成 | `evidence.proof_parameter_provenance` |
+| 完整证明关系规格与逐关系判定 | 已完成 | `PROOF_RELATIONS`、`_first_failing_relation`、CLI 渲染 |
+| 负测覆盖每类篡改 | 已完成 | `tests/integration/test_verification_materials.py`、`tests/crypto/test_crs_provenance.py`（38 项） |
+| 密钥生命周期查询有界 | 已完成 | `MAX_KEY_EPOCHS`、`_check_epoch_capacity`、`key_lifecycle` |
+| 用可信仪式替代单方开发设置 | **未做** | 见下 |
+| 独立密码学审查 | **未做** | 见下 |
+
+**已核实的原状与真实缺陷**：`proof-parameters/<crs_hash>/manifest.json` 是普通本地文件。它被检查的是**内部一致性**（字段形状、密钥长度与固定电路布局相符、`crs_hash` 等于验证密钥摘要），但没有任何东西把它与**生成者**绑定：`created_at` 与 `setup_kind` 不被任何摘要覆盖，因此被改写的清单与原件无法区分，读者也无法判断密钥出自哪次设置。
+
+需要说明的是，方案原文把缺陷定位为 `setup_kind` 取值不足。核实后不是这样：真正的缺陷是清单不受认证。`setup_kind` 的取值本身没有错，错的是它和 `created_at` 一样，没有任何签名或摘要为其背书。
+
+`native/dgfl-native/src/lego.rs:124-127` 从另一侧讲了同一件事：**形状相等不能确立电路同一性**，调用方必须通过可信清单独立固定 CRS 与电路规格。此前没有任何代码在做这件事。
+
+**本轮的做法**：新增来源凭据 `provenance.json`，由执行设置的一方用 Ed25519 签名，覆盖整份清单（因此包含 `created_at` 与 `setup_kind`）、协议指纹与电路标识。校验需要信任锚，锚属于**部署**而不是被检查的运行目录，通过 `DGFL_CRS_PROVENANCE_KEY`（路径或内联十六进制公钥）提供。
+
+**为什么没有把 `created_at` 折进 `crs_hash`**：`crs_hash` 必须继续等于 `lego.py:44-45` 与原生扩展各自独立计算的同一个值，折入清单元数据会使三处计算不可能一致，也会让既有安装全部失效。因此元数据的绑定放在凭据里，而不是改动 `crs_hash` 的定义。
+
+**fail-closed 与"未检查"的区分**：未配置锚时，要求来源校验的部署（`DGFL_REQUIRE_CRS_PROVENANCE`）**拒绝使用**该参数集；不要求时校验报告 `checked: False, authentic: None` 并说明原因，而**从不报告为通过**。"没有配置锚"与"凭据已校验"是两个不同的事实，把二者混同正是未认证参数文件看起来可信的原因。运行记录中的 `evidence.proof_parameter_provenance` 同样保留这一区分。
+
+**实测的端到端性质**：设置写出的凭据报出签发公钥供固定；固定锚后 `checked/authentic = True/True`；未固定锚时为 `False/None`；要求校验但未固定锚时拒绝；**把已安装清单的 `created_at` 改为 1999 年后被拒绝**（此前这不可检出）。
+
+**证明关系规格**：原先每份材料只报一条合并结论（"范围与平方范数证明"），读者只能看到证明失败、看不到哪条主张失败，审计方也没有可对照的主张清单。现在声明五条关系并逐条报告判定：上下文绑定、密文值域、平方范数、密文—注册密钥联动、证明封装完整性。每条给出所检查的主张与"若被破坏意味着什么"。**后续关系不因前面失败而被记为通过**：套件对一个关系集返回单一判定，因此首次 violation 之后的关系一律记为"未确立"。
+
+**密钥生命周期**：`epochs/<digest>.json` 每个被接受的密钥周期写一条并在节点生命周期内保留，而周期标识来自协调方。此前无上界，目录随请求次数增长，且每次生命周期查询逐文件扫描。现在 `MAX_KEY_EPOCHS=256` 为固定常数并在超限时给出明确拒绝（"请新建任务"），`key_lifecycle()` 的查询本身也有界（`held` 如实计数，`records` 截断到上限）。用不可读目录模拟失败时是**报错而非通过**。
+
+**仍未做**：
+- 用可信仪式替代单方开发设置。凭据只证明参数集由哪个签发公钥签署；单方开发设置仍是单方信任假设，**凭据不会把它变成可信仪式**，这一点已写入 `setup_lego_parameters.py --provenance` 的 `note`。
+- 独立密码学审查。本阶段交付的是审查所需的材料：电路标识、来源凭据、逐关系规格与负测结果；审查本身不能由本仓库代做。
+
+**验收**：清单与 `created_at`／`setup_kind` 均有签名覆盖（已实测改动任一字段被拒）；电路标识进入凭据（已实测声明另一电路被拒）；未配置锚时不误报为通过，要求校验时拒绝运行；参数集来源可在运行记录与设置报告中查到；密钥生命周期有界；证明关系逐条可读且负测覆盖各类篡改。
 
 ---
 

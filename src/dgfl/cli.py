@@ -359,8 +359,11 @@ def _verify_submission(arguments):
                 print(f'  拒绝原因：{item["error"]}')
             for relation in item.get('relations', []):
                 mark = '✓' if relation.get('ok') else '✗'
+                # The claim is printed beside the relation's name, so a reader of a
+                # report can see what was checked without reading the source.
+                claim = f"：{relation['claim']}" if relation.get('claim') else ''
                 detail = f'（{relation["detail"]}）' if relation.get('detail') else ''
-                print(f'  {mark} {relation["relation"]}{detail}')
+                print(f'  {mark} {relation["relation"]}{claim}{detail}')
             if item.get('inner_product') is not None:
                 print(f'  授权内积 = {item["inner_product"]}　余弦 = {item["cosine"]:.9f}')
         print(f'\n合计 {len(results)} 个客户端：通过 {len(results)-len(failed)}，未通过 {len(failed)}')

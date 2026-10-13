@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
 from . import backend as b
 from . import lego
 from . import protocol as p
@@ -132,6 +134,14 @@ class Registry:
         self.root = self.runtime/'proof-parameters'
         self._provers = OrderedDict()
         self._lock = threading.RLock()
+        # What the last loaded parameter set could say about its own origin. `None`
+        # means nothing has been loaded yet; a report with `authentic: None` means the
+        # origin was not checked, which is not the same as it having been verified.
+        self._provenance_report = None
+
+    @property
+    def provenance(self):
+        return self._provenance_report
 
     def _folder(self, fingerprint):
         folder = self.root/_hash(fingerprint)
@@ -167,9 +177,35 @@ class Registry:
             manifest = _manifest(json.loads(raw), fingerprint, dimension, bits)
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise ValueError('invalid installed Lego parameter manifest') from exc
+        self._provenance(folder, manifest)
         vk = self._read(folder, 'vk.bin', manifest['vk_bytes'])
         _check_vk(manifest, vk)
         return folder, manifest, vk
+
+    def _provenance(self, folder, manifest):
+        """Verify the parameter set's origin, and fail closed when required.
+
+        The manifest is a plain local file: `created_at` and `setup_kind` are not
+        covered by any digest, so without a credential nothing says who produced the
+        keys. The installed credential is verified against the deployment's trusted
+        issuer key. When an anchor is configured, a missing or invalid credential is
+        refused; when this deployment requires provenance and no anchor is configured,
+        that is refused too, because "required but unchecked" is not a pass.
+        """
+        from . import provenance
+        anchor = provenance.trust_anchor()
+        required = provenance.require_provenance()
+        credential = provenance.load(folder/provenance.CREDENTIAL_NAME)
+        if anchor is None:
+            if required:
+                raise ValueError(
+                    f'本部署要求 CRS 来源校验，但未配置可信签发公钥'
+                    f'（{provenance.TRUST_ANCHOR_ENV}）；拒绝使用未经校验的参数集')
+            self._provenance_report = provenance.verify(manifest, credential)
+            return self._provenance_report
+        report = provenance.verify(manifest, credential, anchor=anchor)
+        self._provenance_report = report
+        return report
 
     def describe(self, crs_hash, dimension, bits):
         _, manifest, vk = self._material(crs_hash, dimension, bits)
@@ -229,6 +265,14 @@ class Registry:
                 raise ValueError('Lego proving key hash mismatch during export')
             (destination/'vk.bin').write_bytes(vk)
             (destination/'manifest.json').write_text(json.dumps(manifest), encoding='utf8')
+            # The credential travels with the material. It is public, and an exported
+            # set without it could not be attributed by whoever receives it.
+            from . import provenance
+            credential = provenance.load(folder/provenance.CREDENTIAL_NAME)
+            if credential is not None:
+                (destination/provenance.CREDENTIAL_NAME).write_text(
+                    json.dumps(credential, ensure_ascii=False, sort_keys=True, indent=2)+'\n',
+                    encoding='utf8')
             manifests.append(manifest)
         return manifests
 
@@ -270,9 +314,19 @@ class Registry:
                 self._provers.popitem(last=False)
         return prover, params, {**manifest, 'load_wall_s':time.perf_counter()-start, 'prover_cached':cached}
 
-    def create_development(self, dimension, bits, *, workers=4):
-        """Explicit OFFLINE single-party setup; never called by experiment start."""
+    def create_development(self, dimension, bits, *, workers=4, producer=None, signing_key=None):
+        """Explicit OFFLINE single-party setup; never called by experiment start.
+
+        The manifest written here is covered by a signed provenance credential. That
+        is the only moment the setup's own identity is available, so it is the only
+        moment the binding can be made; a manifest written without one could never be
+        attributed afterwards. `producer` names the setup and `signing_key` is an
+        Ed25519 private key; when no key is supplied one is generated and its public
+        part is reported back, so the operator can pin it in the deployment.
+        """
         from dgfl.transport.security import atomic_json
+
+        from . import provenance
         if not available():
             raise ValueError('Lego native persistent-parameter support is required for offline setup')
         start = time.perf_counter()
@@ -281,16 +335,33 @@ class Registry:
         vk_size, pk_size = _key_sizes(dimension, bits)
         if (len(vk), len(pk)) != (vk_size, pk_size):
             raise ValueError('native Lego key layout differs from pinned circuit specification')
+        created_at = datetime.now(UTC).isoformat()
         manifest = _manifest({'schema_version':1, 'suite':lego.SUITE, 'protocol_version':lego.VERSION,
             'curve':'BLS12-381', 'circuit':lego.CIRCUIT, 'dimension':dimension, 'bits':bits,
             'crs_hash':params.crs_hash, 'setup_kind':'single_party_development',
             'vk_sha256':hashlib.sha256(vk).hexdigest(), 'pk_sha256':hashlib.sha256(pk).hexdigest(),
-            'vk_bytes':len(vk), 'pk_bytes':len(pk), 'created_at':datetime.now(UTC).isoformat()})
+            'vk_bytes':len(vk), 'pk_bytes':len(pk), 'created_at':created_at})
+        if signing_key is None:
+            signing_key = ed25519.Ed25519PrivateKey.generate()
+        elif not isinstance(signing_key, ed25519.Ed25519PrivateKey):
+            raise ValueError('provenance signing key must be an Ed25519 private key')
+        credential = provenance.build(manifest, signing_key,
+                                      producer=producer or 'single_party_development',
+                                      created_at=created_at)
         folder = self._folder(params.crs_hash)
         if folder.exists():
             raise ValueError('Lego parameter fingerprint already installed; existing files retained')
         folder.mkdir(parents=True)
         _atomic_raw(folder/'vk.bin',vk); _atomic_raw(folder/'pk.bin',pk)
         atomic_json(folder/'manifest.json',manifest)
-        # Store only public proving parameters, never setup trapdoor randomness.
-        return {**manifest, 'setup_wall_s':time.perf_counter()-start}
+        provenance.write(folder/provenance.CREDENTIAL_NAME, credential)
+        # Store only public proving parameters, never setup trapdoor randomness. The
+        # signing key is reported so it can be pinned, and is never written here: a
+        # key stored beside what it signs authenticates nothing.
+        return {**manifest, 'setup_wall_s':time.perf_counter()-start,
+                'provenance':{'schema':credential['schema'],
+                              'issuer_public':credential['issuer_public'],
+                              'producer':credential['producer'],
+                              'circuit_identity':credential['circuit_identity'],
+                              'pin_hint':(f'在部署中设置 {provenance.TRUST_ANCHOR_ENV}='
+                                          f'{credential["issuer_public"]} 以校验该参数集')}}

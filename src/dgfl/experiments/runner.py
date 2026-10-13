@@ -1111,7 +1111,19 @@ class RunManager:
                 if not available(): raise ValueError('当前原生扩展缺少 Lego 能力')
                 policy.pop('proof_block_size')
                 policy['proof_crs_hash']=cfg['proof_crs_hash']
-                record['evidence']['proof_parameters']=Registry(self.runtime).describe(cfg['proof_crs_hash'],dimension,bits)
+                registry=Registry(self.runtime)
+                record['evidence']['proof_parameters']=registry.describe(cfg['proof_crs_hash'],dimension,bits)
+                # What could be established about where this parameter set came from.
+                # `authentic: None` means the origin was not checked, which is a
+                # different statement from "checked and acceptable", and it is recorded
+                # rather than left for a reader to infer from the absence of a field.
+                # Read defensively: a replaced registry (an offline test double, a
+                # future implementation) must not turn a missing report into a failure.
+                provenance=getattr(registry,'provenance',None)
+                record['evidence']['proof_parameter_provenance']=(
+                    provenance if isinstance(provenance,dict) else
+                    {'checked':False,'authentic':None,
+                     'reason':'未记录来源校验结果'})
             record['evidence']['proof_settings']={name:policy[name] for name in
                                                  ('proof_suite','verification','verification_workers','proof_block_size','proof_crs_hash') if name in policy}
             record['evidence']['proof']=proof_description(policy['proof_suite']) if cfg['mode']!='plain' else 'none (plain baseline)'

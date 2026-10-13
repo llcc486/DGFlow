@@ -52,7 +52,10 @@ def lan_bundles(tmp_path_factory):
             item['url'] = f"https://{NODES[node]['host']}:{item['port']}"
         atomic_json(master/'cluster.json', config)
         manifest = Registry(master).create_development(650, 8, workers=2)
+        # `setup_wall_s` and the `provenance` report are about the setup operation, not
+        # about the installed parameter set, so they are not part of the manifest.
         manifest.pop('setup_wall_s', None)
+        manifest.pop('provenance', None)
         bundles = bundle_cluster(master, base/'bundles')
     runtimes = {machine: Path(folder)/'runtime' for machine, folder in bundles.items()}
     for machine, runtime in runtimes.items():
