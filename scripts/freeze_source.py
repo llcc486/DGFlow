@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import tempfile
@@ -29,6 +30,48 @@ MANIFEST='SOURCE-MANIFEST.json'
 
 def _link(path):
     return path.is_symlink() or (hasattr(path,'is_junction') and path.is_junction())
+
+
+def _content_scan():
+    """Load the machine-identity scanner that guards the delivered content.
+
+    Loaded by path rather than by import so this script keeps working when it is
+    executed directly from `scripts/` and when a test loads it by file location.
+    """
+    path=Path(__file__).with_name('freeze_content_scan.py')
+    spec=importlib.util.spec_from_file_location('freeze_content_scan',path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def scan_identifiers(paths,root,*,hostnames=None):
+    """Machine-identifying matches plus files whose text checks could not run."""
+    module=_content_scan()
+    return module.scan(paths,root,hostnames=hostnames)
+
+
+def require_no_identifiers(paths,root):
+    """Fail the delivery when archived tooling recorded the machine it ran on.
+
+    Archives of test reports and evidence JSON are written by tools that record
+    the root directory, the JUnit `hostname`, and `<user>` temp directories. Those
+    files are delivered, so the identifiers must be removed before freezing
+    rather than discovered inside a published package.
+
+    A delivered text file that cannot be decoded is a failure too: this check
+    could neither clear nor convict it. Known binary formats are reported but
+    allowed, because the packaging tool inspects their metadata with parsers for
+    the format instead of scanning raw bytes.
+    """
+    module=_content_scan()
+    findings,unscannable=scan_identifiers(paths,root)
+    if findings:
+        raise ValueError('Machine-identifying content in the delivered tree:\n'+module.render(findings))
+    blocked=module.undecodable(unscannable)
+    if blocked:
+        raise ValueError('Delivered text files could not be content-scanned:\n'+module.render_unscannable(blocked))
+    return findings,unscannable
 
 
 def collect(root,*,source_only=False):
@@ -104,7 +147,10 @@ def verify(root):
 def freeze(root,release_id=None,archive=None,*,source_only=False):
     root=Path(root).resolve()
     if release_id is None: release_id=f'dgflow-{datetime.now(UTC):%Y%m%d}-source'
-    paths=collect(root,source_only=source_only); entries=[_entry(root,path) for path in paths]
+    paths=collect(root,source_only=source_only)
+    findings,unscannable=require_no_identifiers(paths,root)
+    assert not findings, 'require_no_identifiers raises on any finding'
+    entries=[_entry(root,path) for path in paths]
     manifest={'schema_version':2,'kind':'complete-current-project-source','release_id':release_id,
               'base_commit':BASE_COMMIT,'commit':None,
               'provenance':'Current project snapshot identified by file hashes; base_commit is historical provenance only.',
@@ -114,7 +160,16 @@ def freeze(root,release_id=None,archive=None,*,source_only=False):
                        'excluded_directories':sorted(EXCLUDED_DIRS),
                        'excluded_files':sorted(EXCLUDED_FILES),
                        'source_only':source_only,
-                       'built_frontend_included':not source_only,'manifest_excludes_itself':True},'files':entries}
+                       'built_frontend_included':not source_only,'manifest_excludes_itself':True},
+              'content_scan':{'checked_files':len(entries)-len(unscannable),
+                              'violations':0,
+                              'not_text_scanned':[{'path':item['path'],'kind':item['kind'],
+                                                   'reason':item['reason']} for item in unscannable],
+                              'scope':('Machine-identity strings recorded by local tooling: personal profile and '
+                                       'temp paths, pytest temp roots, the local hostname, and identifiers removed '
+                                       'by the recorded sanitisation. Binary formats are listed because byte-level '
+                                       'text checks do not apply to them.')},
+              'files':entries}
     if source_only:
         manifest['scope']['root_files']=[name for name in ROOT_FILES if name!='source-history.bundle']
         manifest['scope']['trees']=[name for name in TREES if name!='offline']
@@ -165,11 +220,26 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument('--verify',action='store_true')
+    parser.add_argument('--scan-only',action='store_true',
+                        help='Report machine-identifying content in the delivered trees without freezing')
     parser.add_argument('--release-id',help='Explicit delivery label; defaults to the current UTC date plus source')
     parser.add_argument('--archive',type=Path)
     parser.add_argument('--source-only',action='store_true',
                         help='Exclude built frontend, offline bundles and historical Git bundle')
     args=parser.parse_args(argv)
+    if args.scan_only:
+        root=Path(args.root).resolve()
+        findings,unscannable=scan_identifiers(collect(root,source_only=args.source_only),root)
+        module=_content_scan()
+        if unscannable:
+            print('NOT SCANNED (content checks unavailable for these delivered files):')
+            print(module.render_unscannable(unscannable))
+        if findings:
+            print(module.render(findings))
+            print(f'FAIL: {len(findings)} machine-identifying occurrence(s)')
+            return 1
+        print('OK: no machine-identifying content in the delivered trees')
+        return 0
     result=verify(args.root) if args.verify else freeze(args.root,args.release_id,args.archive,source_only=args.source_only)
     print(json.dumps({name:result[name] for name in ('release_id','file_count','payload_bytes','snapshot_sha256')}))
     return 0

@@ -158,8 +158,7 @@
       "skipped": "0",
       "tests": "128",
       "time": "48.298",
-      "timestamp": "2026-10-12T12:39:43.222343+08:00",
-      "hostname": "DESKTOP-GT1VP52"
+      "timestamp": "2026-10-12T12:39:43.222343+08:00"
     },
     {
       "file": "tmp\\attack-defense-audit-20261011\\architecture-regression-20261012.xml",
@@ -170,8 +169,7 @@
       "skipped": "0",
       "tests": "842",
       "time": "428.187",
-      "timestamp": "2026-10-12T12:45:28.159749+08:00",
-      "hostname": "DESKTOP-GT1VP52"
+      "timestamp": "2026-10-12T12:45:28.159749+08:00"
     }
   ],
   "overlapping_test_suites_are_not_additive": true,
@@ -196,6 +194,12 @@
   "limitations": [
     "Specific sign-flip and invalid-proof fixtures, not universal poisoning detection",
     "Development CRS; local processes do not constitute separate trusted physical machines",
-    "Cloud exclusion is configured participation, not a crash-recovery test"
-  ]
+    "Cloud exclusion is configured participation, not a crash-recovery test",
+    "This record is not evidence about the current checkout: 8 of the 51 frozen source files changed, 1 is absent and 2 were added afterwards. See version-boundary.json for the per-file comparison, and run `python scripts/evidence_version_boundary.py --check` to re-measure."
+  ],
+  "version_boundary": {
+    "record_accurate_for": "the source version named by source_before/source_after",
+    "evidence": "docs/research/evidence/version-boundary.json",
+    "recheck_command": "python scripts/evidence_version_boundary.py --check"
+  }
 }

@@ -97,8 +97,8 @@
       "time_seconds": 122.061,
       "skip_reasons": {
         "compact format only": 6,
-        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
-        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-185\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-185\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-185\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-185\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-185\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
         "could not import 'pypdf': No module named 'pypdf'": 4
       },
       "junit_sha256": "674299d93d89f751b5c6243f47f91dfc04df413aaf66a3c54280035832b1f494"
@@ -112,8 +112,8 @@
       "time_seconds": 120.967,
       "skip_reasons": {
         "compact format only": 6,
-        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
-        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-188\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-188\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-188\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-188\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-188\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
         "could not import 'pypdf': No module named 'pypdf'": 4
       },
       "junit_sha256": "b54e24b11414aa838c94a1dd5ccab15a5cf5b7ce9a0d130d0977d18a03b46840"
@@ -132,7 +132,7 @@
         "executable": "C:\\Program Files\\nodejs\\node.exe",
         "npm_cli": "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js"
       },
-      "working_directory": "D:\\Desktop\\全国密码技术竞赛\\Project\\DGFlow-source-671a850\\web",
+      "working_directory": "<checkout>",
       "commands": {
         "test": "& 'C:\\Program Files\\nodejs\\node.exe' 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js' test",
         "build": "& 'C:\\Program Files\\nodejs\\node.exe' 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js' run build"

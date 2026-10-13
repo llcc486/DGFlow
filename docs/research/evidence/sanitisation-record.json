@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "scope": "Removes the machine identity that local tooling recorded inside archived test reports and evidence documents. No digest, model hash, metric or count is altered.",
+  "hostname_placeholder": "<local-hostname>",
+  "user_placeholder": "<user>",
+  "checkout_placeholder": "<checkout>",
+  "note": "Embedded SHA-256 values that cover a sanitised file describe the pre-sanitisation bytes; each such digest is recomputed and republished by the release that references it.",
+  "changes": [
+    {
+      "path": "docs/research/evidence/attack-architecture-review-20261012.json",
+      "kind": "removed_local_hostname_key",
+      "occurrences": 2,
+      "replacement": "(hostname key removed)"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/python-final-results.xml",
+      "kind": "junit_hostname_attribute",
+      "occurrences": 1,
+      "replacement": "hostname=\"\""
+    },
+    {
+      "path": "docs/research/training-speed-20261006-artifacts/python-final-results.xml",
+      "kind": "junit_hostname_attribute",
+      "occurrences": 1,
+      "replacement": "hostname=\"\""
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/test-summary.json",
+      "kind": "local_windows_profile_path",
+      "occurrences": 4,
+      "replacement": "(Users|Documents|Desktop|Downloads|AppData|Temp)([\\\\/]{1,4})eeeee(?=[\\\\/])"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/test-summary.json",
+      "kind": "local_pytest_root",
+      "occurrences": 4,
+      "replacement": "pytest-of-<user>"
+    },
+    {
+      "path": "docs/research/evidence/integrity-audit-20261007.json",
+      "kind": "local_windows_profile_path",
+      "occurrences": 8,
+      "replacement": "(Users|Documents|Desktop|Downloads|AppData|Temp)([\\\\/]{1,4})eeeee(?=[\\\\/])"
+    },
+    {
+      "path": "docs/research/evidence/integrity-audit-20261007.json",
+      "kind": "local_pytest_root",
+      "occurrences": 8,
+      "replacement": "pytest-of-<user>"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/python-final-results.xml",
+      "kind": "local_windows_profile_path",
+      "occurrences": 8,
+      "replacement": "(Users|Documents|Desktop|Downloads|AppData|Temp)([\\\\/]{1,4})eeeee(?=[\\\\/])"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/python-final-results.xml",
+      "kind": "local_pytest_root",
+      "occurrences": 8,
+      "replacement": "pytest-of-<user>"
+    },
+    {
+      "path": "docs/research/training-speed-20261006-artifacts/python-final-results.xml",
+      "kind": "local_pytest_root",
+      "occurrences": 8,
+      "replacement": "pytest-of-<user>"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/test-summary.json",
+      "kind": "normalise_redacted_separators",
+      "occurrences": 4,
+      "replacement": "[\\\\/]{2,}<user>[\\\\/]{2,}"
+    },
+    {
+      "path": "docs/research/evidence/integrity-audit-20261007.json",
+      "kind": "normalise_redacted_separators",
+      "occurrences": 8,
+      "replacement": "[\\\\/]{2,}<user>[\\\\/]{2,}"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/python-final-results.xml",
+      "kind": "normalise_redacted_separators",
+      "occurrences": 8,
+      "replacement": "[\\\\/]{2,}<user>[\\\\/]{2,}"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/native-acceptance.json",
+      "kind": "absolute_checkout_path",
+      "occurrences": 1,
+      "replacement": "\"<checkout>\""
+    },
+    {
+      "path": "docs/research/evidence/integrity-audit-20261007.json",
+      "kind": "absolute_checkout_path",
+      "occurrences": 1,
+      "replacement": "\"<checkout>\""
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/python-final-results.xml",
+      "kind": "absolute_checkout_path",
+      "occurrences": 15,
+      "replacement": "<checkout>"
+    },
+    {
+      "path": "tests/packaging/test_package_submission.py",
+      "kind": "synthetic_fixture_profile_rename",
+      "occurrences": 5,
+      "replacement": "sample-profile"
+    },
+    {
+      "path": "docs/research/evidence/combine-optimization-20261004/python-final-results.xml",
+      "kind": "synthetic_profile_redaction",
+      "occurrences": 2,
+      "replacement": "(Users|home)([\\\\/]{1,4})fixture-user(?=[\\\\/]|$)"
+    },
+    {
+      "path": "docs/research/training-speed-20261006-artifacts/python-final-results.xml",
+      "kind": "synthetic_profile_redaction",
+      "occurrences": 2,
+      "replacement": "(Users|home)([\\\\/]{1,4})fixture-user(?=[\\\\/]|$)"
+    },
+    {
+      "path": "docs/research/full-project-audit-20261012.md",
+      "kind": "local_hostname_value",
+      "occurrences": 1,
+      "replacement": "<local-hostname>"
+    },
+    {
+      "path": "docs/research/full-project-audit-20261012.md",
+      "kind": "local_user_name",
+      "occurrences": 4,
+      "replacement": "<user>"
+    }
+  ]
+}

@@ -168,3 +168,104 @@ def test_cli_source_only_archive_and_automatic_manifest_verification(source_with
     (root / 'web/dist/assets/current.js').write_text('new generated frontend', encoding='utf8')
     assert module.main(['--root', str(root), '--verify']) == 0
     assert json.loads(capsys.readouterr().out)['snapshot_sha256'] == created['snapshot_sha256']
+
+
+# --- Machine-identity content scan -------------------------------------------
+#
+# Archived test reports and evidence JSON are delivered, and the tools that wrote
+# them recorded the machine they ran on. These cases pin both directions: real
+# identifiers fail the freeze, and the synthetic fixture shapes the project
+# deliberately ships do not.
+
+HOSTNAME = 'DESKTOP-' + 'GT1VP52'
+PERSONAL_WINDOWS = 'C:' + chr(92) + 'Users' + chr(92) + 'someone' + chr(92) + 'project'
+PERSONAL_POSIX = '/' + 'home/someone/project'
+PYTEST_ROOT = 'pytest-of-' + 'someone'
+
+
+def scan_of(root):
+    return module.scan_identifiers(module.collect(root), root, hostnames={HOSTNAME.lower()})
+
+
+@pytest.mark.parametrize('content', [
+    PERSONAL_WINDOWS,
+    PERSONAL_POSIX,
+    PYTEST_ROOT,
+    '"hostname": "' + HOSTNAME + '"',
+])
+def test_delivered_machine_identifiers_fail_the_freeze(source_with_generated_materials, content):
+    (source_with_generated_materials / 'docs' / 'report.txt').write_text(content + '\n', encoding='utf8')
+    findings, _unscannable = scan_of(source_with_generated_materials)
+    assert findings, f'{content!r} must be reported'
+    with pytest.raises(ValueError, match='Machine-identifying content'):
+        module.freeze(source_with_generated_materials)
+
+
+def test_delivered_identity_scan_names_the_offending_file(source_with_generated_materials):
+    root = source_with_generated_materials
+    (root / 'docs' / 'leak.json').write_text('{"root": "' + PERSONAL_WINDOWS + '"}\n', encoding='utf8')
+    findings, _unscannable = scan_of(root)
+    assert {entry['path'] for entry in findings} == {'docs/leak.json'}
+    assert {entry['kind'] for entry in findings} == {'personal_windows_path'}
+
+
+def test_exempt_drive_fixture_is_not_reported(source_with_generated_materials):
+    """A drive root plus one invented name is a UI fixture, not a checkout."""
+    root = source_with_generated_materials
+    (root / 'web/tests/fixture.test.js').write_text(
+        "const diskPath = 'C:/runtime'\n", encoding='utf8')
+    findings, _unscannable = scan_of(root)
+    assert findings == []
+
+
+def test_third_party_attribution_hostname_is_not_our_machine(source_with_generated_materials):
+    """Upstream authors' hostnames in a required notice are not our identity."""
+    root = source_with_generated_materials
+    (root / 'THIRD_PARTY_NOTICES.md').write_text(
+        'Some Author <author@DESKTOP-OTHER99.localdomain>\n', encoding='utf8')
+    findings, _unscannable = scan_of(root)
+    assert findings == []
+
+
+def test_local_hostname_in_prose_is_not_reported(source_with_generated_materials):
+    """The identifier only matters as a recorded value, not as documentation."""
+    root = source_with_generated_materials
+    prose_host = 'DESKTOP-' + 'PROSEONLY1'
+    (root / 'docs' / 'notes.md').write_text('The host ' + prose_host + ' ran the suite.\n', encoding='utf8')
+    findings, _unscannable = module.scan_identifiers(module.collect(root), root,
+                                                     hostnames={prose_host.lower(), HOSTNAME.lower()})
+    assert findings == []
+
+
+def test_undecodable_delivered_text_fails_instead_of_being_passed_over(source_with_generated_materials):
+    root = source_with_generated_materials
+    (root / 'docs' / 'report.txt').write_bytes(b'Broken text: \xff\xfe and more')
+    with pytest.raises(ValueError, match='could not be content-scanned'):
+        module.freeze(root)
+
+
+def test_binary_delivery_is_listed_but_allowed(source_with_generated_materials):
+    root = source_with_generated_materials
+    (root / 'docs' / 'figure.png').write_bytes(b'\x89PNG\r\n\x1a\n\x00\x01\x02')
+    manifest = module.freeze(root)
+    listed = {entry['path'] for entry in manifest['content_scan']['not_text_scanned']}
+    assert 'docs/figure.png' in listed
+    assert manifest['content_scan']['violations'] == 0
+    assert manifest['content_scan']['checked_files'] > 0
+
+
+def test_manifest_records_the_content_scan_it_passed(source_with_generated_materials):
+    manifest = module.freeze(source_with_generated_materials)
+    scan = manifest['content_scan']
+    assert scan['violations'] == 0
+    assert scan['checked_files'] + len(scan['not_text_scanned']) == manifest['file_count']
+    assert module.verify(source_with_generated_materials) == manifest
+
+
+def test_scan_only_cli_reports_success_and_failure(source_with_generated_materials, capsys):
+    root = source_with_generated_materials
+    assert module.main(['--root', str(root), '--scan-only']) == 0
+    assert 'OK:' in capsys.readouterr().out
+    (root / 'docs' / 'leak.txt').write_text(PYTEST_ROOT + '\n', encoding='utf8')
+    assert module.main(['--root', str(root), '--scan-only']) == 1
+    assert PYTEST_ROOT in capsys.readouterr().out

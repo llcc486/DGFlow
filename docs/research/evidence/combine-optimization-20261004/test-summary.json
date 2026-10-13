@@ -44,12 +44,12 @@
       {
         "class": "tests.packaging.test_package_submission",
         "name": "test_symbolic_link_escape_rejected[file]",
-        "reason": "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'"
+        "reason": "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-110\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-110\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'"
       },
       {
         "class": "tests.packaging.test_package_submission",
         "name": "test_symbolic_link_escape_rejected[directory]",
-        "reason": "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-eeeee\\\\pytest-110\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'"
+        "reason": "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-110\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\<user>\\AppData\\\\Local\\\\Temp\\\\pytest-of-<user>\\\\pytest-110\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'"
       },
       {
         "class": "tests.packaging.test_package_submission",

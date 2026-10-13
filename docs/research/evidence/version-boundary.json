@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "scope": "Maps each frozen acceptance record to the source version it describes. A record with accurate_for_current_tree false is a real result for the version it names and is not evidence about this checkout.",
+  "measured_utc": "2026-10-13T12:26:39.463269+00:00",
+  "commit": "bfbeb46053619f5a4aee1c7bbe186e6327812688",
+  "commit_subject": "澶氭満閮ㄧ讲瀹炵幇",
+  "working_tree_dirty": true,
+  "current_source_files": {
+    "src/dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
+    "src/dgfl/cli.py": "ff3e13ee9c8e6021a291c9682c5c92d6377b36f1942cb9a08f5f2703344fdcdb",
+    "src/dgfl/crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
+    "src/dgfl/crypto/backend.py": "c68aa4b1467e7a5feccc9065f8b4bbe9c218e15340debdc9867759a16fc3f8af",
+    "src/dgfl/crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
+    "src/dgfl/crypto/cuda_scheduler.py": "b80eaf5df5dc609dc8c494bac3ebb33b75b92183f47a78a0ebb39704a6e09643",
+    "src/dgfl/crypto/discrete_log.py": "746ceadc1408c9d3d2d35512ba96c508d1445277f56c18bf4cafd796bc3102aa",
+    "src/dgfl/crypto/gpu.py": "512ab509983bbd9bc7fb32db1c80e0a88a013d8a2be96f7d50b0af04db67fbc8",
+    "src/dgfl/crypto/gpu_profile.py": "502b3408fbb57e5d31bb64494c6359cb4e7f7c0ad622773b4eaee506fa7157ba",
+    "src/dgfl/crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
+    "src/dgfl/crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
+    "src/dgfl/crypto/lego_registry.py": "3dcf3ce3feb75a2653feea1222f8f5ed8971be34534560af27081402fdc7ecb2",
+    "src/dgfl/crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
+    "src/dgfl/crypto/protocol.py": "3bced67cadbc7d7c4f0852c96007da030b713c67506ea87980523eaf553f74ea",
+    "src/dgfl/deployment.py": "a37a6d400d59c4ef53c8816e64d6283ecd9178dd6df59fd14acaa45d4daa96d8",
+    "src/dgfl/experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
+    "src/dgfl/experiments/attack_metrics.py": "064215e950545890cdf069adcf6da3f22a834ef39a10185641536ee722273d26",
+    "src/dgfl/experiments/evidence.py": "e2983667467144a317a6e9c54e82d04cba5f9f222208907195c1b0421cd2ac63",
+    "src/dgfl/experiments/hardware.py": "14fd5c28f39551af3e7fcb9503c99bc2438a6481970215635de7913d3a1cea33",
+    "src/dgfl/experiments/monitoring.py": "cfb223a5555cba3d451c45a9d2f0067b16adfc4758981c1deeb3aa8591e03fa4",
+    "src/dgfl/experiments/resources.py": "68037215993411d7123125442cca4051c1c1800ebda3ab6502becd5202a57a9e",
+    "src/dgfl/experiments/runner.py": "39d1367fe97f34e5f37e328918062a7ba1f136890aa2ce9232e31c94a1701fbb",
+    "src/dgfl/experiments/telemetry.py": "3006c17e4d8eb5af2961e305f8d4f691f504e40598fff08e987126b9c4690f3b",
+    "src/dgfl/experiments/tensorboard.py": "c6a1fd1dcc02555ccbd4b922403917575c716fd479291ddff9aacdfaafab273d",
+    "src/dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
+    "src/dgfl/services/control.py": "afe529a8f5a168eed81f03905ef4d0aba80af22bac0052928a919dd58dde2c83",
+    "src/dgfl/services/node.py": "2c1f26b1367fe085eebc9fdac31c917319f4228114d6ae2b81066fa3d679e979",
+    "src/dgfl/services/roles.py": "20dea7ed3aa5c5399a3537b36a6582db56bc75b1dd2f14ab5d6f5780356b2ac3",
+    "src/dgfl/services/telemetry.py": "1ad07e6e7d10c1f97e1bd2dc936ec3501b537f9371f7cc02a04cabd9a0428696",
+    "src/dgfl/services/tensorboard.py": "a4ff596fca5a3ef3024f09841dad3f9b699390026537019578b419abef0b830e",
+    "src/dgfl/services/tensorboard_metrics.py": "9f2baaa340d6ec6d5dcb5b87e0dc8e3a70c5410e780d76d864bd6498acf5ff92",
+    "src/dgfl/system_info.py": "7a89f8f4d9ecec35fdb72117af7be01680316e779eb290f282a94ee00174eaef",
+    "src/dgfl/tamper_playground.py": "8693b56755639a9e5b5aac2bee83bf1cb1f6885b8a8a3120ebb468c74938de2c",
+    "src/dgfl/topology.py": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+    "src/dgfl/training/__init__.py": "3b3832e90d3052d1fa5d8b0aaa19558513409cef1a4d1921aa70bfb9039b244d",
+    "src/dgfl/training/attacks.py": "d9a15dc0cf38af0e045045ff963870dfa3900c352f356cd07a88f67808899ba4",
+    "src/dgfl/training/cifar10.py": "ad7717e8239be258f8f843d0feaef3fd54619dd919e7cc30f417252c91c062f7",
+    "src/dgfl/training/data.py": "c2b95a2de225cced0e53d320d7322cd624a0cee6913d6afc36d0f03c8f7189b8",
+    "src/dgfl/training/datasets.py": "e5ae4aadd0aa267c4c8a5fdb0f27ff022f0acb66fb601f7f25c52eea4c7fd4b8",
+    "src/dgfl/training/model.py": "3ebecc8707596f815743b469ad57e9ce49897b05ffd3404caefa51fe5d800efd",
+    "src/dgfl/training/model_adapter.py": "c308e5b164508703942972309a9d9ac2d23ffb947f01f358b518ebecf28f6ebd",
+    "src/dgfl/training/model_contracts.py": "7e2749531fe729ed3ac0732321c32065a776d0242170a29c119b282a398efd25",
+    "src/dgfl/training/original_images.py": "3059606025eb2b8501f34162977cc04f787033bf1cfac579a0c50cf2119ae708",
+    "src/dgfl/training/paper_models.py": "a33798e0cdd39628c89175e63ee97db418a5bc6fd93b1172fd8012922f4d3ab9",
+    "src/dgfl/transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
+    "src/dgfl/transport/binary.py": "917c4e82f3af06f6dba6a14ffb2e755889e96f9a52d49ebb041e34a766f91946",
+    "src/dgfl/transport/chunking.py": "46db16b945b285adaad54e36b5600dddcdf44909e61feeff2152dc1d274028dc",
+    "src/dgfl/transport/client.py": "fa83151a69289533e9a6ba2431124c283dee6b976059736087d9c0927e848264",
+    "src/dgfl/transport/security.py": "00903a5146cf65f962ac86644cfd68d96c6be2079c0c20c1cd05d64217ce481d",
+    "src/dgfl/validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
+    "src/dgfl/validation/policy.py": "58ec9c66f510d7272e1dc4998820a29ae716d7cf56e82c2fc7272b64ef678af8",
+    "src/dgfl/verification_materials.py": "394a0b7480a1746d2e49af5bc9155829d731a508d65e40a86d978e95b2b13620"
+  },
+  "records": [
+    {
+      "document": "docs/research/evidence/attack-architecture-20261012.json",
+      "document_sha256": "04f8bd7f1acf12ebecd30c213b12d90216461b20cb222c285725fe095fc9d5f4",
+      "pinned_fields": [
+        "source_before",
+        "source_after"
+      ],
+      "declared_source_unchanged": true,
+      "declared_files": 51,
+      "declared_source_matches_itself": true,
+      "current_files": 52,
+      "changed": [
+        {
+          "path": "src/dgfl/cli.py",
+          "frozen_sha256": "b7b5a1de3808cb28ae22b14b2a42870df1844db810a5aadbb662f72129b665cd",
+          "current_sha256": "ff3e13ee9c8e6021a291c9682c5c92d6377b36f1942cb9a08f5f2703344fdcdb"
+        },
+        {
+          "path": "src/dgfl/crypto/lego_registry.py",
+          "frozen_sha256": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
+          "current_sha256": "3dcf3ce3feb75a2653feea1222f8f5ed8971be34534560af27081402fdc7ecb2"
+        },
+        {
+          "path": "src/dgfl/deployment.py",
+          "frozen_sha256": "b57ffd359887b6b610b12cd5e28c1def0333721a37a64cbe829def22a2ccd8f5",
+          "current_sha256": "a37a6d400d59c4ef53c8816e64d6283ecd9178dd6df59fd14acaa45d4daa96d8"
+        },
+        {
+          "path": "src/dgfl/experiments/runner.py",
+          "frozen_sha256": "5d7cf72784448868530e842e9db75b63baa4e6437645df98ea355121a26f98b7",
+          "current_sha256": "39d1367fe97f34e5f37e328918062a7ba1f136890aa2ce9232e31c94a1701fbb"
+        },
+        {
+          "path": "src/dgfl/services/control.py",
+          "frozen_sha256": "116800f32f79b7043d935cb41af8330e7447061c7b466fd4ea57f45083128393",
+          "current_sha256": "afe529a8f5a168eed81f03905ef4d0aba80af22bac0052928a919dd58dde2c83"
+        },
+        {
+          "path": "src/dgfl/services/roles.py",
+          "frozen_sha256": "32b13162fb61d552186509a5e1a6a45196e70f0a93d844030ce8c9035927dea9",
+          "current_sha256": "20dea7ed3aa5c5399a3537b36a6582db56bc75b1dd2f14ab5d6f5780356b2ac3"
+        },
+        {
+          "path": "src/dgfl/services/tensorboard.py",
+          "frozen_sha256": "52af3361c7485acb6da13a5e0e48dedd5a894f50434d3ce6503f132df5cac324",
+          "current_sha256": "a4ff596fca5a3ef3024f09841dad3f9b699390026537019578b419abef0b830e"
+        },
+        {
+          "path": "src/dgfl/validation/policy.py",
+          "frozen_sha256": "62ec71f76abbb981d9640061eeeff7fe905b22f3553a0cf2895263d0d4fc8d80",
+          "current_sha256": "58ec9c66f510d7272e1dc4998820a29ae716d7cf56e82c2fc7272b64ef678af8"
+        }
+      ],
+      "absent_from_current_tree": [
+        "scripts/verify_attack_architecture.py"
+      ],
+      "added_since_freeze": [
+        "src/dgfl/tamper_playground.py",
+        "src/dgfl/verification_materials.py"
+      ],
+      "accurate_for_current_tree": false
+    }
+  ],
+  "stale_records_exist": true,
+  "affected_summaries": [
+    "docs/research/evidence/attack-architecture-review-20261012.json",
+    "docs/submission/attack-defense-acceptance.md"
+  ],
+  "resolution": "Re-run the acceptance procedure for the current tree, or keep citing the record with the version it names. Do not present a stale record as a result for this checkout."
+}

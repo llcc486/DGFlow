@@ -173,8 +173,8 @@ def test_bundle_requires_an_initialized_cluster(tmp_path):
 
 @pytest.mark.parametrize('count', [4, 27])
 def test_custom_machine_plan_exports_only_requested_machine_keys(tmp_path, count):
-    from dgfl.deployment import MACHINE_GROUPS, load_cluster, node_ports, selected_nodes
     from dgfl.cli import _parser
+    from dgfl.deployment import MACHINE_GROUPS, load_cluster, node_ports, selected_nodes
     topology = {**TOPOLOGY, 'client_count': max(2, count-4)}
     nodes = {name: {'host': f'10.0.0.{index % count+1}', 'machine': MACHINE_GROUPS[index % count]}
              for index, name in enumerate(node_ports(topology['client_count'], 2, 2))}

@@ -41,7 +41,7 @@
   ],
   "historical_execution_environment": {
     "shell": "PowerShell",
-    "working_directory": "D:/Desktop/全国密码技术竞赛/Project/DGFlow-source-671a850",
+    "working_directory": "<checkout>",
     "python": ".venv/Scripts/python.exe",
     "python_abi": "CPython 3.12",
     "platform": "win_amd64",

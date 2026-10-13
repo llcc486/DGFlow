@@ -186,8 +186,8 @@ def test_sensitive_content_cannot_hide_under_ordinary_filename(packager, project
 
 
 @pytest.mark.parametrize("content", [
-    "Local folder: " + "C:" + chr(92) + "Users" + chr(92) + "fixture-user" + chr(92) + "project\n",
-    "Local folder: " + "/" + "home/fixture-user/project\n",
+    "Local folder: " + "C:" + chr(92) + "Users" + chr(92) + "sample-profile" + chr(92) + "project\n",
+    "Local folder: " + "/" + "home/sample-profile/project\n",
 ])
 def test_absolute_development_paths_rejected(packager, project, content):
     (project / "README.md").write_text(content, encoding="utf-8")
@@ -510,7 +510,7 @@ def test_png_pixel_bytes_that_resemble_drive_paths_do_not_trigger_text_scan(pack
 
 @pytest.mark.parametrize('kind', [b'tEXt', b'zTXt', b'iTXt'])
 def test_png_metadata_private_paths_are_rejected(packager, project, kind):
-    private_path = b'C:' + b'/' + b'Users/fixture-user/private'
+    private_path = b'C:' + b'/' + b'Users/sample-profile/private'
     payload = {b'tEXt': b'Description\0' + private_path,
                b'zTXt': b'Description\0\0' + zlib.compress(private_path),
                b'iTXt': b'Description\0\x01\0en\0Description\0' + zlib.compress(private_path)}[kind]
@@ -571,7 +571,7 @@ def test_pdf_without_parser_fails_closed(packager, project, monkeypatch):
 
 
 @pytest.mark.parametrize('metadata, failure', [({'/Title': 'Architecture', '/Author': ''}, None),
-    ({'/Title': 'C:' + '/' + 'Users/fixture-user/private'}, 'development path'),
+    ({'/Title': 'C:' + '/' + 'Users/sample-profile/private'}, 'development path'),
     ({'/Author': 'Student Name'}, 'anonymous|identifying|author')])
 def test_pdf_info_metadata_is_parsed_when_optional_parser_is_available(packager, project, metadata, failure):
     pypdf = pytest.importorskip('pypdf')
@@ -592,7 +592,7 @@ def test_compressed_pdf_xmp_private_path_is_rejected(packager, project):
     writer = pypdf.PdfWriter()
     writer.add_blank_page(width=100, height=100)
     metadata = DecodedStreamObject()
-    metadata.set_data(b'<metadata><description>C:' + b'/' + b'Users/fixture-user/private</description></metadata>')
+    metadata.set_data(b'<metadata><description>C:' + b'/' + b'Users/sample-profile/private</description></metadata>')
     metadata = metadata.flate_encode()
     metadata.update({NameObject('/Type'): NameObject('/Metadata'), NameObject('/Subtype'): NameObject('/XML')})
     writer._root_object[NameObject('/Metadata')] = writer._add_object(metadata)
