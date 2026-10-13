@@ -15,6 +15,49 @@ MAX_AGGREGATOR_THRESHOLD = MAX_AGGREGATOR_COUNT
 TOPOLOGY_FIELDS = ('client_count', 'authority_count', 'aggregator_count',
                    'authority_threshold', 'aggregator_threshold')
 
+#: Policy key for the authorization *consistency* threshold.
+#:
+#: Two thresholds were one. `authority_threshold` bounds the key material, which must
+#: not require every authority or one unavailable machine would stop the deployment.
+#: Confirming that a round's authorization decision is the same on every edge is a
+#: different question, and it must not be answered by the smaller number: with
+#: `authority_threshold=2` of 3, any two colluding edges sign a decision that the
+#: third never saw, and the coordinator accepts it because it only ever compares the
+#: certificates it was given.
+#:
+#: The confirmation threshold is therefore resolved separately and defaults to the
+#: full authority count. An absent key keeps the historical strict behaviour, so a
+#: policy signed before this key existed is unaffected; the key exists so a
+#: deliberate relaxation is possible, is named, and is signed.
+AUTHORIZATION_CONSISTENCY_FIELD = 'authorization_consistency_threshold'
+#: How many distinct authorization decisions may be known to exist.
+#:
+#: Exactly one is acceptable. This is not configurable: a run in which two different
+#: approved sets were signed by different groups of edges has no single answer, and
+#: any policy that permitted it would make the round's recorded decision arbitrary.
+MAX_AUTHORIZATION_DECISIONS = 1
+
+
+def authorization_consistency_threshold(config, authority_count):
+    """Resolve the consistency threshold for one task.
+
+    Returns the number of distinct authorities that must have signed the *same*
+    decision before it is accepted. An absent or null key means every authority,
+    which is what the code did unconditionally before this key existed.
+    """
+    if not isinstance(config, dict):
+        raise ValueError('authorization consistency requires a policy mapping')
+    if type(authority_count) is not int or not MIN_AUTHORITY_COUNT <= authority_count <= MAX_AUTHORITY_COUNT:
+        raise ValueError('invalid authority count for authorization consistency')
+    declared = config.get(AUTHORIZATION_CONSISTENCY_FIELD)
+    if declared is None:
+        return authority_count
+    if type(declared) is not int or not MIN_AUTHORITY_COUNT <= declared <= authority_count:
+        raise ValueError(
+            f'{AUTHORIZATION_CONSISTENCY_FIELD} must be an integer between '
+            f'{MIN_AUTHORITY_COUNT} and the authority count {authority_count}')
+    return declared
+
 
 def validate_topology(client_count=DEFAULT_CLIENT_COUNT, authority_count=DEFAULT_AUTHORITY_COUNT,
                       aggregator_count=DEFAULT_AGGREGATOR_COUNT,

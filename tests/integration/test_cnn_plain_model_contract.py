@@ -309,8 +309,13 @@ def test_real_signed_authorization_commits_to_model_descriptor(tmp_path):
     ctx=roles._context(ctx)
     approval={'context_hash':b.digest(ctx),'members':['client1','client2'],
               'approved':['client1','client2'],'manifest_hash':'1'*64}
-    certificates=[identities[node].sign_public('authorization',approval) for node in names[1:3]]
+    # Every authority signs. The confirmation threshold is separate from the key
+    # threshold and defaults to all of them, so a decision signed by a subset is
+    # refused even when the subset agrees with itself.
+    certificates=[identities[node].sign_public('authorization',approval) for node in names[1:]]
     assert roles.authorization(identities['coordinator'],certificates,ctx)==approval
+    with pytest.raises(ValueError,match='授权一致性未达门限'):
+        roles.authorization(identities['coordinator'],certificates[:2],ctx)
     changed=deepcopy(ctx)
     changed['model_descriptor']['preprocessing_hash']='b'*64
     with pytest.raises(ValueError,match='authorization context mismatch'):

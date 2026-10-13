@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "scope": "Maps each frozen acceptance record to the source version it describes. A record with accurate_for_current_tree false is a real result for the version it names and is not evidence about this checkout.",
-  "measured_utc": "2026-10-13T17:03:12.962672+00:00",
-  "commit": "c30e8a381145463af1408faf3bef02647b0a8531",
-  "commit_subject": "E 阶段：超时分层、停止语义、三层资源预算、性能实测",
+  "measured_utc": "2026-10-13T17:29:40.445261+00:00",
+  "commit": "e3118f6b85170b34cc9ac3f2da1327b1a0f5b9b9",
+  "commit_subject": "F 阶段：CRS 来源凭据、电路标识绑定、证明关系规格、密钥生命周期有界",
   "working_tree_dirty": true,
   "current_source_files": {
     "src/dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
@@ -29,7 +29,7 @@
     "src/dgfl/experiments/hardware.py": "14fd5c28f39551af3e7fcb9503c99bc2438a6481970215635de7913d3a1cea33",
     "src/dgfl/experiments/monitoring.py": "cfb223a5555cba3d451c45a9d2f0067b16adfc4758981c1deeb3aa8591e03fa4",
     "src/dgfl/experiments/resources.py": "64b6c4d46c75dcd9d85c6471c927c5daa05586a336e7b615974c17cf2d9b895b",
-    "src/dgfl/experiments/runner.py": "66e8d65426ed58226e6893971e0f876620beb6769bb30485054824d2b851aa17",
+    "src/dgfl/experiments/runner.py": "d68881ae1ceadf3bb97a7f23bf2d3be5e572bb8b0919bbbcaf0809d609f60ff3",
     "src/dgfl/experiments/telemetry.py": "3006c17e4d8eb5af2961e305f8d4f691f504e40598fff08e987126b9c4690f3b",
     "src/dgfl/experiments/tensorboard.py": "c6a1fd1dcc02555ccbd4b922403917575c716fd479291ddff9aacdfaafab273d",
     "src/dgfl/material_authenticity.py": "bc6118ab27e3b88468eebfe568fa09a3b7b3a03138b3e93346a9cd4e45b57581",
@@ -37,13 +37,13 @@
     "src/dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
     "src/dgfl/services/control.py": "566ac52bd2e1e71e7969a95ed14653f749cc14eb504bde26aed2a28eb13bba4b",
     "src/dgfl/services/node.py": "29ee129a16ed600bd922ddb3deb4baf1ba578563ff938c1adf9d6c9b9ece8815",
-    "src/dgfl/services/roles.py": "1e131e06e7d8770a2f952803d4b2b20d46729ca4025097bfa85e3c83cbbcba62",
+    "src/dgfl/services/roles.py": "131f7b530b7785cb6c9b02bbd147d555414a5b0eca476d7ecacb6f6235de7842",
     "src/dgfl/services/telemetry.py": "1ad07e6e7d10c1f97e1bd2dc936ec3501b537f9371f7cc02a04cabd9a0428696",
     "src/dgfl/services/tensorboard.py": "a4ff596fca5a3ef3024f09841dad3f9b699390026537019578b419abef0b830e",
     "src/dgfl/services/tensorboard_metrics.py": "9f2baaa340d6ec6d5dcb5b87e0dc8e3a70c5410e780d76d864bd6498acf5ff92",
     "src/dgfl/system_info.py": "7a89f8f4d9ecec35fdb72117af7be01680316e779eb290f282a94ee00174eaef",
     "src/dgfl/tamper_playground.py": "581edce3b2d344f4ecbc896b633cf6b1435e127968f8415e2f94106bc8e2d9d3",
-    "src/dgfl/topology.py": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+    "src/dgfl/topology.py": "0aa336a0de3b7ce9bb0b442a8c15902150814dd2064b932cbbe8b1af96e30101",
     "src/dgfl/training/__init__.py": "3b3832e90d3052d1fa5d8b0aaa19558513409cef1a4d1921aa70bfb9039b244d",
     "src/dgfl/training/attacks.py": "d9a15dc0cf38af0e045045ff963870dfa3900c352f356cd07a88f67808899ba4",
     "src/dgfl/training/cifar10.py": "ad7717e8239be258f8f843d0feaef3fd54619dd919e7cc30f417252c91c062f7",
@@ -100,7 +100,7 @@
         {
           "path": "src/dgfl/experiments/runner.py",
           "frozen_sha256": "5d7cf72784448868530e842e9db75b63baa4e6437645df98ea355121a26f98b7",
-          "current_sha256": "66e8d65426ed58226e6893971e0f876620beb6769bb30485054824d2b851aa17"
+          "current_sha256": "d68881ae1ceadf3bb97a7f23bf2d3be5e572bb8b0919bbbcaf0809d609f60ff3"
         },
         {
           "path": "src/dgfl/services/control.py",
@@ -115,12 +115,17 @@
         {
           "path": "src/dgfl/services/roles.py",
           "frozen_sha256": "32b13162fb61d552186509a5e1a6a45196e70f0a93d844030ce8c9035927dea9",
-          "current_sha256": "1e131e06e7d8770a2f952803d4b2b20d46729ca4025097bfa85e3c83cbbcba62"
+          "current_sha256": "131f7b530b7785cb6c9b02bbd147d555414a5b0eca476d7ecacb6f6235de7842"
         },
         {
           "path": "src/dgfl/services/tensorboard.py",
           "frozen_sha256": "52af3361c7485acb6da13a5e0e48dedd5a894f50434d3ce6503f132df5cac324",
           "current_sha256": "a4ff596fca5a3ef3024f09841dad3f9b699390026537019578b419abef0b830e"
+        },
+        {
+          "path": "src/dgfl/topology.py",
+          "frozen_sha256": "e02cd7c4860920cdfc4559b868a1eeecc91dd6a1a6f1a35e4cd2bb798170f5fe",
+          "current_sha256": "0aa336a0de3b7ce9bb0b442a8c15902150814dd2064b932cbbe8b1af96e30101"
         },
         {
           "path": "src/dgfl/transport/binary.py",

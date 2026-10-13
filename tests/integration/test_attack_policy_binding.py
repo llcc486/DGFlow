@@ -18,6 +18,7 @@ from dgfl.training import datasets
 from dgfl.transport.security import Identity, create_cluster
 
 CLIENTS=[f'client{i}' for i in range(1,5)]
+DEFAULT_AUTHORITY_THRESHOLD=2
 
 
 @pytest.fixture(scope='module',params=['legacy','lego_norm_v1'])
@@ -110,13 +111,18 @@ def _make_cluster(tmp_path,monkeypatch,proof_parameters,*,pinned=False):
     return tmp_path,identities,workers,spec,context,reference,proof_parameters
 
 
-def _run_round(cluster):
+def _run_round(cluster,*,ctx=None):
     """DKG, client keys, ciphertexts and proofs. It does not authorize.
 
     Authorization is a separate, individually invoked step because own
     verification is a one-shot guard.
+
+    `ctx` overrides the round context, which is how a test pins a different
+    authorization consistency threshold: the threshold belongs to the round, and every
+    authorization decision binds the context it was made under.
     """
     _,identities,workers,spec,context,reference,proof_parameters=cluster
+    context=context if ctx is None else ctx
     authorities=[workers[name] for name in roles.AUTHORITIES]
     begin={'context':context,'reference':reference,'clients':len(CLIENTS),
            'mode':spec['mode'],'policy':spec}
@@ -144,10 +150,11 @@ def _run_round(cluster):
     return authorities,packets,keys
 
 
-def _authorize(cluster,authorities,packets,keys):
+def _authorize(cluster,authorities,packets,keys,*,ctx=None):
+    context=cluster[4] if ctx is None else ctx
     certificates=[authority.execute('authorize',{'packets':packets,'validation_keys':keys})
                   for authority in authorities]
-    return certificates,roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])
+    return certificates,roles.authorization(cluster[1]['coordinator'],certificates,context)
 
 
 def _finish(cluster,authorities,packets,certificates,decision):
@@ -409,8 +416,83 @@ def test_one_edge_cannot_authorize_a_conflicting_lower_norm_rule(cluster):
     conflicting=deepcopy(decision)
     conflicting['screening']['min_norm_ratio']=None
     certificates[0]=cluster[1]['authority1'].sign_public('authorization',conflicting)
-    with pytest.raises(ValueError,match='conflicting decisions'):
+    # The refusal names which edges signed which decision, so an operator can see the
+    # split rather than being told only that the round failed.
+    with pytest.raises(ValueError,match='授权决定出现分歧'):
         roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])
+    with pytest.raises(ValueError,match='authority1'):
+        roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])
+
+
+def test_a_decision_signed_by_too_few_edges_is_refused_even_when_they_agree(cluster):
+    """The consistency threshold is separate from the key threshold.
+
+    Two of three edges agreeing is enough to hold key material, and it was also being
+    accepted as enough to confirm a decision. It must not be: two colluding edges could
+    then sign a decision the third never saw. An absent policy key therefore demands
+    every authority.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    certificates,_=_authorize(cluster,authorities,packets,keys)
+    partial=[cert for cert in certificates if cert['sender']!='authority3']
+    # Both remaining edges agree with each other, so this is not a split decision.
+    assert len(partial)==len(roles.AUTHORITIES)-1
+    with pytest.raises(ValueError,match='授权一致性未达门限'):
+        roles.authorization(cluster[1]['coordinator'],partial,cluster[4])
+    # The key threshold alone would have accepted it, which is the point: the
+    # requirement that bites here is the separate confirmation threshold.
+    assert len(partial)>=DEFAULT_AUTHORITY_THRESHOLD
+
+
+def test_a_policy_may_lower_the_consistency_threshold_deliberately(cluster):
+    """Relaxing it is possible, but it has to be named and then it is signed.
+
+    The threshold belongs to the round context, so a decision binds the threshold it
+    was made under and the value is part of the signed record rather than a local
+    setting.
+    """
+    relaxed_ctx={**cluster[4],'authorization_consistency_threshold':DEFAULT_AUTHORITY_THRESHOLD}
+    coordinator=cluster[1]['coordinator']
+    authorities,packets,keys=_run_round(cluster,ctx=relaxed_ctx)
+    certificates,_=_authorize(cluster,authorities,packets,keys,ctx=relaxed_ctx)
+    partial=[cert for cert in certificates if cert['sender']!='authority3']
+    assert roles.authorization(coordinator,partial,relaxed_ctx)['approved']==['client3','client4']
+    # Every authority signing the same decision is also accepted.
+    assert len(roles.authorization(coordinator,certificates,relaxed_ctx)['approved'])==2
+
+
+def test_the_strict_default_refuses_a_partial_set_that_the_key_threshold_allows(cluster):
+    """The consistency threshold is separate from the key threshold.
+
+    Two of three edges agreeing is enough to hold key material, and it was also being
+    accepted as enough to confirm a decision. It must not be: two colluding edges could
+    then sign a decision the third never saw. An absent policy key therefore demands
+    every authority.
+    """
+    authorities,packets,keys=_run_round(cluster)
+    certificates,_=_authorize(cluster,authorities,packets,keys)
+    partial=[cert for cert in certificates if cert['sender']!='authority3']
+    # Both remaining edges agree with each other, so this is not a split decision.
+    assert len(partial)==len(roles.AUTHORITIES)-1
+    with pytest.raises(ValueError,match='授权一致性未达门限'):
+        roles.authorization(cluster[1]['coordinator'],partial,cluster[4])
+    # The key threshold alone would have accepted it, which is the point: the
+    # requirement that bites here is the separate confirmation threshold.
+    assert len(partial)>=DEFAULT_AUTHORITY_THRESHOLD
+    # And every authority agreeing is accepted, so the default is not "refuse always".
+    assert len(roles.authorization(cluster[1]['coordinator'],certificates,cluster[4])['approved'])==2
+
+
+def test_an_out_of_range_consistency_threshold_is_refused():
+    """A threshold below the key threshold or above the edge count is a config error."""
+    from dgfl.topology import authorization_consistency_threshold
+    config={'authority_count':3,'authority_threshold':2}
+    assert authorization_consistency_threshold(config,3)==3
+    assert authorization_consistency_threshold({**config,'authorization_consistency_threshold':2},3)==2
+    assert authorization_consistency_threshold({**config,'authorization_consistency_threshold':None},3)==3
+    for bad in (1,4,True,'2',2.0):
+        with pytest.raises(ValueError,match='authorization_consistency_threshold'):
+            authorization_consistency_threshold({**config,'authorization_consistency_threshold':bad},3)
 
 
 @pytest.mark.parametrize('field,value',[('min_norm_ratio',None),('min_norm_ratio',.5),

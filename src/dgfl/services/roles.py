@@ -15,7 +15,13 @@ import numpy as np
 from dgfl.crypto import backend as b
 from dgfl.crypto import protocol as p
 from dgfl.deployment import cluster_topology
-from dgfl.topology import client_authorities, validate_topology
+from dgfl.topology import (
+    AUTHORIZATION_CONSISTENCY_FIELD,
+    MAX_AUTHORIZATION_DECISIONS,
+    authorization_consistency_threshold,
+    client_authorities,
+    validate_topology,
+)
 from dgfl.transport.security import atomic_bytes, atomic_json, parse_frame, read_bytes
 from dgfl.validation.policy import (
     EXIT_STAGES,
@@ -56,6 +62,14 @@ def pinned_topology(value):
         raise ValueError('pinned client ownership mapping is required')
     topology=validate_topology(**{name:value[name] for name in TOPOLOGY_FIELDS-{'client_authorities'}})
     topology['client_authorities']=client_authorities(topology['client_count'],topology['authority_count'],value['client_authorities'])
+    # The consistency threshold is carried alongside the pinned topology rather than
+    # inside `TOPOLOGY_FIELDS`, so a task pinned before this key existed still matches
+    # its own signature and keeps the strict default. It is resolved and range-checked
+    # here so an out-of-range value fails at pinning time, not mid-round.
+    if AUTHORIZATION_CONSISTENCY_FIELD in value:
+        topology[AUTHORIZATION_CONSISTENCY_FIELD]=authorization_consistency_threshold(
+            {AUTHORIZATION_CONSISTENCY_FIELD:value[AUTHORIZATION_CONSISTENCY_FIELD]},
+            topology['authority_count'])
     return topology
 
 
@@ -64,6 +78,10 @@ def role_topology(value):
         **validate_topology(client_count=len(value.get('members',[])) or 6,authority_count=3,aggregator_count=3,
                             authority_threshold=2,aggregator_threshold=2),
         'client_authorities':{},
+        # An unpinned context still carries the consistency threshold when it states
+        # one; absent, the resolver defaults to every authority, which is the strict
+        # behaviour this code had unconditionally before the key existed.
+        AUTHORIZATION_CONSISTENCY_FIELD:authorization_consistency_threshold(value,3),
     }
 
 
@@ -335,24 +353,39 @@ def envelope_context(ctx):
 
 def _context(ctx):
     fields={'task_id','round_id','key_epoch','model_hash','bits','scale','dimension'}
+    # Proof-suite fields. Kept separate from the authorization consistency threshold
+    # below, because these three are what the proof-suite rules discriminate on: a
+    # legacy context must omit them and a compact one must pin them.
     optional={'proof_suite','proof_block_size','proof_crs_hash'}
     data_fields={'dataset','model_descriptor'}
-    if not isinstance(ctx,dict) or not fields<=set(ctx) or set(ctx)-fields-optional-data_fields-TOPOLOGY_FIELDS:
+    # The threshold travels with the round context rather than as a separate argument,
+    # because a decision binds `b.digest(ctx)`: putting it here is what makes the
+    # threshold part of the signed record, so an edge cannot be checked against one
+    # value while having signed another. It is not a proof-suite field, so it is
+    # excluded from the checks that discriminate between suites.
+    allowed=fields|optional|data_fields|TOPOLOGY_FIELDS|{AUTHORIZATION_CONSISTENCY_FIELD}
+    if not isinstance(ctx,dict) or not fields<=set(ctx) or set(ctx)-allowed:
         raise ValueError('invalid round context')
+    if AUTHORIZATION_CONSISTENCY_FIELD in ctx:
+        # Range-checked here so an out-of-range value fails at round entry rather than
+        # mid-authorization. The unpinned legacy path has no declared count, so the
+        # authority list length is used.
+        authorization_consistency_threshold(ctx,len(authority_nodes(ctx)))
     _safe_id(ctx['task_id']); _safe_id(ctx['key_epoch']); _training_bounds(ctx)
     descriptor=_model_descriptor(ctx)
     if descriptor is None and 'dataset' in ctx:
         _model_geometry(ctx['dimension'],ctx['dataset'])
-    if descriptor is not None and descriptor['model_name']!='linear' and set(ctx)&optional:
+    proof_fields=set(ctx)&optional
+    if descriptor is not None and descriptor['model_name']!='linear' and proof_fields:
         raise ValueError('plain CNN context cannot contain cryptographic proof fields')
     pinned_topology(ctx)
     suite,_=p.proof_settings(ctx)
-    if suite=='legacy' and set(ctx)&optional:
+    if suite=='legacy' and proof_fields:
         raise ValueError('legacy round context must omit compact proof fields')
     if suite==_LEGO_SUITE:
-        if not {'proof_suite','proof_crs_hash'}<=set(ctx) or 'proof_block_size' in ctx:
+        if not {'proof_suite','proof_crs_hash'}<=proof_fields or 'proof_block_size' in ctx:
             raise ValueError('Lego round context must pin suite and CRS without a block size')
-    elif suite!='legacy' and (not {'proof_suite','proof_block_size'}<=set(ctx) or 'proof_crs_hash' in ctx):
+    elif suite!='legacy' and (not {'proof_suite','proof_block_size'}<=proof_fields or 'proof_crs_hash' in ctx):
         raise ValueError('compact round context must pin proof suite and block size')
     if (type(ctx['round_id']) is not int or ctx['round_id']<1
             or type(ctx['scale']) is not int or ctx['scale']<=0
@@ -365,14 +398,49 @@ def _context(ctx):
 
 
 def authorization(identity,certificates,ctx):
+    """Accept one authorization decision, after separating two thresholds.
+
+    `authority_threshold` bounds the key material: a subset of edges can hold enough
+    shares to proceed, which is what makes the deployment survive a machine being
+    down. Confirming that a decision is the same on every edge is a different
+    question, and it was being answered by that smaller number. With two of three
+    edges, two colluding edges could sign a decision the third never saw, and this
+    function accepted it because it only ever compared the certificates it was given.
+
+    The two are now separate. `authority_consistency_threshold` decides how many
+    distinct authorities must have signed the same decision, and it defaults to every
+    authority. A conflicting decision from any single authority is refused, because a
+    round in which two different approved sets were signed has no single answer.
+
+    The certificate count is checked against the *key* threshold and the distinct
+    signer count against the *consistency* threshold, so neither check can be
+    satisfied by the other's number.
+    """
     topology=role_topology(ctx); authorities=authority_nodes(ctx)
-    decisions=[]; senders=[]
+    consistency=authorization_consistency_threshold(topology,topology['authority_count'])
+    decisions=[]; senders=[]; distinct={}
     for cert in certificates:
         sender=cert['sender']
         if sender not in authorities or sender in senders: raise ValueError('duplicate or unknown authorization signer')
-        senders.append(sender); decisions.append(identity.verify_public(cert,'authorization',sender))
-    if len(decisions)<topology['authority_threshold'] or any(v!=decisions[0] for v in decisions):
-        raise ValueError('authorization quorum not met or conflicting decisions')
+        senders.append(sender)
+        verified=identity.verify_public(cert,'authorization',sender)
+        decisions.append(verified)
+        # Exact equality of the whole signed decision, not of a subset of fields: a
+        # field the comparison forgot would be a field two edges could disagree on
+        # without anyone noticing.
+        distinct.setdefault(b.digest(verified),[]).append(sender)
+    if len(distinct)>MAX_AUTHORIZATION_DECISIONS:
+        # Name the split so an operator can see which edges disagree, rather than
+        # being told only that the round failed.
+        groups='；'.join(f"{','.join(sorted(signers))} 签了一份决定"
+                         for signers in distinct.values())
+        raise ValueError(f'授权决定出现分歧：{groups}；一轮只能有一个被签署的决定')
+    if len(senders)<topology['authority_threshold']:
+        raise ValueError('authorization quorum not met')
+    if len(senders)<consistency:
+        raise ValueError(
+            f'授权一致性未达门限：需要 {consistency} 个边缘签署同一决定，实际 {len(senders)} 个；'
+            '该门限与密钥门限分开，默认要求全部边缘')
     decision=decisions[0]
     if decision['context_hash']!=b.digest(ctx): raise ValueError('authorization context mismatch')
     if pinned_topology(decision)!=pinned_topology(ctx):
@@ -873,6 +941,12 @@ class RoleWorker:
                 self._check_epoch_capacity()
             previous=self.task_state.get(ctx['task_id'])
             if previous and previous.get('policy')!=policy:
+                # This is where a changed client set is refused: `policy` carries
+                # `members`, so a task whose population grew is a policy mismatch and
+                # not an append. Dynamic join would have to replace this check, and the
+                # questions that decision has to answer are recorded in the staged plan
+                # under G (key epoch for the joiner, context binding, batch meaning,
+                # cross-round comparison).
                 raise ValueError('task policy already fixed; create a new task')
             if previous and previous.get('status')!='ready':
                 raise ValueError('round already started; retry cached request or create a new task')

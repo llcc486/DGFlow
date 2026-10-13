@@ -44,6 +44,7 @@ from dgfl.services.roles import (
     node_number,
     submission_core,
 )
+from dgfl.topology import authorization_consistency_threshold
 from dgfl.training import model_adapter
 from dgfl.training.attacks import attack_clients, attack_settings
 from dgfl.training.data import load_mnist
@@ -511,6 +512,11 @@ class RunManager:
                               'batch_strategy') if name in policy},
                 'authority_threshold':topology['authority_threshold'],
                 'aggregator_threshold':topology['aggregator_threshold'],
+                # Frozen with the rest of the plan: a continuation that used a
+                # different confirmation threshold would not be the same experiment,
+                # and the threshold is what decides how many edges had to agree.
+                'authorization_consistency_threshold':authorization_consistency_threshold(
+                    cfg,topology['authority_count']),
                 'mode':cfg.get('mode'),
                 'bits':cfg.get('bits'),'scale':cfg.get('scale'),
                 'proof_suite':policy.get('proof_suite'),
