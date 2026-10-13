@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "scope": "Maps each frozen acceptance record to the source version it describes. A record with accurate_for_current_tree false is a real result for the version it names and is not evidence about this checkout.",
-  "measured_utc": "2026-10-13T13:45:31.668961+00:00",
-  "commit": "abba32fa7721b961b4463f4a35bd8b29bc9949cf",
-  "commit_subject": "A 阶段：版本协商、材料分级、导出白名单、真实性核对",
+  "measured_utc": "2026-10-13T13:49:15.372166+00:00",
+  "commit": "a3b524ce8478f771a383c078ec17e0274cbc1132",
+  "commit_subject": "B 阶段：轮次检查点、提交证书、从检查点恢复",
   "working_tree_dirty": true,
   "current_source_files": {
     "src/dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
@@ -32,6 +32,7 @@
     "src/dgfl/experiments/telemetry.py": "3006c17e4d8eb5af2961e305f8d4f691f504e40598fff08e987126b9c4690f3b",
     "src/dgfl/experiments/tensorboard.py": "c6a1fd1dcc02555ccbd4b922403917575c716fd479291ddff9aacdfaafab273d",
     "src/dgfl/material_authenticity.py": "bc6118ab27e3b88468eebfe568fa09a3b7b3a03138b3e93346a9cd4e45b57581",
+    "src/dgfl/registration.py": "efb1c2b25fce7b17cce2545024f31e9c87daffc78b500d2de99552ffcec9e521",
     "src/dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
     "src/dgfl/services/control.py": "d7e1c9be21361d569f328e078fcbaa3e236e498c7586f290467c72b11bdb6672",
     "src/dgfl/services/node.py": "29ee129a16ed600bd922ddb3deb4baf1ba578563ff938c1adf9d6c9b9ece8815",
@@ -73,7 +74,7 @@
       "declared_source_unchanged": true,
       "declared_files": 51,
       "declared_source_matches_itself": true,
-      "current_files": 55,
+      "current_files": 56,
       "changed": [
         {
           "path": "src/dgfl/cli.py",
@@ -132,6 +133,7 @@
       "added_since_freeze": [
         "src/dgfl/experiments/checkpoint.py",
         "src/dgfl/material_authenticity.py",
+        "src/dgfl/registration.py",
         "src/dgfl/tamper_playground.py",
         "src/dgfl/verification_materials.py",
         "src/dgfl/versioning.py"
