@@ -61,6 +61,25 @@ export function deploymentPayloadError(configuration, defaults = DEFAULT_TOPOLOG
   return lanHostsError(lanHosts(topology, configuration.hosts), names)
 }
 
+/** Test just the selected machine; other machines may still have blank IPs. */
+export function connectionTestPayload(configuration) {
+  const topologyError = deploymentConfigError(deploymentConfig(configuration))
+  if (topologyError) throw new Error(topologyError)
+  const payload = deploymentPayload(configuration)
+  if (payload.deployment !== 'lan') throw new Error('连接测试仅用于多机部署。')
+  const machine = configuration.machine
+  if (machine == null) {
+    const error = lanHostsError(payload.hosts)
+    if (error) throw new Error(error)
+    return payload
+  }
+  if (!MACHINE_GROUPS.includes(machine)) throw new Error('请选择有效的主机。')
+  const entries = Object.entries(payload.hosts).filter(([, entry]) => entry.machine === machine)
+  if (!entries.length) throw new Error(`请先为电脑 ${machine} 分配节点。`)
+  if (entries.some(([, entry]) => !validHost(entry.host))) throw new Error(`请填写电脑 ${machine} 的有效 IP 或主机名，不要带协议或端口。`)
+  return { ...payload, machine, hosts: Object.fromEntries(entries) }
+}
+
 export function deploymentConfigError(config) {
   if (!validClientCount(config.client_count)) return '客户端数量需为 2–100 的整数。'
   if (!validServerCount(config.authority_count)) return '边缘服务器数量需为 2–32 的整数。'

@@ -205,18 +205,21 @@ Windows 完整部署对应 `-CifarSource`，Linux 对应 `DGFL_CIFAR_SOURCE`。�
 | B | authority2、aggregator2、client2、client5 | 192.168.10.12 | 9102、9202、9302、9305 |
 | C | authority3、aggregator3、client3、client6 | 192.168.10.13 | 9103、9203、9303、9306 |
 
-防火墙仅向这组实验机器开放需要的节点端口。A 本机浏览器访问 8765；B、C 不需要取得 coordinator 私钥，也不需要启动控制服务。
+防火墙仅向这组实验机器开放需要的节点端口。A、B、C 分别启动本机控制服务，并用各自浏览器访问 `http://127.0.0.1:8765`。B、C 的页面用于接收实验邀请、同意或拒绝参与，以及查看共同实验状态；它们不取得 coordinator 私钥，也不能代替 A 发起全群训练。控制页保持仅本机访问，邀请和状态同步通过既有节点的 mTLS 通道传递，无需对局域网开放 8765。
 
 三机部署仍在每台机器上托管多个角色。它改善进程和主机分布，但不是完整的独立机构治理或安全隔离证明。整台 B/C 故障会同时失去 authority、aggregator 和两个客户端，不能等同于只失去一个聚合器。
 
 ### 3.2 一次性配置和按主机分包
 
-网页支持输入自定义电脑数量，范围为 2 到当前客户端、边缘与云节点总数（最多 164 台），每台至少分配一个节点。采用“配置电脑 → 生成配置包 → 各机启动并检查”的流程。物理机器分配不改变客户端的单边缘归属，也不改变协议拓扑。
+网页支持输入自定义电脑数量，范围为 2 到当前客户端、边缘与云节点总数（最多 164 台），每台至少分配一个节点。采用“配置电脑 → 测试连接 → 生成并安装配置包 → 各机启动 → 认证连接测试 → 发送实验邀请 → 全部主机同意 → A 开始训练”的流程。物理机器分配不改变客户端的单边缘归属，也不改变协议拓扑。
 
 1. 将部署方式切换为「多机部署」，在数字框中输入电脑数量，每台填写一次局域网 IP 或主机名。电脑按 A、B、…、Z、AA、AB…编号。只填地址，不带协议或端口。A 负责主控，节点默认均分；「高级分配」可逐节点调整电脑，节点使用目标电脑的地址。空值、小数或超出节点总数会阻止生成配置包，不会静默改写为其他数量。
-2. 点击「生成部署配置包」，下载各机 A/B/C 包。计划存放在当前运行目录的 `deployment-plans/<plan_id>`，当前单机部署、节点和实验记录均不变。修改地址、数量、门限或归属后，旧下载入口失效，需重新生成。
-3. 每台电脑安装同一版本源码和依赖、准备数据，将自己包内的 `runtime` 放入独立运行目录。按包内 README 启动本机角色；只有 A 启动控制页。配置包不含源码、虚拟环境或数据集。
-4. 在 A 的控制页检查每台机器的在线节点数量，然后创建实验。页面上的「启动本机 A 节点」只启动当前电脑，不会通过 SSH 启动 B/C。远端必须在各自电脑执行启动命令。
+2. 填完地址后可点击「测试连接」。尚未安装同一集群的配置包时，只检查配置中节点端口的 TCP 可达性；端口未监听会明确报出，TCP 连通不代表对端身份已认证，也不允许据此直接训练。
+3. 点击「生成部署配置包」，下载各机 A/B/C 包。计划存放在当前运行目录的 `deployment-plans/<plan_id>`，当前单机部署、节点和实验记录均不变。修改地址、数量、门限或归属后，旧下载入口失效，需重新生成。
+4. 每台电脑准备同版本环境和数据并打开已有本地网页，在「多机部署 → 在网页中部署本机」点击「导入本机配置包 ZIP」。A 选 A 包，B/C 选各自包；确认电脑编号、IP 后点击「启用电脑 X 配置并启动」。网页自动建立独立运行目录、启动本机节点和控制页并跳转。如果旧单机节点占用了端口，先点击「释放当前单机节点」，再启用；原记录保留。配置包不含源码、虚拟环境或数据集，本地网页服务须已启动。
+5. 在新打开的 A 多机页面执行连接测试，确认同一集群的各节点通过 mTLS 身份检查。各机的「启动本机节点」「释放本机节点」只操作自己的节点；B/C 在各自网页完成启用。B/C 不持有主控私钥，节点通信状态以 A 的认证检查为准。
+6. A 配置本次实验后发送邀请。B/C 的本地页面显示发起主机、实验名称、训练配置和等待同意状态，分别点击同意或拒绝。只有所有主机同意且连接正常时，A 才能开始训练。任一主机未同意、拒绝、失联，或邀请已过期，都不能开始；更改实验配置后须重新邀请，不沿用旧批准。
+7. 训练开始后，三台页面显示同一个实验及其进度、指标和结束状态。训练状态表示共同实验正在进行，各机实际工作随本机角色和协议阶段执行，并不保证各机 CPU 同时满载。每次新实验都要重新邀请并批准。
 
 配置包只含本机私钥、公共 CA、身份注册表、集群配置、机器标记，以及准备机器已安装且通过尺寸与摘要检查的公共 CRS（manifest、PK、VK）。只有 A 包含 coordinator 身份。额外文件、实验记录、其他机器私钥不分发。所有包使用同一份 CRS，不能在各机独立随机生成替代参数。若准备机器没有 CRS，页面会明确提示这些包只能用于明文实验；加密运行前须补齐并重新分包。
 
@@ -224,14 +227,26 @@ Windows 完整部署对应 `-CifarSource`，Linux 对应 `DGFL_CIFAR_SOURCE`。�
 
 ```text
 POST /api/deployment/plans
+POST /api/deployment/test-connection
 GET /api/deployment/plans/<plan_id>/bundle/A
 GET /api/deployment/plans/<plan_id>/bundle/B
 GET /api/deployment/plans/<plan_id>/bundle/C
+POST /api/deployment/import
+GET /api/deployment/installations
+POST /api/deployment/installations/<install_id>/activate
+POST /api/deployment/local-nodes/start
+POST /api/deployment/local-nodes/stop
+GET /api/participation
+POST /api/participation/invite
+POST /api/participation/respond
+POST /api/participation/cancel
 ```
 
 已部署的 LAN 仍可通过 `GET /api/deployment/bundle/<machine>` 下载本机配置包。刷新页面会恢复实际部署方式、电脑归属及地址。地址与机器归属绑定证书和身份包，已部署时数量、门限、地址和归属只读；更换布局应建立新的运行目录，保留原记录。新目录也可以先运行 `python -m dgfl.cli serve --runtime 新目录` 打开空控制页，再生成多机计划。自定义数量需要更新并重启控制服务；所有电脑应使用同版本源码，CLI 的 `--machine` 接受包中实际编号（如 `D`、`AA`）。
 
-2026-10-13 验证：三份独立运行目录、每组仅本机私钥，使用 `127.0.0.2 / .3 / .4` 和动态空闲端口运行六个角色。MNIST 650 维完成明文 1 轮、加密 2 轮、DGFlow 2 轮；加密实验核对了同一 CRS、客户端单归属、授权、两份云解密结果、证明验证和全部边缘确认。测试见 `tests/integration/test_lan_distributed_training.py`。这证明了应用层跨地址和独立包的流程，实体局域网的防火墙、地址、网络延迟与多主机性能仍需现场验收。
+实验邀请绑定本次完整配置，批准只用于这次实验。发送邀请本身还会执行认证连接检查，不能通过跳过页面上的连接测试绕过校验。B/C 的同意操作只能从各自的本地控制页完成，主控不能替远端批准。单机部署仍按原流程直接开始训练，不需要邀请。
+
+三机隔离包集成测试使用 `127.0.0.2 / .3 / .4` 和动态空闲端口运行六个角色，每组仅持有本机私钥。测试先核对未批准和拒绝时不能训练，再分别邀请并由 B/C 本地页面批准，执行 MNIST 650 维明文 1 轮、加密 2 轮、DGFlow 2 轮，并检查各机页面同步最终状态；加密实验还核对同一 CRS、客户端单归属、授权、两份云解密结果、证明验证和全部边缘确认。测试见 `tests/integration/test_lan_distributed_training.py`。这覆盖应用层跨地址和独立包的流程，实体局域网的防火墙、地址、网络延迟与多主机性能仍需现场验收。
 
 命令行方式（等价，便于复现）：复制并编辑配置：
 
@@ -255,7 +270,13 @@ Copy-Item -LiteralPath .\configs\hosts.example.yaml -Destination .\configs\hosts
 
 此初始化工具是集中式的身份/证书准备工具；它与每轮模型加密用的 DKG 不同。初始化目录暂时持有整套传输身份，因此必须保留在受控离线准备环境，不能作为常规三机运行目录到处分发。**不要把完整 `provisioning-runtime/keys` 或全部 machine-bundles 一起复制给每台机器。**
 
-### 3.3 分别安装并启动
+### 3.3 网页启用与手动部署备选
+
+已有本地网页时，按 3.2 节导入 ZIP 即可完成部署，无须手动执行 `start`、`serve`，也无须复制数据。导入目录为当前运行目录的同级 `runtime-lan-<随机标识>`；通常就是 `DGFlow/runtime-lan-…`，数据使用 `DGFlow/data`。导入先校验目录结构、本机身份和公共 CRS，拒绝越界路径、链接、额外私钥和损坏参数；ZIP 最大 128 MiB，解压最多 256 MiB。仅含公开注册材料、没有本机私钥的注册包仍需完成原有身份注册流程，不能当作完整本机部署包直接启用。
+
+启用会在可用的本地端口启动独立控制页（优先 8766），并通过它启动本机节点。失败时显示原因和已启动页面的入口，可重试；不会结束旧实验或自动终止占用端口的进程。关闭浏览器不会停止节点。需要释放时在多机页点击「释放本机节点」；重开原页面后可从「继续已导入的部署」重新启用，无须重复导入。原页面仍用于查看原部署历史，多机页提供返回入口。
+
+下面保留命令行部署方法，已通过网页启用的机器无需再执行。
 
 每台机器使用同一版本程序，但使用全新的目标运行目录。把对应主机包内的 `runtime` 放到该机器项目根目录的 `runtime`；不要覆盖旧部署目录或合并另一主机的密钥。示例在 A 的新项目目录中：
 
@@ -263,7 +284,7 @@ Copy-Item -LiteralPath .\configs\hosts.example.yaml -Destination .\configs\hosts
 Copy-Item -LiteralPath .\machine-bundles\A\runtime -Destination .\runtime -Recurse
 ```
 
-B/C 仅接收各自的配置包并按同样布局放置。新版配置包已经携带准备目录中同组公共 CRS，各机安装环境时应保留这些指纹。第 1 节的 `-SetupOnly`（Linux 为 `--setup-only`）只准备环境和数据，不启动控制服务，适用于 B/C。若使用包内 README 的 `lan-deployment/runtime` 布局，数据放在 `lan-deployment/data`；下列根目录 `runtime` 示例对应根目录 `data`。不要把其他机器的私钥复制过来。每台机器都提前准备公开 MNIST 缓存，单独校验命令为：
+B/C 仅接收各自的配置包并按同样布局放置。新版配置包已经携带准备目录中同组公共 CRS，各机安装环境时应保留这些指纹。第 1 节的 `-SetupOnly`（Linux 为 `--setup-only`）只准备环境和数据，不启动控制服务，适用于 B/C；准备完成后再按下文启动本机节点和本机控制页。若使用包内 README 的 `lan-deployment/runtime` 布局，数据放在 `lan-deployment/data`，准备环境时传入 `-Runtime lan-deployment/runtime`；下列根目录 `runtime` 示例对应根目录 `data`。不要把其他机器的私钥复制过来。每台机器都提前准备公开 MNIST 缓存，单独校验命令为：
 
 ```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli prepare-data
@@ -292,16 +313,25 @@ B/C 仅接收各自的配置包并按同样布局放置。新版配置包已经�
 .\.venv\Scripts\python.exe -m dgfl.cli start --machine C
 ```
 
-仅在 A 启动控制服务并执行全群健康检查：
+然后在 A、B、C 各自的新终端启动本机控制服务，三台都执行：
 
 ```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli serve
+```
+
+每台浏览器打开各自的 `http://127.0.0.1:8765`。A 页面显示发起实验和各机批准状态；B/C 页面显示待处理邀请、批准按钮及共同实验进度。普通一键启动入口可能初始化单机运行目录，多机部署应使用上述明确的 `start` 和 `serve` 命令，并保证二者指向本机同一个配置包目录。
+
+全群健康检查仅在 A 的另一个终端执行：
+
+```powershell
 .\.venv\Scripts\python.exe -m dgfl.cli doctor
 ```
 
-`serve` 常驻当前终端，因此 `doctor` 应在 A 的另一个终端执行。B/C 包故意不含 coordinator 身份，当前 `doctor` 的全群 RPC 检查在 B/C 会报告缺少 coordinator；不要为消除这个提示而把 A 私钥复制过去。
+`serve` 常驻当前终端。B/C 包故意不含 coordinator 身份，`doctor` 的全群 RPC 检查在 B/C 会报告缺少 coordinator；不要为消除这个提示而把 A 私钥复制过去。B/C 使用本地参与页面接收和批准邀请即可。
 
 若改用自定义 `--runtime`，当前控制/训练代码从该目录的父目录寻找 `data/mnist`。把运行目录放在项目根目录的直接子目录下最容易保持数据路径一致；不要仅把 `--runtime` 指向嵌套分包目录，却仍假设使用默认数据路径。
+
+例如使用 `lan-deployment/runtime` 时，每台 `start` 和 `serve` 都传入 `--runtime lan-deployment/runtime`；A 检查时执行 `doctor --runtime lan-deployment/runtime --data-dir lan-deployment/data/mnist`。确认节点在线后，A 先测试连接，再发出本次实验邀请；B/C 在本地页面同意，A 确认全部批准后开始。
 
 关闭时在每台机器分别执行匹配的 `stop --machine A/B/C`。它会停止该机所有受管角色，不适合用来模拟“只停止一个聚合器”。
 
@@ -395,7 +425,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m dgfl.cli serve
 ```
 
-此最小示例用于新的本机运行目录，使用已准备的 MNIST、NumPy 和 CPU，启动后选择明文基线，无需密码证明或 CRS；不代表 Torch、Lego、CIFAR-10 或 GPU 全功能部署，提交包还需已有 `web/dist`。新加密实验必须另行安装当前原生扩展与匹配参数。不要复制覆盖需保留的旧数据，已有身份时不要重复 `init`。三机部署先放好各自 runtime 包，再执行第 3 节 `cli start --machine A/B/C`，仅 A 执行 `cli serve`；不在 B/C 使用会打开控制服务的一键入口。离线 wheel 包只适用于记录的平台与解释器。测试依赖不在基础锁内，离线执行 pytest 需要单独准备。
+此最小示例用于新的本机运行目录，使用已准备的 MNIST、NumPy 和 CPU，启动后选择明文基线，无需密码证明或 CRS；不代表 Torch、Lego、CIFAR-10 或 GPU 全功能部署，提交包还需已有 `web/dist`。新加密实验必须另行安装当前原生扩展与匹配参数。不要复制覆盖需保留的旧数据，已有身份时不要重复 `init`。三机部署先放好各自 runtime 包，再执行第 3 节 `cli start --machine A/B/C`，三台分别对本机同一个运行目录执行 `cli serve`，由 A 邀请、B/C 本地批准后开始；不要用普通一键入口意外初始化或启动另一套单机目录。离线 wheel 包只适用于记录的平台与解释器。测试依赖不在基础锁内，离线执行 pytest 需要单独准备。
 
 完整功能的离线运行使用第 5.1 节完整材料，或在目标机器提前完成第 1 节完整部署并保留环境、原生来源记录、两套数据和前端。两个默认 CRS 由完整部署核验或补齐，非默认模型维度仍需显式准备。基础离线包和 `validate_release.py` 的成功结果不能代替完整环境及模型参数检查。
 

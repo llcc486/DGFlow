@@ -4,6 +4,7 @@ import json
 import re
 import secrets
 import shutil
+import tempfile
 import threading
 import time
 import zipfile
@@ -14,10 +15,11 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import URL, Headers
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -29,10 +31,14 @@ from dgfl.deployment import (
     configure_cluster,
     init_lan_cluster,
     load_cluster,
+    runtime_lifecycle_lock,
+    selected_nodes,
     start_nodes,
+    stop_nodes,
     validate_machine,
 )
-from dgfl.experiments.metadata import normalize_text
+from dgfl.experiments.config import ArchivedRunConfig as ArchivedRunConfig
+from dgfl.experiments.config import RunConfig
 from dgfl.experiments.monitor_series import MonitorSeries
 from dgfl.experiments.runner import RunManager
 from dgfl.services.node import training_backends
@@ -127,14 +133,14 @@ def _origin(value: str):
     return parsed.scheme,parsed.hostname,port if port is not None else (443 if parsed.scheme=='https' else 80)
 
 
-def _declared_body_allowed(lengths:list[str]):
+def _declared_body_allowed(lengths:list[str],limit=CONTROL_BODY_LIMIT):
     if not lengths:
         return True
     if len(lengths)!=1 or not lengths[0].isascii() or not lengths[0].isdigit():
         return False
     digits=lengths[0].lstrip('0') or '0'
     # Avoid unbounded integer parsing of malformed or extremely long headers.
-    return len(digits)<=len(str(CONTROL_BODY_LIMIT)) and int(digits)<=CONTROL_BODY_LIMIT
+    return len(digits)<=len(str(limit)) and int(digits)<=limit
 
 
 class ControlHostMiddleware(TrustedHostMiddleware):
@@ -172,166 +178,43 @@ class ControlSafetyMiddleware:
             response=JSONResponse({'detail':'控制操作仅允许同源本机页面'},status_code=403)
             await response(scope,receive,send)
             return
+        from dgfl.services.deployment_import import BUNDLE_BODY_LIMIT
+        bundle_upload=scope['path']=='/api/deployment/import' and scope['method']=='POST'
+        limit=BUNDLE_BODY_LIMIT if bundle_upload else CONTROL_BODY_LIMIT
         lengths=headers.getlist('content-length')
-        if not _declared_body_allowed(lengths):
+        if not _declared_body_allowed(lengths,limit):
             response=JSONResponse({'detail':'控制请求过大'},status_code=413)
             await response(scope,receive,send)
             return
-        # Buffer at most 32 KiB even without Content-Length or when an action
-        # ignores its body (for example stop). Do not dispatch until checked.
-        body=bytearray()
-        while True:
-            message=await receive()
-            if message['type']=='http.disconnect':
-                return
-            chunk=message.get('body',b'')
-            if len(body)+len(chunk)>CONTROL_BODY_LIMIT:
-                response=JSONResponse({'detail':'控制请求过大'},status_code=413)
-                await response(scope,receive,send)
-                return
-            body.extend(chunk)
-            if not message.get('more_body',False):
-                break
-        replayed=False
+        # Ordinary control JSON retains the 32 KiB limit. ZIP uploads alone may
+        # be larger, spooled to disk and bounded before any mutation is dispatched.
+        with tempfile.SpooledTemporaryFile(max_size=CONTROL_BODY_LIMIT) as body:
+            size=0
+            while True:
+                message=await receive()
+                if message['type']=='http.disconnect':
+                    return
+                chunk=message.get('body',b'')
+                size+=len(chunk)
+                if size>limit:
+                    await JSONResponse({'detail':'控制请求过大'},status_code=413)(scope,receive,send)
+                    return
+                body.write(chunk)
+                if not message.get('more_body',False):
+                    break
+            body.seek(0)
+            replayed=False
 
-        async def checked_receive():
-            nonlocal replayed
-            if not replayed:
-                replayed=True
-                return {'type':'http.request','body':bytes(body),'more_body':False}
-            return await receive()
+            async def checked_receive():
+                nonlocal replayed
+                if replayed:
+                    return await receive()
+                chunk=body.read(64*1024)
+                more=body.tell()<size
+                replayed=not more
+                return {'type':'http.request','body':chunk,'more_body':more}
 
-        await self.app(scope,checked_receive,send)
-
-
-class ArchivedRunConfig(BaseModel):
-    """Read-only validation of historical declarations and experiment evidence."""
-    model_config=ConfigDict(extra='forbid')
-    name:str|None=Field(None,strict=True,max_length=80)
-    description:str|None=Field(None,strict=True,max_length=1000)
-    dataset:Literal['mnist','cifar10']='mnist'
-    # Optional metadata: None means the unchanged historical linear path.
-    model_name:Literal['linear','paper_cnn_mnist','paper_cnn_cifar10']|None=None
-    # Archives may contain the trusted descriptor generated by RunManager.
-    model_descriptor:dict|None=Field(None,strict=True)
-    bits:int|None=Field(None,ge=2,le=16,strict=True)
-    scale:int|None=Field(None,ge=1,le=65536,strict=True)
-    mode:Literal['plain','encrypted','dgflow','optimized']='optimized'
-    # Execution strategy is independent of the cryptographic protocol mode.
-    # auto uses bounded parallelism; explicit serial remains a comparison.
-    execution:Literal['auto','serial','parallel']='auto'
-    cloud_strategy:Literal['auto','threshold','all']='auto'
-    compute_device:Literal['cpu','gpu']='cpu'
-    rpc_workers:int=Field(6,ge=1,le=24)
-    proof_suite:Literal['legacy','compact_range_v1','compact_norm_v1','lego_norm_v1']='legacy'
-    proof_crs_hash:str|None=Field(None,pattern=r'^[0-9a-fA-F]{64}$')
-    verification:Literal['deterministic','randomized']='deterministic'
-    verification_workers:int=Field(1,ge=1,le=8)
-    verification_threads:int=Field(2,ge=1,le=4,strict=True)
-    proof_block_size:int=Field(128,ge=1,le=1024)
-    rounds:int=Field(3,ge=1,le=100)
-    client_count:int=Field(6,ge=2,le=100,strict=True)
-    authority_count:int|None=Field(None,ge=2,le=32,strict=True)
-    aggregator_count:int|None=Field(None,ge=2,le=32,strict=True)
-    authority_threshold:int|None=Field(None,ge=2,le=32,strict=True)
-    aggregator_threshold:int|None=Field(None,ge=2,le=32,strict=True)
-    seed:int=Field(42,ge=0,le=2**31-1)
-    attack:Literal['none','label_flip','targeted_label_flip','sign_flip','random','free_rider','tamper_proof','dropout']='none'
-    malicious_clients:int=Field(1,ge=0,le=100,strict=True)
-    # Simulation placement only; absent/null preserves historical prefix assignment.
-    attack_client_ids:list[str]|None=Field(None,max_length=100,strict=True)
-    # Only used by targeted_label_flip: the class an attacker steers predictions
-    # towards. The paper's ASR counts test samples misclassified into it.
-    attack_target_class:int=Field(0,ge=0,le=9,strict=True)
-    non_iid:bool=False
-    offline_aggregators:int=Field(0,ge=0,le=32,strict=True)
-    train_limit:int=Field(1200,ge=120,le=60000)
-    test_limit:int=Field(400,ge=100,le=10000)
-    local_epochs:int=Field(2,ge=1,le=20)
-    backend:Literal['numpy','torch']='numpy'
-    # MNIST has one channel; CIFAR-10 preserves all three RGB channels.
-    # Resource preflight applies image resolution and the 20,000-coordinate cap.
-    grid:int=Field(8,ge=2,le=32)
-    min_cosine:float=Field(0.0,ge=-1,le=1,allow_inf_nan=False)
-    max_norm_squared:int|None=Field(None,ge=1,strict=True)
-    max_norm_ratio:float=Field(2.0,ge=1,allow_inf_nan=False)
-    # Optional extension: the paper specifies an upper bound, not this lower
-    # L2 norm ratio. Its efficacy and honest-client rejection need measurement.
-    min_norm_ratio:float|None=Field(None,gt=0,le=1,allow_inf_nan=False,strict=True)
-    batch_strategy:Literal['fixed','regroup']='regroup'
-    # Privacy-group size, independent of local SGD's mini-batch size.
-    batch_size:int=Field(2,ge=2,le=100,strict=True)
-    # Screening rule and its clustering parameters.
-    #
-    # These decide which clients an honest round drops, and they used to be
-    # constants inside the rule, which meant the signed authorization manifest did
-    # not cover them: replacing the whole rule while leaving the five thresholds
-    # above unchanged produced an identical manifest hash. Declaring them here puts
-    # them into the manifest, so a change to the decision procedure is a change to
-    # the signed policy.
-    screening_rule:Literal['legacy_v1']='legacy_v1'
-    cluster_center_gap:float=Field(0.45,gt=0,le=2,allow_inf_nan=False,strict=True)
-    cluster_low_center_max:float=Field(0.25,ge=-1,le=1,allow_inf_nan=False,strict=True)
-    cluster_iterations:int=Field(32,ge=1,le=4096,strict=True)
-    cluster_tolerance:float=Field(1e-12,gt=0,le=1e-3,allow_inf_nan=False,strict=True)
-
-    @field_validator('name','description',mode='before')
-    @classmethod
-    def normalize_user_metadata(cls,value,info):
-        return normalize_text(value,field=info.field_name)
-
-    @model_validator(mode='after')
-    def crs_matches_suite(self):
-        from dgfl.experiments.resources import check_wire_resources
-
-        if self.model_descriptor is not None:
-            from dgfl.training import model_adapter
-            self.model_descriptor=model_adapter.validate_descriptor(self.model_descriptor)
-        effective_name=self.model_name or (self.model_descriptor or {}).get('model_name','linear')
-        if effective_name=='linear' and (self.bits not in (None,8) or self.scale not in (None,128)):
-            raise ValueError('linear experiments retain 8-bit scale-128 quantization')
-        # Null optional model fields must not activate a new descriptor path.
-        check_wire_resources(self.model_dump(exclude_none=True))
-        for role in ('authority','aggregator'):
-            count=getattr(self,role+'_count'); threshold=getattr(self,role+'_threshold')
-            if count is not None and threshold is not None and threshold>count:
-                raise ValueError(f'{role}_threshold cannot exceed {role}_count')
-        if self.aggregator_count is not None and self.offline_aggregators>self.aggregator_count:
-            raise ValueError('offline_aggregators cannot exceed aggregator_count')
-        if self.malicious_clients>self.client_count:
-            raise ValueError('malicious_clients cannot exceed client_count')
-        from dgfl.training.attacks import attack_clients
-        from dgfl.validation.policy import client_members
-        attack_clients(self.model_dump(),client_members(self.client_count))
-        if self.compute_device=='gpu' and self.mode=='plain':
-            raise ValueError('GPU 模式用于密码批量计算，请选择加密实验模式')
-        if self.proof_suite=='lego_norm_v1':
-            if self.mode=='plain':
-                if self.proof_crs_hash is not None:
-                    raise ValueError('Plain experiments do not use a proof CRS')
-            elif self.proof_crs_hash is None:
-                raise ValueError('Lego proof requires the fingerprint of an installed trusted setup')
-            if self.proof_crs_hash is not None:
-                self.proof_crs_hash=self.proof_crs_hash.lower()
-        elif self.proof_crs_hash is not None:
-            raise ValueError('proof_crs_hash is only valid for the Lego proof suite')
-        return self
-
-
-class RunConfig(ArchivedRunConfig):
-    """New encrypted experiments support only the installed LegoGroth16 suite."""
-    proof_suite:Literal['lego_norm_v1']='lego_norm_v1'
-    # Public requests select a trusted name; only the service generates descriptors.
-    model_descriptor:None=None
-    # New runs follow the paper's immutable batches; archives retain the historical
-    # regroup default so omitted old declarations are not silently reinterpreted.
-    batch_strategy:Literal['fixed','regroup']='fixed'
-
-    @model_validator(mode='after')
-    def complete_fixed_batches(self):
-        from dgfl.validation.policy import validate_batch_configuration
-        validate_batch_configuration(self.client_count,self.batch_size,self.batch_strategy)
-        return self
+            await self.app(scope,checked_receive,send)
 
 
 class ResumeRequest(BaseModel):
@@ -353,6 +236,12 @@ class ResumeRequest(BaseModel):
 class DataConfig(BaseModel):
     model_config=ConfigDict(extra='forbid')
     dataset:Literal['mnist','cifar10']='mnist'
+
+
+class ParticipationDecision(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    session_id:str=Field(pattern=r'^[0-9a-f]{32}$')
+    decision:Literal['approved','rejected']
 
 
 MachineName = Annotated[str, Field(strict=True, min_length=1, max_length=2), AfterValidator(validate_machine)]
@@ -400,6 +289,20 @@ class DeploymentStart(DeploymentConfig):
     machine:MachineName|None=None
 
 
+class ConnectionTestConfig(DeploymentConfig):
+    machine:MachineName|None=None
+
+    def topology(self):
+        return {key:value for key,value in super().topology().items() if key!='machine'}
+
+
+class NodeSelection(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    # Omission means the current deployment, never the uncommitted UI plan.
+    nodes:list[Annotated[str,Field(strict=True,pattern=r'^(authority|aggregator|client)[1-9][0-9]*$')]]|None=Field(
+        None,min_length=1,max_length=164,strict=True)
+
+
 def _registration_commands(node, state):
     """The commands this node's machine needs next, for the deployment page.
 
@@ -416,8 +319,28 @@ def _registration_commands(node, state):
 
 def create_control_app(runtime, *, auto_prepare_compute=True):
     runtime=Path(runtime).resolve(); manager=RunManager(runtime)
+    participation=manager.participation
     tensorboard=EmbeddedTensorBoard(manager.tensorboard,run_labels=manager.tensorboard_run_labels)
     compute_shutdown=threading.Event(); compute_wakeup=threading.Event()
+    participation_shutdown=threading.Event()
+
+    def participation_worker():
+        while not participation_shutdown.is_set():
+            try:
+                state=participation.local_state()
+                if state['enabled'] and state['role']=='coordinator':
+                    with manager.lock:
+                        session=state.get('session') or {}
+                        run_id=manager.active or (session.get('run') or {}).get('run_id')
+                        source=manager.records.get(run_id)
+                        record=(dict(source, rounds=list(source.get('rounds', []))) if source else None)
+                    if record:
+                        participation.publish(record)
+                    participation.refresh()
+                app.state.participation_error=None
+            except (ValueError,OSError,RuntimeError,httpx.HTTPError) as exc:
+                app.state.participation_error=type(exc).__name__
+            participation_shutdown.wait(2)
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -425,6 +348,13 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         # here, while the console is still booting, keeps that cost off the first
         # visitor's page load.
         _app.state.tensorboard_warmup = tensorboard.warm()
+        try:
+            participation.reconcile(manager.records)
+        except (ValueError,OSError,RuntimeError,httpx.HTTPError) as exc:
+            _app.state.participation_error=type(exc).__name__
+        worker=threading.Thread(target=participation_worker,name='dgflow-participation',daemon=True)
+        worker.start()
+        _app.state.participation_worker=worker
         if auto_prepare_compute:
             compute_wakeup.set()
             worker=threading.Thread(target=automatic_compute_worker,name='dgflow-gpu-discovery',daemon=True)
@@ -433,12 +363,14 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         try:
             yield
         finally:
+            participation_shutdown.set()
             compute_shutdown.set(); compute_wakeup.set()
             tensorboard.close()
             manager.tensorboard.close_all()
 
     app=FastAPI(title='DGFlow Lab',docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
     app.state.manager=manager
+    app.state.participation=participation
     app.state.tensorboard=tensorboard
     app.add_middleware(ControlSafetyMiddleware)
     app.add_middleware(ControlHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
@@ -448,9 +380,19 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     compute_preparation={'state':'idle','reason':''}
     app.state.compute_preparation=compute_preparation
 
+    def participant_busy():
+        state=participation.local_state()
+        session=state.get('session') or {}
+        return session.get('status') in ('starting','running') or (
+            state.get('role')=='participant' and session.get('status') in ('pending','ready')
+            and any(row['machine']==state['local_machine'] and row['state']=='approved'
+                    for row in session.get('machines',[])))
+
     def idle_for_deployment():
         if manager.active is not None:
-            raise HTTPException(409,'实验运行中不能修改部署或启动节点')
+            raise HTTPException(409,'实验运行中不能修改部署、启动或释放节点')
+        if participant_busy():
+            raise HTTPException(409,'本机已加入多机实验，请先结束或退出当前会话')
         if prepare_lock.locked():
             raise HTTPException(409,'数据正在准备，暂时不能修改部署')
         with compute_lock:
@@ -460,6 +402,95 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def invalidate_nodes():
         with monitor_lock:
             monitor.update(time=0.,nodes=[])
+
+    @app.get('/api/deployment/runtime')
+    def deployment_runtime():
+        from dgfl.services.deployment_import import MARKER
+        marker=runtime/MARKER
+        return json.loads(marker.read_text('utf8')) if marker.is_file() else {'install_id':None}
+
+    @app.get('/api/deployment/installations')
+    def deployment_installations():
+        from dgfl.services.deployment_import import list_installations
+        return {'installations':list_installations(runtime)}
+
+    @app.post('/api/deployment/import')
+    async def deployment_import(request:Request):
+        if request.headers.get('content-type','').split(';')[0]!='application/zip':
+            raise HTTPException(415,'请选择 ZIP 格式的本机配置包')
+        from dgfl.services.deployment_import import import_bundle
+        def install(archive):
+            with manager.lock:
+                idle_for_deployment()
+                try:
+                    return import_bundle(runtime,archive)
+                except (ValueError,OSError,RuntimeError) as exc:
+                    raise HTTPException(422,str(exc)) from exc
+        with tempfile.TemporaryFile() as archive:
+            async for chunk in request.stream():
+                archive.write(chunk)
+            archive.seek(0)
+            return await run_in_threadpool(install,archive)
+
+    @app.post('/api/deployment/installations/{install_id}/activate')
+    def deployment_activate(install_id:str,request:Request):
+        from dgfl.services.deployment_import import activate
+        with manager.lock:
+            idle_for_deployment()
+            try:
+                return activate(runtime,install_id,str(request.base_url))
+            except (ValueError,OSError,RuntimeError) as exc:
+                raise HTTPException(409,str(exc)) from exc
+
+    @app.post('/api/deployment/test-connection')
+    def test_connection(config:ConnectionTestConfig):
+        if config.deployment!='lan':
+            raise HTTPException(422,'连接测试仅用于多机部署')
+        from dgfl.services.connection_probe import test_connections
+        try:
+            return test_connections(runtime,{name:entry.model_dump() for name,entry in config.hosts.items()},
+                                    config.topology(),machine=config.machine)
+        except (ValueError,OSError,RuntimeError) as exc:
+            raise HTTPException(409,str(exc)) from exc
+
+    @app.get('/api/participation')
+    def participation_state():
+        try:
+            return participation.local_state()
+        except (ValueError,OSError,RuntimeError) as exc:
+            raise HTTPException(409,str(exc)) from exc
+
+    @app.post('/api/participation/invite')
+    def participation_invite(config:RunConfig):
+        with manager.lock:
+            idle_for_deployment()
+            try:
+                return participation.invite(config.model_dump(exclude_none=True))
+            except (ValueError,OSError,RuntimeError,httpx.HTTPError) as exc:
+                raise HTTPException(409,str(exc)) from exc
+
+    @app.post('/api/participation/respond')
+    def participation_respond(config:ParticipationDecision):
+        with manager.lock:
+            if manager.active is not None or prepare_lock.locked():
+                raise HTTPException(409,'本机有正在执行的任务，暂时不能确认加入')
+            with compute_lock:
+                if compute_preparation['state']=='initializing':
+                    raise HTTPException(409,'本机 GPU 正在初始化，请稍后确认加入')
+            try:
+                return participation.respond(config.session_id,config.decision)
+            except (ValueError,OSError,RuntimeError) as exc:
+                raise HTTPException(409,str(exc)) from exc
+
+    @app.post('/api/participation/cancel')
+    def participation_cancel():
+        with manager.lock:
+            if manager.active is not None:
+                raise HTTPException(409,'训练已开始，请在主控停止实验')
+            try:
+                return participation.cancel()
+            except (ValueError,OSError,RuntimeError,httpx.HTTPError) as exc:
+                raise HTTPException(409,str(exc)) from exc
 
     def _apply_deployment(config):
         """Create or resize the cluster for either deployment mode.
@@ -560,10 +591,65 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
                 compute_wakeup.set()
             return result
 
+    def operate_nodes(selection,action,*,local_lan=False):
+        with manager.lock:
+            idle_for_deployment()
+            try:
+                with runtime_lifecycle_lock(runtime):
+                    cluster=load_cluster(runtime)
+                    if local_lan and cluster['deployment']!='lan':
+                        raise HTTPException(409,'当前不是多机部署')
+                    if not local_lan and cluster['deployment']!='single_host':
+                        raise HTTPException(409,'此节点操作仅用于当前单机部署')
+                    allowed=selected_nodes(runtime) if local_lan else list(cluster['nodes'])
+                    names=allowed if selection.nodes is None else selection.nodes
+                    if len(names)!=len(set(names)) or not set(names)<=set(allowed):
+                        raise HTTPException(422,'节点列表必须唯一，且全部属于当前部署')
+                    if action=='start':
+                        result=start_nodes(runtime,_nodes=names,control_locked=True)
+                    else:
+                        result=stop_nodes(runtime,_nodes=names)
+                        result['already_stopped']=[name for name in names
+                                                   if name not in result['stopped'] and name not in result['refused']]
+                        if result['refused']:
+                            return JSONResponse({**result,'detail':'部分节点无法安全释放，已保留其进程：'
+                                                 +'、'.join(result['refused'])+'。请检查节点日志和进程归属。'},status_code=409)
+            except (ValueError,OSError,RuntimeError) as exc:
+                raise HTTPException(409,str(exc)) from exc
+            finally:
+                invalidate_nodes()
+            if action=='start' and auto_prepare_compute:
+                compute_wakeup.set()
+            return result
+
+    @app.post('/api/deployment/nodes/start')
+    def selected_nodes_start(selection:NodeSelection):
+        return operate_nodes(selection,'start')
+
+    @app.post('/api/deployment/nodes/stop')
+    def selected_nodes_stop(selection:NodeSelection):
+        return operate_nodes(selection,'stop')
+
+    @app.post('/api/deployment/local-nodes/start')
+    def local_nodes_start(selection:NodeSelection):
+        return operate_nodes(selection,'start',local_lan=True)
+
+    @app.post('/api/deployment/local-nodes/stop')
+    def local_nodes_stop(selection:NodeSelection):
+        return operate_nodes(selection,'stop',local_lan=True)
+
     def refresh_nodes(cluster,topology):
         with monitor_lock:
             if time.monotonic()-monitor['time']<3: return monitor['nodes']
-            if not (runtime/'keys'/'coordinator'/'identity.json').exists(): return []
+            if not (runtime/'keys'/'coordinator'/'identity.json').exists():
+                # Participants know the public layout, but cannot impersonate A
+                # for signed health RPC. Keep unknown health distinct from online.
+                return [{'id':node,'role':''.join(c for c in node if not c.isdigit()),
+                         'status':'unverified','host':settings['url'],'machine':settings['machine'],
+                         'capabilities':{},'native':None,
+                         **({'authority_id':topology['client_authorities'][node]}
+                            if node.startswith('client') else {})}
+                        for node,settings in cluster['nodes'].items()]
             rpc=RPCClient(runtime,cluster['nodes']); rpc.client.timeout=httpx.Timeout(2,connect=.5)
             def one(item):
                 node,settings=item
@@ -588,6 +674,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
 
     def status_snapshot():
         from dgfl.crypto.gpu import compute_capabilities
+        from dgfl.services.deployment_import import local_processes
         cluster=json.loads((runtime/'cluster.json').read_text('utf8')) if (runtime/'cluster.json').exists() else {'nodes':{},'deployment':'single_host'}
         topology=validate_topology(); cluster_error=None
         try:
@@ -651,6 +738,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         return {'version':__version__,'backend':'BLS12-381/arkworks','node_count':len(nodes),'active_run_id':manager.active,
                 'deployment_schema_version':DEPLOYMENT_SCHEMA_VERSION,
                 'lan_deployment_plans':True,
+                'local_processes':local_processes(runtime) if cluster['deployment']=='lan' else [],
                 'max_machine_count':len(MACHINE_GROUPS),
                 'local_machine':(json.loads((runtime/'machine.json').read_text('utf8'))['machine']
                                  if (runtime/'machine.json').exists() else 'A' if cluster['deployment']=='lan' else 'local'),
@@ -658,6 +746,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
                 'dataset_ready':ready,'datasets':datasets,'deployment':cluster['deployment'],'nodes':nodes,
                 'data_preparation':{'state':'preparing' if prepare_lock.locked() else 'idle'},
                 'capabilities':{'proofs':True,'proof_suites':['lego_norm_v1'],'threshold':True,'compute':compute,'training_backends':backends,
+                                'participation':True,'node_lifecycle':True,'web_deployment':True,
                                 'cloud_strategies':['auto','threshold','all']}}
 
     @app.get('/api/status')
@@ -669,6 +758,8 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         from dgfl.crypto.gpu import compute_capabilities, require_gpu
         if manager.active is not None:
             raise HTTPException(409,'运行中不能初始化 GPU 后端')
+        if participant_busy():
+            raise HTTPException(409,'本机已加入多机实验，不能初始化 GPU 后端')
         if prepare_lock.locked():
             raise HTTPException(409,'数据正在准备，暂时不能初始化 GPU 后端')
         capability=compute_capabilities()['gpu']
@@ -816,6 +907,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def prepare(config:DataConfig|None=None):
         with manager.lock:
             if manager.active is not None: raise HTTPException(409,'运行中不能修改数据缓存')
+            if participant_busy(): raise HTTPException(409,'本机已加入多机实验，不能修改数据缓存')
             with compute_lock:
                 if compute_preparation['state']=='initializing':
                     raise HTTPException(409,'GPU 后端正在初始化，暂时不能准备数据')
@@ -929,8 +1021,23 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     @app.get('/api/runs/{run_id}/recovery')
     def recovery(run_id:str):
         """The latest checkpoint, whether the run can continue, and what blocks it."""
-        try: return manager.recovery_status(run_id)
+        try:
+            plan=manager.recovery_status(run_id)
+            cluster_path=runtime/'cluster.json'
+            if cluster_path.exists() and json.loads(cluster_path.read_text('utf8')).get('deployment')=='lan':
+                from dgfl.participation import public_config
+                with manager.lock:
+                    config=dict(manager.records[run_id].get('config') or {})
+                config['rounds']=max(int(config.get('rounds',1)),int(plan.get('start_round') or 1))
+                plan['participation_required']=True
+                try:
+                    plan['participation_config']=public_config(config)
+                except ValueError:
+                    plan['participation_config']=None
+                    plan['participation_reason']='历史实验配置无法用于新邀请，请先确认当前版本与模型兼容'
+            return plan
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+        except (ValueError,OSError) as exc: raise HTTPException(409,'恢复参与信息无法读取：'+str(exc)) from exc
 
     @app.post('/api/runs/{run_id}/resume')
     def resume(run_id:str,request:ResumeRequest|None=None):

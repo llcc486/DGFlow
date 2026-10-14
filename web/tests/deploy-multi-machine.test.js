@@ -21,6 +21,7 @@ import * as clouds from '../src/lib/cloudStrategies.js'
 import { trainingEligibility } from '../src/lib/trainingEligibility.js'
 import * as batching from '../src/lib/batchGrouping.js'
 import * as experiments from '../src/lib/experiments.js'
+import * as participation from '../src/lib/participation.js'
 import { api, errorText } from '../src/lib/api.js'
 import { consoleStore as store } from '../src/lib/store.js'
 
@@ -28,17 +29,18 @@ const source = readFileSync(new URL('../src/views/Deploy.vue', import.meta.url),
 const compiled = compileScript(parse(source).descriptor, { id: 'lan-deploy-test' }).content
 const executable = compiled.replace(/^import [^\r\n]*\r?\n/gm, '').replace('export default', 'globalThis.component =')
 
-function setup() {
+function setup(extra = {}) {
   store.connected.value = false
   store.status.value = null
   store.selectedDataset.value = 'mnist'
   const stops = []
   const context = createContext({
-    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {},
     onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
+    ...extra,
   })
   runInContext(executable, context)
   return { form: context.component.setup({}, { expose() {}, emit() {} }), stops }
@@ -226,4 +228,113 @@ test('moving a node uses the target computer address and keeps compact host edit
     }
     assert.ok(view.form.hostsError.value, 'a new machine needs its own address')
   } finally { teardown(view) }
+})
+
+test('per-machine tests run independently and editing one IP invalidates only its late result', async () => {
+  const view = setup({ AbortController, window: { setTimeout: () => 1 }, clearTimeout() {},
+    fetch: async () => ({ ok: true, json: async () => ({ available: true, parameters: [] }) }) })
+  const original = api.testDeploymentConnection
+  const requests = []
+  const resolve = {}
+  try {
+    view.form.deploymentMode.value = 'multi_machine'
+    view.form.setMachineHost('A', '192.168.1.10')
+    view.form.setMachineHost('B', '192.168.1.11')
+    store.connected.value = true
+    api.testDeploymentConnection = (config, signal) => {
+      requests.push({ config: JSON.parse(JSON.stringify(config)), signal })
+      return new Promise(yes => { resolve[config.machine] = yes })
+    }
+    const a = view.form.testConnection('A')
+    const b = view.form.testConnection('B')
+    assert.equal(view.form.connectionChecks.A.testing, true)
+    assert.equal(view.form.connectionChecks.B.testing, true)
+    assert.equal(requests[0].config.deployment, 'lan')
+    assert.equal(requests[0].config.machine, 'A')
+    assert.equal(requests[1].config.machine, 'B')
+    view.form.setMachineHost('B', '192.168.1.12')
+    assert.equal(requests[0].signal.aborted, false)
+    assert.equal(requests[1].signal.aborted, true)
+    resolve.A({ ready: true, level: 'tcp', machines: [{ machine: 'A', ready: true }] })
+    resolve.B({ ready: true, level: 'authenticated', machines: [{ machine: 'B', ready: true }] })
+    await Promise.all([a, b])
+    assert.equal(view.form.connectionChecks.A.result.ready, true)
+    assert.equal(view.form.connectionChecks.A.testing, false)
+    assert.equal(view.form.connectionChecks.B, undefined)
+    api.testDeploymentConnection = async () => ({ ready: false, level: 'tcp', machines: [
+      { machine: 'B', host: '192.168.1.12', reachable: false, reason: 'port closed' },
+    ] })
+    await view.form.testConnection('B')
+    assert.equal(view.form.connectionChecks.B.result.level, 'tcp')
+    assert.equal(view.form.connectionChecks.B.result.reason, 'port closed')
+    assert.equal(view.form.connectionChecks.A.result.ready, true)
+    view.form.form.client_count = 8
+    assert.deepEqual(Object.keys(view.form.connectionChecks), [])
+  } finally { api.testDeploymentConnection = original; teardown(view) }
+})
+
+test('each host can be tested while another IP is blank, and its failures stay in that host card', async () => {
+  const view = setup({ AbortController, window: { setTimeout: () => 1 }, clearTimeout() {},
+    fetch: async () => ({ ok: true, json: async () => ({ available: true, parameters: [] }) }) })
+  const original = api.testDeploymentConnection
+  let called = 0
+  try {
+    view.form.deploymentMode.value = 'multi_machine'
+    store.connected.value = true
+    api.testDeploymentConnection = async () => { called++; throw new Error('network unavailable') }
+    await view.form.testConnection('A')
+    assert.equal(called, 0)
+    view.form.setMachineHost('A', '192.168.1.10')
+    assert.ok(view.form.hostsError.value, 'another machine still has a blank IP')
+    await view.form.testConnection('A')
+    assert.equal(called, 1)
+    assert.equal(view.form.connectionChecks.A.testing, false)
+    assert.equal(view.form.connectionChecks.A.error, 'network unavailable')
+    assert.equal(view.form.connectionChecks.A.result, null)
+    assert.equal(view.form.connectionChecks.B, undefined)
+    view.form.setMachineHost('A', 'http://192.168.1.10')
+    await view.form.testConnection('A')
+    assert.equal(called, 1)
+  } finally { api.testDeploymentConnection = original; teardown(view) }
+})
+
+test('per-machine API sends only that host and preserves its name and abort signal', async () => {
+  const previous = globalThis.fetch, requests = [], controller = new AbortController()
+  const config = { ...deployment.DEFAULT_TOPOLOGY, deployment: 'lan', machine: 'B', hosts: {} }
+  const names = deployment.topologyNodeNames(6, 3, 4)
+  for (const [index, name] of names.entries()) config.hosts[name] = index % 2
+    ? { machine: 'B', host: '192.168.1.11' } : { machine: 'A', host: '' }
+  globalThis.fetch = async (url, options) => { requests.push({ url, ...options }); return { ok: true, text: async () => '{}' } }
+  try {
+    await api.testDeploymentConnection(config, controller.signal)
+    assert.equal(requests[0].url, '/api/deployment/test-connection')
+    const payload = JSON.parse(requests[0].body)
+    assert.equal(payload.machine, 'B')
+    assert.deepEqual(Object.keys(payload.hosts), names.filter((_, index) => index % 2))
+    assert.ok(Object.values(payload.hosts).every(entry => entry.machine === 'B' && entry.host === '192.168.1.11'))
+    assert.equal(requests[0].signal, controller.signal)
+    assert.throws(() => api.testDeploymentConnection({ ...config, machine: 'A' }), /有效 IP/)
+    assert.equal(requests.length, 1)
+  } finally { globalThis.fetch = previous }
+})
+
+test('a response for the wrong host is rejected and duplicate clicks only send one request', async () => {
+  const view = setup({ AbortController, window: { setTimeout: () => 1 }, clearTimeout() {},
+    fetch: async () => ({ ok: true, json: async () => ({ available: true, parameters: [] }) }) })
+  const original = api.testDeploymentConnection
+  let resolve, count = 0
+  try {
+    view.form.deploymentMode.value = 'multi_machine'
+    view.form.setMachineHost('A', '192.168.1.10')
+    store.connected.value = true
+    api.testDeploymentConnection = () => { count++; return new Promise(yes => { resolve = yes }) }
+    const pending = view.form.testConnection('A')
+    await view.form.testConnection('A')
+    assert.equal(count, 1)
+    resolve({ ready: true, level: 'tcp', machines: [{ machine: 'B', ready: true }] })
+    await pending
+    assert.ok(view.form.connectionChecks.A.error)
+    assert.equal(view.form.connectionChecks.A.result, null)
+    assert.equal(view.form.connectionChecks.A.testing, false)
+  } finally { api.testDeploymentConnection = original; teardown(view) }
 })

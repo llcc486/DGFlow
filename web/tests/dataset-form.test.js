@@ -14,6 +14,7 @@ import * as clouds from '../src/lib/cloudStrategies.js'
 import { trainingEligibility } from '../src/lib/trainingEligibility.js'
 import * as batching from '../src/lib/batchGrouping.js'
 import * as experiments from '../src/lib/experiments.js'
+import * as participation from '../src/lib/participation.js'
 import { api, errorText } from '../src/lib/api.js'
 import { consoleStore as store } from '../src/lib/store.js'
 
@@ -44,9 +45,9 @@ test('switching the actual deployment form updates RGB dimensions, CRS selection
   const stops = []
   store.connected.value = false; store.status.value = null; store.selectedDataset.value = 'mnist'
   const context = createContext({
-    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {},
     onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
@@ -71,7 +72,7 @@ test('switching the actual deployment form updates RGB dimensions, CRS selection
     assert.equal(form.runConfiguration().proof_crs_hash, 'b'.repeat(64))
     assert.equal(form.form.train_limit, 50000)
     assert.equal(store.selectedDataset.value, 'cifar10')
-    form.applyPreset(form.presets.find(preset => preset.id === 'full'))
+    form.applyImportedConfiguration(JSON.stringify({ train_limit: 50000 }))
     assert.equal(form.form.train_limit, 50000)
     form.form.dataset = 'mnist'
     await nextTick()
@@ -104,9 +105,9 @@ test('mount keeps CRS refresh and machine registration together and unmount canc
   store.selectedDataset.value = 'mnist'
   store.loadRegistration = async machine => { machines.push(machine) }
   const context = createContext({
-    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility, AbortController,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {},
     onMounted: fn => { mount = fn }, onUnmounted: fn => { unmount = fn },
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
     setInterval: (fn, delay) => { intervals.set(++next, { fn, delay }); return next },

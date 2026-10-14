@@ -11,7 +11,8 @@ function deferred() {
 async function withStore(action) {
   const previous = { window: globalThis.window, clearTimeout: globalThis.clearTimeout,
     getRecovery: api.getRecovery, getRegistration: api.getRegistration,
-    resumeRun: api.resumeRun, listRuns: api.listRuns }
+    resumeRun: api.resumeRun, listRuns: api.listRuns,
+    inviteParticipation: api.inviteParticipation, getParticipation: api.getParticipation }
   const timers = new Map()
   let next = 0
   globalThis.window = { setTimeout(fn) { timers.set(++next, fn); return next } }
@@ -22,7 +23,7 @@ async function withStore(action) {
     store.stop()
     globalThis.window = previous.window
     globalThis.clearTimeout = previous.clearTimeout
-    for (const name of ['getRecovery', 'getRegistration', 'resumeRun', 'listRuns']) api[name] = previous[name]
+    for (const name of ['getRecovery', 'getRegistration', 'resumeRun', 'listRuns', 'inviteParticipation', 'getParticipation']) api[name] = previous[name]
   }
 }
 const readable = runId => ({ run_id: runId, resumable: true, start_round: 3,
@@ -154,6 +155,58 @@ test('an idempotent response for a finished continuation does not invent an acti
     await store.resumeRun()
     assert.equal(store.selectedRunId.value, 'finished-continuation')
     assert.equal(store.hasActiveRun.value, false)
+  })
+})
+
+test('LAN continuation sends the normalized recovery config and cannot resume before renewed approvals', async () => {
+  await withStore(async store => {
+    const config = { name: '恢复三机训练', mode: 'plain', rounds: 5 }
+    const invitations = [], resumes = []
+    const reading = { enabled: true, role: 'coordinator', local_machine: 'A', session: {
+      session_id: 'restore', config, status: 'pending', ready: false,
+      machines: [{ machine: 'A', state: 'approved' }, { machine: 'B', state: 'pending' }],
+    } }
+    api.inviteParticipation = async value => { invitations.push(value) }
+    api.getParticipation = async () => reading
+    api.resumeRun = async (id, key) => { resumes.push({ id, key }); return { run_id: 'continued', start_round: 3 } }
+    api.listRuns = async () => ({ runs: [] })
+    api.getRecovery = async id => ({ run_id: id, resumable: false })
+    store.status.value = { deployment: 'lan', capabilities: { participation: true } }
+    store.connected.value = true
+    store.chooseRun('parent')
+    store.currentRun.value = { run_id: 'parent', status: 'stopped' }
+    store.recovery.value = { ...readable('parent'), participation_required: true, participation_config: config }
+    await store.resumeRun()
+    assert.equal(resumes.length, 0)
+    assert.equal(await store.inviteRecoveryRun(), true)
+    assert.deepEqual(invitations, [config])
+    await store.resumeRun()
+    assert.equal(resumes.length, 0)
+    assert.match(store.operationError.value, /等待全部/)
+    reading.session.machines[1].state = 'approved'
+    reading.session.status = 'ready'; reading.session.ready = true
+    await store.loadParticipation()
+    await store.resumeRun()
+    assert.equal(resumes.length, 1)
+    assert.equal(resumes[0].id, 'parent')
+    assert.equal(store.selectedRunId.value, 'continued')
+  })
+})
+
+test('stale and unreadable recovery configurations cannot send participation invitations', async () => {
+  await withStore(async store => {
+    let requested = 0
+    api.inviteParticipation = async () => { requested++ }
+    store.connected.value = true
+    store.chooseRun('current')
+    store.currentRun.value = { run_id: 'current', status: 'stopped' }
+    store.recovery.value = { ...readable('other'), participation_required: true, participation_config: { rounds: 5 } }
+    assert.equal(await store.inviteRecoveryRun(), false)
+    store.recovery.value = { ...readable('current'), participation_required: true, participation_config: null }
+    assert.equal(await store.inviteRecoveryRun(), false)
+    await store.resumeRun()
+    assert.match(store.operationError.value, /无法读取恢复训练配置/)
+    assert.equal(requested, 0)
   })
 })
 

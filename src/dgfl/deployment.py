@@ -820,18 +820,25 @@ def bundle_cluster(runtime, output, *, machine=None):
             '这是配置包，包含本机身份、集群配置和已安装的公共 CRS，不包含源码、依赖、数据集或实验记录。\n'
             '每台电脑先安装同一版本源码与依赖并准备数据（Windows: scripts/start_demo.ps1 -SetupOnly；'
             'Linux: bash scripts/start_demo.sh --setup-only）。不要复制其他电脑的私钥。\n\n'
-            '在源码目录新建 lan-deployment 文件夹，将本包 runtime 放入其中，'
-            '将已准备的数据目录复制为 lan-deployment/data；不要覆盖原有 runtime。\n'
-            '以下命令在源码根目录、已激活项目虚拟环境时执行：\n\n'
-            '    python -m dgfl.cli start --runtime lan-deployment/runtime\n'
-            + ('    python -m dgfl.cli serve --runtime lan-deployment/runtime\n'
-               '    python -m dgfl.cli doctor --runtime lan-deployment/runtime --data-dir lan-deployment/data/mnist\n'
-               '\n仅 A 启动控制页 http://127.0.0.1:8765；如旧控制页占用 8765，先正常退出旧控制服务。\n'
-               if machine in ('A', 'local') else '\n本机只启动角色节点；在 A 的控制页创建实验。\n')
+            '推荐在网页部署：各电脑打开已有本地控制页，在新建实验中切换多机部署，'
+            '点击“导入本机配置包 ZIP”，选择本机对应的原始 ZIP 包，确认电脑编号和 IP 后启用。\n'
+            '网页会创建与原 runtime 同级的 runtime-lan-<标识>，复用父目录的 data，'
+            '自动启动本机节点并打开新的本地多机页面；原运行目录和实验记录保留。\n'
+            '如旧单机节点占用端口，先在网页点击“释放当前单机节点”，再启用。\n'
+            '手动部署备选：将本包 runtime 改名为 runtime-lan，放在源码根目录，'
+            '与 data 同级；以下命令在源码根目录、已激活项目虚拟环境时执行：\n\n'
+            '    python -m dgfl.cli start --runtime runtime-lan\n'
+            '    python -m dgfl.cli serve --runtime runtime-lan --port 8766\n'
+            '\n手动部署打开 http://127.0.0.1:8766；网页部署会自动选择可用的本机端口。\n'
+            + ('A 在部署页测试连接、发送本次实验邀请，全部主机同意后才可启动训练。\n'
+               '可选命令行检查：python -m dgfl.cli doctor --runtime runtime-lan --data-dir data/mnist\n'
+               if machine in ('A', 'local') else
+               '本机页面会显示 A 的训练邀请；核对实验配置后同意或拒绝，训练开始后同步显示进度。\n')
             + f'\n本机节点端口：{ports}（TCP）；需要各机双向可达，IP 与证书一致。'
-            '同机旧角色占用这些端口时，请先使用其原运行目录执行 stop。\n'
+            '同机旧角色占用这些端口时，先在原控制页释放它们。\n'
             f'本包公共 CRS 数量：{len(parameters)}。各机须使用来自同一份部署计划的参数；不要独立重新生成替代。\n'
-            '停止本机节点：python -m dgfl.cli stop --runtime lan-deployment/runtime\n'
+            '停止本机节点：多机页面点击“释放本机节点”；手动部署也可执行 '
+            'python -m dgfl.cli stop --runtime runtime-lan。\n'
         )
         (output/machine/'README.txt').write_text(instructions, encoding='utf8')
         exported[machine] = str(output/machine)

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import NebulaHeader from './components/NebulaHeader.vue'
 import PageBackdrop from './components/PageBackdrop.vue'
 import LabIcon from './components/LabIcon.vue'
+import ParticipationPanel from './components/ParticipationPanel.vue'
 import Home from './views/Home.vue'
 import Dashboard from './views/Dashboard.vue'
 import Deploy from './views/Deploy.vue'
@@ -57,6 +58,9 @@ onBeforeUnmount(() => {
 
     <main class="nb-main">
       <div class="nb-container wide">
+        <ParticipationPanel v-if="store.participation.value?.role === 'participant'"
+          :participation="store.participation.value" :busy="store.participationBusy.value"
+          :error="store.participationError.value || (!store.connected.value ? '本地控制服务连接中断' : '')" @respond="store.respondParticipation($event)" />
         <div v-if="page !== 'monitor' && !store.connected.value && !store.initialLoading.value" class="nb-notice warning" style="margin-top:24px">
           <LabIcon name="alert" :size="18" />
           <div>
