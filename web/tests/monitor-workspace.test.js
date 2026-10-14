@@ -10,6 +10,8 @@ import { monitorStatus, useNodeMonitor } from '../src/lib/nodeMonitor.js'
 import * as format from '../src/lib/format.js'
 import { consoleStore as store } from '../src/lib/store.js'
 import { runDatasetName } from '../src/lib/datasets.js'
+import * as overview from '../src/lib/monitorOverview.js'
+import * as experiments from '../src/lib/experiments.js'
 
 const flush = () => new Promise(resolve => setImmediate(resolve))
 const response = data => ({ ok: true, text: async () => JSON.stringify(data) })
@@ -18,9 +20,9 @@ function scheduler() {
   let next = 0
   return { scheduled, schedule: (fn, delay) => { scheduled.set(++next, { fn, delay }); return next }, cancel: id => scheduled.delete(id) }
 }
-function monitor(id = 'run-a') {
+function monitor(id = 'run-a', options = {}) {
   const scope = vue.effectScope(), runId = vue.ref(id), timers = scheduler()
-  const state = scope.run(() => useNodeMonitor(runId, timers))
+  const state = scope.run(() => useNodeMonitor(runId, { ...timers, ...options }))
   return { scope, runId, state, ...timers }
 }
 
@@ -175,7 +177,7 @@ test('a background export failure keeps the loaded TensorBoard and reports the e
   } finally { scope.stop(); globalThis.fetch = original }
 })
 
-test('hidden monitor preloads once, pauses console polling and resumes the same frame', async () => {
+test('a mounted native analysis panel pauses console polling while hidden and resumes the same frame', async () => {
   const original = globalThis.fetch, scope = vue.effectScope(), timers = scheduler(), active = vue.ref(false), calls = []
   globalThis.fetch = async url => { calls.push(url); return response({ available: true, url: '/tensorboard/' }) }
   try {
@@ -270,10 +272,57 @@ test('monitor failures preserve the last snapshot with a visible error, and mism
   } finally { current.scope.stop(); globalThis.fetch = original }
 })
 
+test('hidden monitor pauses cached snapshot requests and resumes with the same recorded values', async () => {
+  const original = globalThis.fetch, active = vue.ref(false), calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    return response({ run_id: 'run-a', nodes: [{ id: 'client1', latest: { cpu_percent: 0, rss_bytes: null } }] })
+  }
+  const current = monitor('run-a', { active })
+  try {
+    await flush()
+    assert.equal(calls.length, 0)
+    assert.equal(current.scheduled.size, 0)
+    active.value = true
+    await flush()
+    assert.equal(calls.length, 1)
+    assert.equal(current.state.snapshot.value.nodes[0].latest.cpu_percent, 0)
+    const snapshot = current.state.snapshot.value
+    active.value = false
+    assert.equal(current.scheduled.size, 0)
+    assert.equal(current.state.snapshot.value, snapshot)
+    await current.state.refresh()
+    assert.equal(calls.length, 1, 'hidden panels do not launch manual or timed requests')
+    active.value = true
+    await flush()
+    assert.equal(calls.length, 2)
+    assert.equal(current.state.snapshot.value.nodes[0].latest.rss_bytes, null)
+  } finally { current.scope.stop(); globalThis.fetch = original }
+})
+
+test('hiding an in-flight monitor cancels the request and ignores a late response', async () => {
+  const original = globalThis.fetch, active = vue.ref(true)
+  let signal, finish
+  globalThis.fetch = async (_url, options) => {
+    signal = options.signal
+    return await new Promise(resolve => { finish = resolve })
+  }
+  const current = monitor('run-a', { active })
+  try {
+    active.value = false
+    assert.equal(signal.aborted, true)
+    assert.equal(current.state.busy.value, false)
+    finish(response({ run_id: 'run-a', nodes: [{ id: 'late-client' }] }))
+    await flush()
+    assert.equal(current.state.snapshot.value, null)
+    assert.equal(current.scheduled.size, 0)
+  } finally { current.scope.stop(); globalThis.fetch = original }
+})
+
 function component(path, dependencies) {
   const source = readFileSync(new URL(`../src/${path}.vue`, import.meta.url), 'utf8')
   const compiled = compileScript(parse(source).descriptor, { id: path, inlineTemplate: true }).content
-  const bindings = { ...vue, ...format, ...dependencies }
+  const bindings = { ...vue, ...format, ...overview, ...experiments, ...dependencies }
   const executable = compiled.replace(/^import \{ ([^\r\n]*) \} from [^\r\n]*\r?\n/gm, (_, imports) => {
     for (const item of imports.split(',')) {
       const [original, alias = original] = item.trim().split(/\s+as\s+/)
@@ -311,34 +360,272 @@ test('node table renders actual training metrics and separates physical machine 
   assert.doesNotMatch(html, /NaN|Infinity/)
 })
 
-test('monitor is a single native TensorBoard surface without summary, node tables or protocol cards', async () => {
+function monitorDependencies(overrides = {}) {
   const stub = name => ({ render: () => vue.h('section', { 'data-panel': name }, name) })
-  const Monitor = component('views/Monitor', {
-    store, consoleStore: store, runDatasetName, gpuEvidence: () => ({ show: false }), GPU_TIMING_NOTE: '',
-    LabIcon: stub('icon'), MetricCard: stub('metric'), EmptyState: stub('empty'), PageHead: stub('head'), RunToolbar: stub('toolbar'),
+  const LabIcon = stub('icon')
+  return {
+    store, consoleStore: store, runDatasetName, LabIcon,
+    MetricCard: component('components/MetricCard', { LabIcon }),
+    StatusBadge: component('components/StatusBadge', { LabIcon }),
+    EmptyState: component('components/EmptyState', { LabIcon }),
     TensorBoardPanel: stub('tensorboard'), NodeMonitorPanel: stub('nodes'),
-  })
+    MonitorTrainingPanel: stub('training'), MonitorExecutionPanel: stub('execution'),
+    RecoveryPanel: component('components/RecoveryPanel', { LabIcon }),
+    MonitorResourcePanel: stub('resources'), MonitorEntityDrawer: stub('drawer'),
+    useNodeMonitor: () => ({ snapshot: vue.ref(null), busy: vue.ref(false), error: vue.ref(''), updatedAt: vue.ref(''), refresh() {} }),
+    document: { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} },
+    setInterval: () => 1, clearInterval() {},
+    ...overrides,
+  }
+}
+
+function resetMonitorStore() {
+  store.currentRun.value = null
+  store.selectedRunId.value = ''
+  store.runs.value = []
+  store.connected.value = false
+  store.initialLoading.value = true
+  store.loadingRun.value = false
+  store.runError.value = ''
+  store.listError.value = ''
+  store.operationError.value = ''
+  store.recovery.value = null
+  store.recovering.value = false
+  store.status.value = null
+  if (store.inspectionRound) store.inspectionRound.value = null
+}
+
+test('monitor retains the recovery action alongside native metrics and hides recovery from a different run', async () => {
+  const Monitor = component('views/Monitor', monitorDependencies())
+  const originalResume = store.resumeRun
+  let resumes = 0
+  store.resumeRun = () => { resumes += 1 }
+  resetMonitorStore()
+  store.connected.value = true
+  store.initialLoading.value = false
+  store.chooseRun('historical')
+  store.currentRun.value = { run_id: 'historical', name: '已停止的实验', status: 'stopped',
+    config: { dataset: 'mnist', rounds: 5 }, rounds: [] }
+  store.recovery.value = { run_id: 'historical', resumable: true, start_round: 3,
+    checkpoint: { round: 2, sha256: 'ab'.repeat(32), model_hash: 'cd'.repeat(32) } }
+  const workspace = mountWorkspace(Monitor)
   try {
-    store.currentRun.value = { run_id: 'historical', config: { dataset: 'mnist' }, rounds: [], events: [] }
+    const button = workspace.find(node => node.props?.['data-testid'] === 'resume-button')
+    assert.ok(button)
+    assert.equal(button.props.disabled, false)
+    button.props.onClick()
+    assert.equal(resumes, 1)
+    assert.ok(workspace.find(node => node.props?.['data-panel'] === 'training'))
+    assert.ok(workspace.find(node => node.props?.['data-panel'] === 'nodes'))
+
+    store.status.value = { active_run_id: 'another-run' }
+    await vue.nextTick()
+    assert.equal(workspace.find(node => node.props?.['data-testid'] === 'resume-button').props.disabled, true)
+    store.recovery.value = { ...store.recovery.value, run_id: 'other-run' }
+    await vue.nextTick()
+    assert.equal(workspace.find(node => node.props?.['data-testid'] === 'recovery-panel'), undefined)
+  } finally {
+    workspace.app.unmount()
+    store.resumeRun = originalResume
+    resetMonitorStore()
+  }
+})
+
+// A small Vue host lets these tests exercise tab clicks and component lifetime
+// without substituting the real workspace template or introducing a DOM library.
+function mountWorkspace(Monitor, props = {}) {
+  const root = { type: 'root', children: [] }
+  const renderer = vue.createRenderer({
+    createElement: type => ({ type, tagName: type.toUpperCase(), props: {}, style: {}, children: [], parent: null }),
+    createText: text => ({ type: '#text', text, parent: null }),
+    createComment: text => ({ type: '#comment', text, parent: null }),
+    setText: (node, text) => { node.text = text },
+    setElementText: (node, text) => { node.children = []; node.text = text },
+    parentNode: node => node.parent,
+    nextSibling: node => node.parent?.children[node.parent.children.indexOf(node) + 1] || null,
+    insert(node, parent, anchor = null) {
+      if (node.parent) node.parent.children.splice(node.parent.children.indexOf(node), 1)
+      node.parent = parent
+      const index = anchor ? parent.children.indexOf(anchor) : -1
+      if (index < 0) parent.children.push(node)
+      else parent.children.splice(index, 0, node)
+    },
+    remove(node) { if (node.parent) node.parent.children.splice(node.parent.children.indexOf(node), 1); node.parent = null },
+    patchProp(node, key, _previous, value) { node.props[key] = value },
+  })
+  const active = vue.ref(true)
+  const app = renderer.createApp({ render: () => vue.h(Monitor, { active: active.value, ...props }) })
+  app.mount(root)
+  const find = predicate => {
+    const visit = node => predicate(node) ? node : (node.children || []).map(visit).find(Boolean)
+    return visit(root)
+  }
+  return { app, active, find, root,
+    async tab(id) { find(node => node.props?.id === `monitor-tab-${id}`).props.onClick(); await vue.nextTick() },
+  }
+}
+
+test('monitor opens an overview with training and node metrics without duplicate host resource cards', async () => {
+  const Monitor = component('views/Monitor', monitorDependencies())
+  try {
+    store.initialLoading.value = false
+    store.connected.value = true
+    store.currentRun.value = { run_id: 'historical', status: 'completed', config: { dataset: 'mnist', rounds: 5 },
+      rounds: [{ round: 1, accuracy: 0, loss: 0, duration_s: 0 }], events: [] }
     store.selectedRunId.value = 'historical'
     store.runs.value = [
       { run_id: 'historical', mode: 'dgflow', status: 'completed', config: { dataset: 'mnist' } },
       { run_id: 'other-run', mode: 'optimized', status: 'completed', config: { dataset: 'cifar10' } },
     ]
     const html = await renderToString(vue.createSSRApp(Monitor))
-    assert.match(html, /data-panel="tensorboard"/)
-    // No chrome at all: no node table, heading, metric card, toolbar, and no
-    // page-owned control. Which experiment is shown comes from shared navigation.
-    assert.doesNotMatch(html, /data-panel="(?:nodes|head|metric|toolbar)"|<details|<table|<svg|<select|<button|协议耗时|执行事件/)
-    assert.doesNotMatch(html, /monitor-run-picker|nb-run-picker/)
-  } finally {
-    store.currentRun.value = null
-    store.selectedRunId.value = ''
-    store.runs.value = []
-  }
+    assert.match(html, /运行总览/)
+    assert.match(html, /节点与资源/)
+    assert.match(html, /深入分析/)
+    assert.match(html, /role="tab" aria-selected="true" aria-controls="monitor-panel-overview"/)
+    assert.match(html, /完成轮次/)
+    assert.match(html, /1 \/ 5/)
+    assert.match(html, /全局测试准确率/)
+    assert.match(html, /0\.00%/)
+    assert.match(html, /全局测试损失/)
+    assert.match(html, /0\.0000/)
+    assert.match(html, /第 1 轮 · 全局测试集/)
+    assert.match(html, /历史实验/)
+    for (const panel of ['training', 'execution', 'nodes']) assert.match(html, new RegExp(`data-panel="${panel}"`))
+    assert.doesNotMatch(html, /data-panel="resources"|data-panel="tensorboard"|<iframe|健康度|预计剩余/)
+    assert.match(html, /id="monitor-run-picker"/)
+  } finally { resetMonitorStore() }
 })
 
-test('the monitor shell removes the footer and constrained container while preserving shared navigation', async () => {
+test('monitor displays escaped experiment metadata while its picker retains the immutable ID', async () => {
+  const Monitor = component('views/Monitor', monitorDependencies())
+  try {
+    resetMonitorStore()
+    const record = { run_id: 'opaque-a123', name: 'MNIST <防御> 对照', description: '比较筛选效果\n<script>不可执行</script>',
+      status: 'completed', config: { dataset: 'mnist', rounds: 1 }, rounds: [], events: [] }
+    store.initialLoading.value = false
+    store.selectedRunId.value = record.run_id
+    store.currentRun.value = record
+    store.runs.value = [record]
+    const html = await renderToString(vue.createSSRApp(Monitor))
+    assert.match(html, /<option value="opaque-a123"[^>]*>MNIST &lt;防御&gt; 对照 · 已完成<\/option>/)
+    assert.match(html, /class="monitor-description"/)
+    assert.match(html, /&lt;script&gt;不可执行&lt;\/script&gt;/)
+    assert.doesNotMatch(html, /<script>|>opaque-a123 ·/)
+  } finally { resetMonitorStore() }
+})
+
+test('an experiment change never renders the previous experiment detail under the new selection', async () => {
+  const Monitor = component('views/Monitor', monitorDependencies())
+  try {
+    store.initialLoading.value = false
+    store.currentRun.value = { run_id: 'old', status: 'completed', config: { dataset: 'mnist', rounds: 1 },
+      rounds: [{ round: 1, accuracy: .8765, loss: .1234 }], events: [] }
+    store.selectedRunId.value = 'new'
+    store.runs.value = [{ run_id: 'new', status: 'running' }]
+    store.loadingRun.value = true
+    const html = await renderToString(vue.createSSRApp(Monitor))
+    assert.match(html, /正在读取实验记录/)
+    assert.doesNotMatch(html, /87\.65%|0\.1234|data-panel="training"|data-panel="nodes"/)
+  } finally { resetMonitorStore() }
+})
+
+test('empty monitoring offers a deployment action without inventing metrics or loading analysis', async () => {
+  const Monitor = component('views/Monitor', monitorDependencies())
+  try {
+    resetMonitorStore()
+    store.initialLoading.value = false
+    const html = await renderToString(vue.createSSRApp(Monitor))
+    assert.match(html, /开始观察第一场实验/)
+    assert.match(html, /部署实验/)
+    assert.doesNotMatch(html, /data-panel="tensorboard"|data-panel="training"|全局测试准确率/)
+  } finally { resetMonitorStore() }
+})
+
+test('workspace tabs mount native analysis once, preserve it, and pause the inactive data source', async () => {
+  let mounted = 0, unmounted = 0, polling
+  const TensorBoardPanel = vue.defineComponent({
+    props: ['active'],
+    setup(props) {
+      vue.onMounted(() => { mounted += 1 })
+      vue.onUnmounted(() => { unmounted += 1 })
+      return () => vue.h('section', { 'data-panel': 'tensorboard', 'data-active': props.active })
+    },
+  })
+  const Monitor = component('views/Monitor', monitorDependencies({ TensorBoardPanel,
+    useNodeMonitor: (_runId, options) => {
+      polling = options.active
+      return { snapshot: vue.ref(null), busy: vue.ref(false), error: vue.ref(''), updatedAt: vue.ref(''), refresh() {} }
+    },
+  }))
+  let workspace
+  try {
+    resetMonitorStore()
+    store.initialLoading.value = false
+    store.connected.value = true
+    store.selectedRunId.value = 'active-run'
+    store.currentRun.value = { run_id: 'active-run', status: 'running', config: { rounds: 3 }, rounds: [], events: [] }
+    workspace = mountWorkspace(Monitor)
+    assert.equal(mounted, 0, 'overview does not create the native analysis component')
+    assert.equal(workspace.find(node => node.props?.['data-panel'] === 'resources'), undefined, 'overview omits duplicate host resource cards')
+    assert.equal(workspace.find(node => node.props?.['data-panel'] === 'nodes').props.compact, true)
+    assert.equal(polling.value, true)
+    await workspace.tab('analysis')
+    assert.equal(mounted, 1)
+    const frame = workspace.find(node => node.props?.['data-panel'] === 'tensorboard')
+    assert.equal(frame.props['data-active'], true)
+    assert.equal(polling.value, false)
+    await workspace.tab('overview')
+    assert.equal(workspace.find(node => node.props?.['data-panel'] === 'tensorboard'), frame)
+    assert.equal(frame.props['data-active'], false)
+    assert.equal(polling.value, true)
+    await workspace.tab('resources')
+    assert.equal(workspace.find(node => node.props?.['data-panel'] === 'training'), undefined)
+    assert.ok(workspace.find(node => node.props?.['data-panel'] === 'nodes'))
+    assert.equal(workspace.find(node => node.props?.['data-panel'] === 'nodes').props.compact, false)
+    assert.equal(workspace.find(node => node.props?.['data-panel'] === 'resources'), undefined, 'the resources tab also omits duplicate host resource cards')
+    await workspace.tab('overview')
+    assert.equal(workspace.find(node => node.props?.['data-panel'] === 'resources'), undefined, 'returning to overview removes host resource cards')
+    await workspace.tab('analysis')
+    assert.equal(mounted, 1)
+    assert.equal(unmounted, 0)
+    workspace.active.value = false
+    await vue.nextTick()
+    assert.equal(frame.props['data-active'], false)
+    assert.equal(polling.value, false)
+  } finally { workspace?.app.unmount(); resetMonitorStore() }
+  assert.equal(unmounted, 1)
+})
+
+test('a round selected in the monitor opens validation for the same experiment and round', async () => {
+  const MonitorTrainingPanel = vue.defineComponent({
+    emits: ['select-round', 'verify'],
+    setup(_props, { emit }) {
+      return () => vue.h('div', [
+        vue.h('button', { 'data-action': 'round', onClick: () => emit('select-round', 2) }, '选择第 2 轮'),
+        vue.h('button', { 'data-action': 'verify', onClick: () => emit('verify', 2) }, '核验第 2 轮'),
+      ])
+    },
+  })
+  const Monitor = component('views/Monitor', monitorDependencies({ MonitorTrainingPanel }))
+  let workspace, destination
+  try {
+    resetMonitorStore()
+    store.selectedRunId.value = 'round-inspection'
+    store.currentRun.value = { run_id: 'round-inspection', status: 'completed', config: { rounds: 2 },
+      rounds: [{ round: 1 }, { round: 2 }], events: [] }
+    workspace = mountWorkspace(Monitor, { onNavigate: value => { destination = value } })
+    workspace.find(node => node.props?.['data-action'] === 'round').props.onClick()
+    await vue.nextTick()
+    const execution = workspace.find(node => node.props?.['data-panel'] === 'execution')
+    assert.equal(execution.props['selected-round'], 2)
+    workspace.find(node => node.props?.['data-action'] === 'verify').props.onClick()
+    assert.equal(store.inspectionRound.value.runId, 'round-inspection')
+    assert.equal(store.inspectionRound.value.round, 2)
+    assert.equal(destination, 'validation')
+  } finally { workspace?.app.unmount(); resetMonitorStore() }
+})
+
+test('the monitor shell preserves shared navigation and the standard scrolling content container', async () => {
   const stub = name => ({ render: () => vue.h('div', { 'data-view': name }, name) })
   const App = component('App', {
     window: { location: { hash: '#monitor' } }, store, consoleStore: store,
@@ -350,6 +637,7 @@ test('the monitor shell removes the footer and constrained container while prese
   assert.match(html, /nb-app-monitor/)
   assert.match(html, /data-view="navigation"/)
   assert.match(html, /data-view="monitor"/)
+  assert.match(html, /nb-container wide/)
   assert.doesNotMatch(html, /data-view="footer"|暂时无法连接实验引擎/)
 })
 

@@ -67,7 +67,7 @@ def main(argv=None):
     report = {'kind': 'canonical-codec-timing',
               'python': platform.python_version(),
               'implementation': platform.python_implementation(),
-              'machine': platform.node(),
+              'machine': 'redacted',
               'platform': platform.platform(),
               'scope': ('Single-process in-memory timings of the canonical codec. '
                         'No network, disk or cryptographic work; not a protocol benchmark.'),

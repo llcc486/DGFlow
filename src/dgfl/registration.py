@@ -462,6 +462,10 @@ def verify_registry(registry, *, authority_certificate):
     if not isinstance(nodes, dict) or not nodes:
         raise RegistrationError('登记表为空')
     for name, entry in nodes.items():
+        if (not isinstance(entry, dict) or entry.get('node') != name
+                or entry.get('schema') != ENTRY_SCHEMA
+                or entry.get('registry_version') != IDENTITY_REGISTRY_VERSION):
+            raise RegistrationError(f'{name}：登记条目名称或版本与登记表不符')
         signature = entry.get('signature')
         if not isinstance(signature, str) or not signature:
             raise RegistrationError(f'{name}：登记条目缺少签发签名')
@@ -476,27 +480,49 @@ def verify_registry(registry, *, authority_certificate):
     return registry
 
 
-def check_local_identity(root, registry, node):
+def transport_registry(registry, *, authority_certificate):
+    """Verify signed entries and expose the existing transport's public-key map."""
+    verify_registry(registry, authority_certificate=authority_certificate)
+    return {name: {field: entry[field]
+                   for field in ('signing_public', 'exchange_public', 'host')}
+            for name, entry in registry['nodes'].items()}
+
+
+def check_local_identity(root, registry, node, *, authority_certificate=None):
     """Confirm before startup that this machine's private keys match its entry.
 
     This is the check that turns "the platform issued me keys" into "the keys I hold
     are the keys in the registry". A mismatch stops the node from starting rather
     than letting it authenticate as nothing.
     """
-    registry = verify_registry(registry, authority_certificate=registry['ca_pem'])
+    root = Path(root)
+    if authority_certificate is None:
+        ca_path = root/'ca.pem'
+        authority_certificate = (ca_path.read_text('ascii') if ca_path.is_file()
+                                 else registry['ca_pem'])
+    registry = verify_registry(registry, authority_certificate=authority_certificate)
     entry = registry['nodes'].get(node)
     if entry is None:
         raise RegistrationError(f'{node}：受信登记表中没有本节点')
-    folder = Path(root)/node
+    folder = root/node
     if not (folder/'identity.json').is_file():
         raise RegistrationError(f'{node}：本机身份文件不存在')
     if _public_from_private(folder, 'signing') != entry['signing_public']:
         raise RegistrationError(f'{node}：本机签名私钥与登记公钥不匹配')
     if _public_from_private(folder, 'exchange') != entry['exchange_public']:
         raise RegistrationError(f'{node}：本机密钥交换私钥与登记公钥不匹配')
-    for name in ('tls.pem',):
+    for name in ('tls.pem', 'tls-key.pem'):
         if not (folder/name).is_file():
-            raise RegistrationError(f'{node}：缺少已签发的证书 {name}')
+            raise RegistrationError(f'{node}：缺少本机 TLS 材料 {name}')
+    certificate = x509.load_pem_x509_certificate((folder/'tls.pem').read_bytes())
+    tls_key = serialization.load_pem_private_key((folder/'tls-key.pem').read_bytes(), password=None)
+    certificate_public = certificate.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    local_public = tls_key.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    from dgfl.crypto.backend import digest
+    if certificate_public != local_public or digest(certificate_public) != entry['tls_public_sha256']:
+        raise RegistrationError(f'{node}：本机 TLS 私钥或证书与登记公钥不匹配')
     return entry
 
 

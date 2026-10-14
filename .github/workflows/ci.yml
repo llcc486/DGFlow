@@ -90,15 +90,9 @@ jobs:
           print('Required CPU Torch:', torch.__version__)
           PY
       - name: Test training, full CNN updates and Torch parity
-        run: python -m pytest -q tests/training --junitxml=cnn-results.xml
-      - name: Fail if any required training test was skipped
-        run: |
-          python - <<'PY'
-          import xml.etree.ElementTree as ET
-          cases = ET.parse('cnn-results.xml').findall('.//testcase')
-          assert cases, 'No training tests were collected'
-          assert not any(case.find('skipped') is not None for case in cases), 'Required training tests were skipped'
-          PY
+        # All CPU tests must execute. Only explicitly marked checks of an optional
+        # preinstalled original data cache may skip; fixture-based loaders run.
+        run: python -m pytest -q tests/training --require-cpu-training --junitxml=cnn-results.xml
 
   native-lego:
     name: Required native Rust and Lego proof paths
@@ -141,6 +135,8 @@ jobs:
           tests/crypto/test_acceleration.py::test_native_gt_and_public_fixed_tables_match_upstream
           tests/crypto/test_lego.py tests/crypto/test_lego_registry.py
           tests/crypto/test_aggregate_native.py tests/crypto/test_partial_decryption.py
+          tests/crypto/test_paper_dimension_native.py
+          tests/packaging/test_full_offline_native.py
           tests/integration/test_lego_roles.py tests/experiments/test_runner_lego.py
           tests/integration/test_configurable_batches.py
           --junitxml=native-lego-results.xml
@@ -175,6 +171,7 @@ jobs:
       - name: Require the packaging boundary tests to run, not skip
         run: >-
           python -m pytest -q tests/packaging
+          --ignore=tests/packaging/test_full_offline_native.py
           --junitxml=packaging-results.xml
       - name: Fail if any packaging boundary test was skipped
         run: |

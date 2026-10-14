@@ -188,9 +188,10 @@ class Registry:
         The manifest is a plain local file: `created_at` and `setup_kind` are not
         covered by any digest, so without a credential nothing says who produced the
         keys. The installed credential is verified against the deployment's trusted
-        issuer key. When an anchor is configured, a missing or invalid credential is
-        refused; when this deployment requires provenance and no anchor is configured,
-        that is refused too, because "required but unchecked" is not a pass.
+        issuer key. An invalid credential is refused when an anchor is configured.
+        Requiring provenance also refuses missing credentials or a missing anchor,
+        because "required but unchecked" is not a pass. Legacy installations remain
+        usable with an unchecked report when provenance has not been required.
         """
         from . import provenance
         anchor = provenance.trust_anchor()
@@ -204,6 +205,8 @@ class Registry:
             self._provenance_report = provenance.verify(manifest, credential)
             return self._provenance_report
         report = provenance.verify(manifest, credential, anchor=anchor)
+        if required and (report['checked'] is not True or report['authentic'] is not True):
+            raise ValueError('本部署要求 CRS 来源校验，但未安装可验证的来源凭据；拒绝使用未经校验的参数集')
         self._provenance_report = report
         return report
 

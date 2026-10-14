@@ -105,3 +105,16 @@ test('the refresh and download actions are disabled while busy', async () => {
   const html = await render({ registration: registered, busy: true })
   assert.match(html, /disabled/)
 })
+
+test('a failed registration reading states the error without inventing a trust environment', async () => {
+  const html = await render({ registration: { nodes: {}, identity_scheme: null, reason: '无法读取登记状态：连接失败' } })
+  assert.match(html, /无法读取登记状态：连接失败/)
+  assert.match(html, /role="alert"/)
+  assert.doesNotMatch(html, /集中生成身份|单机模拟信任环境|nb-registration-table/)
+})
+
+test('an unknown identity scheme remains unconfirmed', async () => {
+  const html = await render({ registration: { nodes: {}, identity_scheme: null } })
+  assert.match(html, /尚未确认/)
+  assert.doesNotMatch(html, /集中生成身份/)
+})

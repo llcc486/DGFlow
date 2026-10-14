@@ -997,7 +997,7 @@ def pending_registration(runtime=DEFAULT_RUNTIME, *, machine=None):
             # Identities were prepared locally, so nothing is pending and a node can
             # start when its identity and certificate are present.
             state = 'startable' if has_identity and has_certificate else 'pending'
-        elif issued and has_registration and has_certificate:
+        elif issued and has_identity and has_registration and has_certificate:
             state = 'startable'
         elif issued:
             state = 'registered'
@@ -1108,12 +1108,8 @@ def issue_registration(runtime, request, *, authority, allow_reissue=False):
     (runtime/'registration-issued').mkdir(parents=True, exist_ok=True)
     atomic_json(runtime/'registration-issued'/f"{request['node']}.json", issued)
     registry = reg.registry_from_entries(entries, authority_certificate=issued['ca_certificate'])
-    atomic_json(runtime/'keys'/'registry.json', {'nodes': {
-        name: {'signing_public': entry['signing_public'],
-               'exchange_public': entry['exchange_public'],
-               'host': entry['host'],
-               'signature': entry['signature']}
-        for name, entry in registry['nodes'].items()}})
+    atomic_json(runtime/'keys'/'registry.json',
+                reg.transport_registry(registry, authority_certificate=issued['ca_certificate']))
     (runtime/'keys'/'ca.pem').write_text(issued['ca_certificate'], encoding='ascii')
     (runtime/'keys'/'registration-registry.json').write_text(
         json.dumps(registry, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
@@ -1146,8 +1142,13 @@ def registration_bundle(runtime, machine, output):
         if not path.exists():
             raise ValueError(f'{name}：尚未登记，本机配置包无法生成；请先接受该节点的登记请求')
         issued_material[name] = json.loads(path.read_text('utf8'))
-    registry = reg.registry_from_entries(list(issued_material.values()),
-                                         authority_certificate=next(iter(issued_material.values()))['ca_certificate'])
+    # Every role needs peer public keys, including peers on other machines. Only
+    # this machine's certificates are packaged below; private keys never leave it.
+    all_material = [json.loads(path.read_text('utf8'))
+                    for path in sorted((runtime/'registration-issued').glob('*.json'))]
+    authority_certificate = next(iter(issued_material.values()))['ca_certificate']
+    registry = reg.registry_from_entries(all_material, authority_certificate=authority_certificate)
+    public_registry = reg.transport_registry(registry, authority_certificate=authority_certificate)
     output.mkdir(parents=True, exist_ok=False)
     folder = output/machine
     (folder/'keys').mkdir(parents=True)
@@ -1166,18 +1167,16 @@ def registration_bundle(runtime, machine, output):
     (folder/'keys'/'ca.pem').write_text(next(iter(issued_material.values()))['ca_certificate'],
                                         encoding='ascii')
     (folder/'keys'/'registry.json').write_text(
-        json.dumps({'nodes': {name: {'signing_public': entry['signing_public'],
-                                     'exchange_public': entry['exchange_public'],
-                                     'host': entry['host'],
-                                     'signature': entry['signature']}
-                              for name, entry in registry['nodes'].items()}},
-                   ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
+        json.dumps(public_registry, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
     (folder/'cluster.json').write_text(
         json.dumps(config, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf8')
     atomic_json(folder/'machine.json', {'machine': machine})
+    from dgfl.crypto.lego_registry import Registry
+    parameters = Registry(runtime).export_to(folder)
     (folder/'README.txt').write_text(_registration_instructions(machine, names, config), encoding='utf8')
     return {'machine': machine, 'nodes': names, 'output': str(folder),
             'public_only': True,
+            'proof_parameters': len(parameters),
             'deployment_id': config.get('deployment_id')}
 
 
@@ -1189,12 +1188,15 @@ def _registration_instructions(machine, names, config):
         '本包不包含任何私钥。每台机器自行生成并持有本机密钥；平台只登记公钥。\n\n'
         '步骤：\n'
         '1. 在本机源码目录生成身份与登记请求（私钥留在本机）：\n'
-        f'   python -m dgfl.cli identity-init --node {names[0]} --host <本机地址>\n'
-        f'   python -m dgfl.cli register-request --node {names[0]} --deployment <部署标识>\n'
+        f'   python -m dgfl.cli identity-init --runtime <本机运行目录> --node {names[0]} '
+        f'--host <本机地址> --deployment {config.get("deployment_id")}\n'
+        '   对本机每个节点分别执行；请求文件在本机运行目录的 registration-requests 中。\n'
         '2. 把请求文件交给平台（在签发环境所在机器执行）：\n'
         '   python -m dgfl.cli register-accept --request <请求文件> --authority <签发环境>\n'
-        '3. 取回本机配置包并解压到本机运行目录，然后核对身份：\n'
-        f'   python -m dgfl.cli register-check --node {names[0]}\n\n'
+        '3. 将包内 keys、cluster.json、machine.json 和 proof-parameters 合并到本机已有运行目录，'
+        '保留本机各节点的 identity.json 与 tls-key.pem，然后逐个核对身份：\n'
+        f'   python -m dgfl.cli register-check --runtime <本机运行目录> --node {names[0]}\n'
+        '   所有机器登记完成后重新下载各机配置包，以同步完整的远端公钥表。\n\n'
         '启动前若报"本机私钥与登记公钥不匹配"，说明本机身份与登记材料不是同一对，'
         '必须重新登记，不要手工改登记表。\n\n'
         f'本机节点端口：{ports}\n'

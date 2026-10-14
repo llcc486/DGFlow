@@ -1,7 +1,7 @@
 {
   "implementation": "CPython",
   "kind": "canonical-codec-timing",
-  "machine": "DESKTOP-GT1VP52",
+  "machine": "redacted",
   "platform": "Windows-11-10.0.26100-SP0",
   "python": "3.12.2",
   "rejected_changes": [

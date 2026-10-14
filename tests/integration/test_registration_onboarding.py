@@ -11,15 +11,21 @@ directory layout.
 """
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from dgfl import deployment as deploy
 from dgfl import registration as reg
 from dgfl.cli import main
+from dgfl.crypto.lego_registry import Registry, available
+from dgfl.services.control import create_control_app
 from dgfl.topology import client_authorities, validate_topology
+from dgfl.transport.security import Identity
 
 DEPLOYMENT = 'contest-lan-1'
 # Each machine owns a disjoint set of nodes, as the LAN deployment does. The
@@ -156,6 +162,83 @@ def test_each_machine_confirms_its_own_keys_before_startup(platform, machines):
         for name in names:
             assert main(['register-check', '--runtime', str(machines[machine]),
                          '--node', name]) == 0
+
+
+def test_registration_packages_authenticate_and_encrypt_between_machines(platform, machines):
+    for machine in MACHINES:
+        generate_and_accept(platform, machines, machine)
+    for machine in MACHINES:
+        bundle = install_machine(platform, machines, machine)
+        public_registry = json.loads((bundle/'keys'/'registry.json').read_text('utf8'))
+        assert set(public_registry) == ALL_NODES
+        assert {path.name for path in (bundle/'keys').iterdir() if path.is_dir()} == set(MACHINES[machine])
+    sender = Identity(machines['A']/'keys', 'authority1')
+    recipient = Identity(machines['C']/'keys', 'client3')
+    sealed = sender.seal('client3', 'registration-test', {'share': b'private-share'}, 'epoch-1')
+    assert recipient.open(sealed, 'registration-test', 'epoch-1', 'authority1')['payload'] == {
+        'share': b'private-share'}
+    signed = recipient.sign_public('registration-reply', {'accepted': True})
+    assert sender.verify_public(signed, 'registration-reply', 'client3') == {'accepted': True}
+
+
+def test_registered_deployment_download_returns_public_registration_package(platform, machines):
+    for machine in MACHINES:
+        generate_and_accept(platform, machines, machine)
+    with TestClient(create_control_app(platform[0], auto_prepare_compute=False)) as http:
+        response = http.get('/api/deployment/bundle/B')
+    assert response.status_code == 200, response.text
+    assert response.headers['content-type'] == 'application/zip'
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+        prefix = 'dgflow-B/'
+        assert prefix+'keys/registry.json' in names
+        assert prefix+'keys/registration-registry.json' in names
+        assert prefix+'cluster.json' in names and prefix+'machine.json' in names
+        assert set(json.loads(archive.read(prefix+'keys/registry.json'))) == ALL_NODES
+        for node in MACHINES['B']:
+            assert prefix+f'keys/{node}/tls.pem' in names
+        assert not any(name.endswith(('identity.json', 'tls-key.pem', 'ca-key.pem')) for name in names)
+        assert not any(b'PRIVATE KEY' in archive.read(name) for name in names)
+
+
+@pytest.mark.skipif(not available(), reason='persistent Lego native extension required')
+def test_registration_package_preserves_installed_public_crs(platform, machines):
+    runtime = platform[0]
+    generate_and_accept(platform, machines, 'A')
+    manifest = Registry(runtime).create_development(3, 3, workers=1)
+    bundle = Path(deploy.registration_bundle(runtime, 'A', machines['A'].parent/'crs-bundle')['output'])
+    source = runtime/'proof-parameters'/manifest['crs_hash']
+    exported = bundle/'proof-parameters'/manifest['crs_hash']
+    assert {path.name for path in exported.iterdir()} == {'manifest.json', 'pk.bin', 'vk.bin', 'provenance.json'}
+    assert (exported/'pk.bin').read_bytes() == (source/'pk.bin').read_bytes()
+    assert (exported/'vk.bin').read_bytes() == (source/'vk.bin').read_bytes()
+    assert json.loads((exported/'provenance.json').read_text('utf8')) == json.loads(
+        (source/'provenance.json').read_text('utf8'))
+
+
+def test_registered_identity_rejects_a_modified_transport_peer_key(platform, machines):
+    onboard(platform, machines, 'A')
+    path = machines['A']/'keys'/'registry.json'
+    registry = json.loads(path.read_text('utf8'))
+    registry['client1']['exchange_public'] = registry['authority1']['exchange_public']
+    path.write_text(json.dumps(registry), encoding='utf8')
+    with pytest.raises(ValueError, match='does not match signed registration'):
+        Identity(machines['A']/'keys', 'authority1')
+
+
+def test_registered_identity_rejects_missing_signed_registration(platform, machines):
+    onboard(platform, machines, 'A')
+    (machines['A']/'keys'/'registration-registry.json').unlink()
+    with pytest.raises(ValueError, match='requires a signed registration registry'):
+        Identity(machines['A']/'keys', 'authority1')
+
+
+def test_registration_status_does_not_mark_missing_private_identity_as_startable(platform, machines):
+    onboard(platform, machines, 'A')
+    (machines['A']/'keys'/'authority1'/'identity.json').unlink()
+    status = deploy.pending_registration(machines['A'], machine='A')
+    assert 'authority1' not in status['startable']
+    assert status['nodes']['authority1']['state'] == 'registered'
 
 
 def test_register_check_refuses_a_machine_whose_identity_was_replaced(platform, machines, capsys):

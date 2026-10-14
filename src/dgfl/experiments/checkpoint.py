@@ -53,6 +53,7 @@ from dgfl.versioning import (
     SCREENING_VERSION,
     VersionMismatch,
     accepts_record,
+    require_protocol,
 )
 
 SUBDIRECTORY = 'checkpoints'
@@ -61,7 +62,8 @@ GLOB = 'checkpoint-round-*.bin'
 #: instead of proceeding with a partially understood state.
 FIELDS = ('schema_version', 'round', 'model', 'model_hash', 'model_sha256', 'config_digest',
           'plan_digest', 'context_hash', 'authorization_manifest_hash', 'key_epoch',
-          'previous_checkpoint_sha256', 'versions', 'scope', 'refused_content')
+          'previous_checkpoint_sha256', 'versions', 'scope', 'refused_content',
+          'config', 'plan', 'context')
 
 
 def _fsync_directory(path):
@@ -198,14 +200,37 @@ def load(path):
     for field in FIELDS:
         if field not in document:
             raise ValueError(f'checkpoint is missing {field}')
-    if not isinstance(document['model'], list) or not document['model']:
+    if (not isinstance(document['model'], list) or not document['model']
+            or any(type(value) is not int for value in document['model'])):
         raise ValueError('checkpoint model is absent')
     if b.digest(document['model']) != document['model_hash']:
         raise ValueError('checkpoint model does not match its recorded digest')
+    if b.digest(packb(document['model'])) != document['model_sha256']:
+        raise ValueError('checkpoint model bytes do not match their recorded digest')
+    for field in ('config', 'plan', 'context'):
+        if not isinstance(document[field], dict):
+            raise ValueError(f'checkpoint {field} is not a mapping')
+    for field in ('config', 'plan'):
+        if b.digest(document[field]) != document[field + '_digest']:
+            raise ValueError(f'checkpoint {field} does not match its recorded digest')
     if b.digest(document['context']) != document['context_hash']:
         raise ValueError('checkpoint context does not match its recorded digest')
-    if int(document['context'].get('round_id', -1)) != int(document['round']):
+    if type(document['round']) is not int or document['round'] < 1:
+        raise ValueError('checkpoint round is invalid')
+    if document['context'].get('round_id') != document['round']:
         raise ValueError('checkpoint context disagrees with its round')
+    if document['context'].get('dimension') != len(document['model']):
+        raise ValueError('checkpoint model dimension differs from its context')
+    if document['context'].get('key_epoch') != document['key_epoch']:
+        raise ValueError('checkpoint key epoch differs from its context')
+    versions = document['versions']
+    if not isinstance(versions, dict):
+        raise ValueError('checkpoint versions are not a mapping')
+    require_protocol(versions.get('protocol_version'), subject='检查点')
+    for field, expected in (('checkpoint_schema_version', CHECKPOINT_SCHEMA_VERSION),
+                            ('record_schema_version', RECORD_SCHEMA_VERSION),
+                            ('screening_version', SCREENING_VERSION)):
+        accepts_record(versions.get(field), expected=expected, subject='检查点 ' + field)
     return document
 
 
@@ -221,6 +246,15 @@ def verify_chain(paths):
     report = []
     for path in ordered:
         document = load(path)
+        number = parse_round_number(path)
+        if number != document['round']:
+            raise ValueError('checkpoint filename disagrees with its round')
+        if previous is not None and number != previous['round'] + 1:
+            raise ValueError(f"检查点链在第 {number} 轮断裂：缺少完整的前序轮次")
+        if previous is None:
+            start_round = document['config'].get('resume_from', {}).get('start_round', 1)
+            if number != start_round:
+                raise ValueError(f"检查点链在第 {number} 轮断裂：缺少首轮检查点")
         expected = (previous or {}).get('sha256')
         linked = document['previous_checkpoint_sha256'] == expected
         report.append({'round': int(document['round']), 'path': str(path),
@@ -230,7 +264,7 @@ def verify_chain(paths):
             raise ValueError(f"检查点链在第 {document['round']} 轮断裂："
                              f"记录的前序摘要 {document['previous_checkpoint_sha256']} "
                              f"而实际为 {expected}")
-        previous = {'sha256': b.digest(path.read_bytes())}
+        previous = {'sha256': b.digest(path.read_bytes()), 'round': number}
     return report
 
 
@@ -357,8 +391,16 @@ def resume_plan(results_root, run_id, *, config=None):
     from a stored accuracy or model digest.
     """
     try:
+        paths = list(checkpoints_root(results_root, run_id).glob(GLOB))
+        verify_chain(paths)
         found = latest(results_root, run_id)
-    except (ValueError, VersionMismatch) as exc:
+        if found is not None:
+            for path in paths:
+                document = load(path)
+                if document['context'].get('task_id') != run_id:
+                    raise ValueError('checkpoint belongs to a different task')
+                _verify_commit(results_root, run_id, document, b.digest(path.read_bytes()))
+    except (OSError, ValueError, TypeError, KeyError, VersionMismatch) as exc:
         return {'resumable': False, 'reason': f'检查点无法读取：{exc}', 'checkpoint': None}
     if found is None:
         return {'resumable': False, 'checkpoint': None,
@@ -391,9 +433,47 @@ def _configuration_compatible(document, config):
     batch plan and the screening policy. A changed value here means the run would
     not be the same experiment.
     """
-    recorded = document.get('plan') or {}
-    for field in ('model_descriptor', 'dataset', 'grid', 'seed', 'batch_size', 'batch_strategy',
-                  'client_count', 'client_authorities', 'screening'):
-        if field in recorded and field in config and recorded[field] != config[field]:
-            return False
-    return True
+    recorded = document['config']
+    # Rounds may be extended and scheduling may change; model, partition,
+    # training, screening and cryptographic policy must retain their meaning.
+    fields = ('model_name', 'model_descriptor', 'dataset', 'grid', 'seed', 'non_iid',
+              'train_limit', 'test_limit', 'local_epochs', 'learning_rate', 'backend',
+              'batch_size', 'batch_strategy', 'client_count', 'client_authorities',
+              'authority_count', 'authority_threshold', 'aggregator_count', 'aggregator_threshold',
+              'authorization_consistency_threshold', 'mode', 'bits', 'scale',
+              'proof_suite', 'proof_crs_hash', 'min_cosine', 'max_norm_squared',
+              'max_norm_ratio', 'min_norm_ratio', 'screening_rule', 'cluster_center_gap',
+              'cluster_low_center_max', 'cluster_iterations', 'cluster_tolerance',
+              'attack', 'attack_target_class', 'malicious_clients')
+    return all(field not in config or recorded.get(field) == config[field] for field in fields)
+
+
+def _verify_commit(results_root, run_id, document, checkpoint_sha256):
+    """Require complete recorded confirmations for secure checkpoints.
+
+    These are coordinator records of authenticated runtime replies, not standalone
+    signatures over the checkpoint. Plain baselines have no edge confirmations.
+    """
+    if document['config'].get('mode') == 'plain':
+        return
+    certificate = read_certificate(results_root, run_id, document['round'])
+    if not isinstance(certificate, dict):
+        raise ValueError('secure checkpoint has no commit certificate')
+    accepts_record(certificate.get('schema_version'), expected=CHECKPOINT_SCHEMA_VERSION,
+                   subject='检查点提交记录')
+    confirmations = certificate.get('confirmations')
+    authority_count = document['context'].get('authority_count', 3)
+    expected = {f'authority{i}' for i in range(1, authority_count + 1)}
+    if (certificate.get('round') != document['round']
+            or certificate.get('checkpoint_sha256') != checkpoint_sha256
+            or certificate.get('valid') is not True
+            or certificate.get('all_confirmed') is not True
+            or certificate.get('threshold') != document['plan'].get('authority_threshold')
+            or not isinstance(confirmations, list)
+            or len(confirmations) != authority_count
+            or certificate.get('signer_count') != authority_count
+            or any(not isinstance(row, dict) for row in confirmations)
+            or {row.get('node_id') for row in confirmations} != expected
+            or any(row.get('matches') is not True
+                   or row.get('model_hash') != document['model_hash'] for row in confirmations)):
+        raise ValueError('secure checkpoint commit certificate does not confirm its model and authorities')

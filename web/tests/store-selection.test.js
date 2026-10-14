@@ -9,7 +9,7 @@ let instance = 0
 
 async function withPoller(initial, action) {
   const previous = { window: globalThis.window, clearTimeout: globalThis.clearTimeout,
-    status: api.status, listRuns: api.listRuns, getRun: api.getRun }
+    status: api.status, listRuns: api.listRuns, getRun: api.getRun, getRecovery: api.getRecovery }
   const timers = new Map(), requested = []
   let timerId = 0
   const state = { active: '', runs: [], ...initial }
@@ -18,6 +18,7 @@ async function withPoller(initial, action) {
   api.status = async () => ({ active_run_id: state.active })
   api.listRuns = async () => ({ runs: state.runs })
   api.getRun = async id => { requested.push(id); return state.runs.find(run => run.run_id === id) || { run_id: id, status: 'running' } }
+  api.getRecovery = async id => ({ run_id: id, resumable: false, reason: '缺少恢复材料' })
   const { consoleStore: store } = await import(`../src/lib/store.js?selection-test=${++instance}`)
   const settle = async () => {
     for (let count = 0; count < 10 && ![...timers.values()].some(timer => timer.delay === 2000); count += 1) {
@@ -39,6 +40,7 @@ async function withPoller(initial, action) {
     api.status = previous.status
     api.listRuns = previous.listRuns
     api.getRun = previous.getRun
+    api.getRecovery = previous.getRecovery
   }
 }
 

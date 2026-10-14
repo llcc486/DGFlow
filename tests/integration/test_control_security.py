@@ -2,6 +2,7 @@
 import asyncio
 import json
 from copy import deepcopy
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -46,6 +47,11 @@ def test_different_or_malformed_origin_cannot_stop(stop_app,origin):
 def test_same_origin_and_nonbrowser_control_remain_usable(stop_app,base_url,origin):
     app,stopped=stop_app
     headers={} if origin is None else {'Origin':origin}
+    # Exercise the actual IPv6 Host header without relying on TestClient's
+    # httpx transport, which splits bracketed IPv6 addresses at the first colon.
+    if urlsplit(base_url).hostname=='::1':
+        headers['Host']=urlsplit(base_url).netloc
+        base_url='http://localhost:8765'
     with TestClient(app,base_url=base_url) as client:
         response=client.post('/api/runs/test/stop',headers=headers)
     assert response.status_code==200
@@ -58,6 +64,15 @@ def test_multiple_origins_cannot_stop(stop_app):
         response=client.post('/api/runs/test/stop',headers=[
             ('Origin','http://localhost:8765'),('Origin','http://localhost:8765')])
     assert response.status_code==403
+    assert stopped==[]
+
+
+@pytest.mark.parametrize('host',['[::2]:8765','[::1]:bad','[::1]:8765/path','[::1]:8765@evil.example'])
+def test_ipv6_host_support_keeps_the_loopback_allowlist(stop_app,host):
+    app,stopped=stop_app
+    with TestClient(app,base_url='http://localhost:8765') as client:
+        response=client.post('/api/runs/test/stop',headers={'Host':host})
+    assert response.status_code==400
     assert stopped==[]
 
 

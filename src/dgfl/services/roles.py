@@ -952,7 +952,27 @@ class RoleWorker:
                 raise ValueError('round already started; retry cached request or create a new task')
             if previous and (ctx['round_id']!=previous['next_round'] or reference!=previous['reference'] or mode!=previous['mode']):
                 raise ValueError('round/model fork rejected')
-            if not previous and ctx['round_id']!=1: raise ValueError('task must start at round one')
+            if not previous and ctx['round_id']!=1:
+                # A fresh task may skip round one only when this authority has
+                # durably confirmed the exact parent state. The coordinator's
+                # checkpoint alone cannot bypass the local no-fork guard.
+                recovery=payload.get('recovery')
+                if (not isinstance(recovery,dict)
+                        or set(recovery)!={'parent_task_id','checkpoint_round','checkpoint_sha256'}
+                        or not isinstance(recovery['parent_task_id'],str)
+                        or recovery['parent_task_id']==ctx['task_id']
+                        or type(recovery['checkpoint_round']) is not int
+                        or recovery['checkpoint_round']!=ctx['round_id']-1
+                        or not isinstance(recovery['checkpoint_sha256'],str)
+                        or len(recovery['checkpoint_sha256'])!=64
+                        or any(char not in '0123456789abcdef' for char in recovery['checkpoint_sha256'])):
+                    raise ValueError('task must start at round one or carry verified recovery state')
+                parent=self.task_state.get(recovery['parent_task_id'])
+                if (not parent or parent.get('status')!='ready'
+                        or parent.get('next_round')!=ctx['round_id']
+                        or parent.get('reference')!=reference
+                        or parent.get('mode')!=mode or parent.get('policy')!=policy):
+                    raise ValueError('recovery parent round/model/policy is not locally confirmed')
             public_job=None; parameters_evidence=None
             if settings['proof_suite']==_LEGO_SUITE:
                 # Validate local pinned public parameters before committing any

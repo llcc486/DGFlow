@@ -37,7 +37,7 @@ export function modelConfigurationError(config = {}) {
   if (!Number.isInteger(scale) || scale < 1 || scale > 65536) return '量化比例需为 1–65,536 的整数。'
   if (cnn) {
     if (cnn.dataset !== dataset) return '论文 CNN 必须与所选数据集匹配。'
-    if (config.mode !== 'plain') return '论文 CNN 当前仅支持明文对照，尚不支持加密协议；没有可用的 CNN CRS，补充参数文件也不能启用。请明确选择 CNN 明文对照预设，或改用线性模型运行加密实验。'
+    if (config.mode !== 'plain') return '论文 CNN 当前仅支持明文对照，尚不支持加密协议。请选择明文模式与 Torch 训练后端，或改用 Softmax 回归运行 DGFlow 实验。'
     if (config.backend !== 'torch') return '论文 CNN 需要明确选择 torch 训练后端。'
     const grid = config.grid ?? 8
     if (!Number.isInteger(grid) || grid < 2 || grid > info.imageSize) return '模型网格参数超出原图范围。'
@@ -65,6 +65,19 @@ export function modelSizes(dataset = 'mnist') {
       note: `${info.channels === 3 ? 'RGB 三通道分别池化后展平' : '灰度池化后展平'}；坐标数为默认网格的 ${(geometry.dimension / baseline).toFixed(1)}×。实际耗时与通信量以实验记录为准。`,
     }
   })
+}
+
+/** Only expose model geometries covered by an installed Lego parameter set. */
+export function installedProofModels(dataset, parameters = []) {
+  const dimensions = new Set(parameters.filter(parameter =>
+    parameter?.bits === 8 && Number.isInteger(parameter.dimension)
+    && (parameter.suite == null || parameter.suite === 'lego_norm_v1')
+    && typeof parameter.crs_hash === 'string' && /^[0-9a-f]{64}$/i.test(parameter.crs_hash),
+  ).map(parameter => parameter.dimension))
+  return modelSizes(dataset).filter(size => dimensions.has(size.dimension)).map(size => ({
+    ...size, id: `softmax-${dataset}-${size.grid}`,
+    label: `Softmax 回归 · ${size.grid}×${size.grid} 池化 · ${size.dimension.toLocaleString('zh-CN')} 参数`,
+  }))
 }
 
 /** Legacy readiness means MNIST only; it must never imply CIFAR-10 is ready. */

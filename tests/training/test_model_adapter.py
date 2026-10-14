@@ -282,6 +282,7 @@ def test_unavailable_cnn_cuda_is_explicit_error(monkeypatch, torch_threads):
 
 
 @pytest.mark.parametrize("dataset,name,_dimension,shape", CNN_MODELS)
+@pytest.mark.original_data_cache
 def test_prepared_real_data_adapter_preserves_original_split_pixels_labels_and_partition(dataset, name, _dimension, shape, torch_threads):
     raw = ROOT / "data" / dataset / "raw"
     if not raw.is_dir():
@@ -302,6 +303,7 @@ def test_prepared_real_data_adapter_preserves_original_split_pixels_labels_and_p
 
 
 @pytest.mark.parametrize("dataset,name,_dimension,_shape", CNN_MODELS)
+@pytest.mark.original_data_cache
 def test_real_cnn_metadata_and_loader_work_with_torch_import_forbidden(dataset, name, _dimension, _shape):
     if not (ROOT / "data" / dataset / "raw").is_dir():
         pytest.skip("prepared original dataset is not installed; never download in tests")
@@ -332,6 +334,7 @@ print('CNN metadata and original-image loader are Torch-free')
 
 
 @pytest.mark.parametrize("dataset", ["mnist", "cifar10"])
+@pytest.mark.original_data_cache
 def test_prepared_real_linear_loader_is_exactly_legacy(dataset):
     if not (ROOT / "data" / dataset / "raw").is_dir():
         pytest.skip("prepared original dataset is not installed; never download in tests")

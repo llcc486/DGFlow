@@ -6,6 +6,7 @@ import json
 import os
 import ssl
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -290,13 +291,24 @@ def _restricted_for(arguments, vm, material):
     if getattr(arguments, 'restricted_dir', None) is None:
         return None
     root = Path(arguments.restricted_dir).resolve()
-    path = root/f'round-{int(material["round"])}.bin'
-    if not path.exists():
-        return None
-    restricted = vm.load_restricted(path)
-    if int(restricted['round']) != int(material['round']):
-        raise ValueError('受限材料记录的是另一轮')
-    return restricted
+    round_id = int(material['round'])
+    # Owners persist one file per key epoch; older material uses round-N.bin.
+    # Match the public-document digest so another epoch's keys cannot be selected
+    # merely because its round number is the same.
+    candidates = sorted(root.glob(f'round-{round_id}-*.bin'))
+    legacy = root/f'round-{round_id}.bin'
+    if legacy.exists():
+        candidates.insert(0, legacy)
+    expected = vm.digest_of(material)
+    for path in candidates:
+        restricted = vm.load_restricted(path)
+        if int(restricted['round']) != round_id:
+            raise ValueError('受限材料记录的是另一轮')
+        if restricted['proof_material_digest'] == expected:
+            return restricted
+    if candidates:
+        raise ValueError('受限材料与公开证明材料摘要不一致')
+    return None
 
 
 def _verify_submission(arguments):
@@ -423,17 +435,32 @@ def _resume(arguments):
     second implementation of recovery: it produces the same new execution record,
     the same key-epoch rotation, and the same refusal reasons.
     """
+    runtime = Path(arguments.runtime).resolve()
+    # A second manager must never rewrite the live controller's run records or
+    # execute concurrently with it. Hold ownership until the CLI worker exits.
+    with _control_process_lock(runtime), runtime_lifecycle_lock(runtime):
+        if running_control(runtime):
+            raise RuntimeError('控制服务正在运行，请通过监控页面恢复实验')
+        return _resume_owned(arguments, runtime)
+
+
+def _resume_owned(arguments, runtime):
     from dgfl.experiments.runner import RunManager
 
-    manager = RunManager(Path(arguments.runtime).resolve())
+    manager = RunManager(runtime)
     try:
-        status = manager.recovery_status(arguments.run)
+        if arguments.check:
+            payload = manager.recovery_status(arguments.run)
+        else:
+            # RunManager resolves idempotency before inspecting the parent again.
+            payload = manager.resume(arguments.run, idempotency_key=arguments.key)
+            # This command owns the manager and its daemon worker. Keep the process
+            # alive until the worker has saved its final state and released the run.
+            while manager.active == payload['run_id']:
+                time.sleep(.1)
+            payload['status'] = manager.snapshot(payload['run_id'], include_history=False)['status']
     except KeyError as exc:
         raise ValueError(f'任务不存在：{arguments.run}') from exc
-    if arguments.check or not status.get('resumable'):
-        payload = status
-    else:
-        payload = manager.resume(arguments.run, idempotency_key=arguments.key)
     if arguments.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     elif payload.get('reused') is not None:
@@ -447,7 +474,7 @@ def _resume(arguments):
         print(payload.get('key_epoch_reason', ''))
     else:
         print(f"不可恢复：{payload.get('reason')}")
-    return 1 if payload.get('resumable') is False else 0
+    return 1 if payload.get('resumable') is False or payload.get('status') in ('failed', 'aborted') else 0
 
 
 def _identity_init(arguments):

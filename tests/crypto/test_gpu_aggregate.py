@@ -11,8 +11,9 @@ from dgfl.crypto import protocol as p
 @pytest.fixture(scope='module')
 def cuda():
     capability=gpu.compute_capabilities()['gpu']
-    if not capability.get('hardware_available') and not capability.get('available'):
-        pytest.skip('CUDA driver/NVRTC is unavailable')
+    if not capability.get('driver_available') or not capability.get('compiler_available'):
+        pytest.skip('CUDA driver/NVRTC is unavailable: '+capability.get('reason', ''))
+    # With both optional dependencies present, compilation and self-tests must pass.
     gpu.require_gpu()
     return gpu
 

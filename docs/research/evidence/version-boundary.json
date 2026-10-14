@@ -1,45 +1,52 @@
 {
   "schema_version": 1,
   "scope": "Maps each frozen acceptance record to the source version it describes. A record with accurate_for_current_tree false is a real result for the version it names and is not evidence about this checkout.",
-  "measured_utc": "2026-10-13T17:55:32.595507+00:00",
-  "commit": "2de5b0b966153958b4a236ee01cb307b9fc2cd22",
-  "commit_subject": "G 阶段：授权一致性门限与密钥门限分离；动态加入边界显式化",
+  "source_hash_policy": {
+    "current": "SHA-256 of source bytes with CRLF normalised to LF",
+    "frozen": "Original raw SHA-256 retained; matched against LF and CRLF source representations",
+    "scope": "Only source newline encoding is ignored; archive and delivery hashes remain byte-exact"
+  },
+  "measured_utc": "2026-10-13T19:12:00.282027+00:00",
+  "commit": "6b367373e89e624e01749128fd25e3f88c78e475",
+  "commit_subject": "Merge origin/main into fuben and preserve experiment workflows",
   "working_tree_dirty": true,
   "current_source_files": {
     "src/dgfl/__init__.py": "9a778c0978b07428fc22585223defc28c7479e8c4c477d404a0d8b8556f34f9c",
-    "src/dgfl/cli.py": "c56cea89bdc6b21f972fac11278f8fa582ec439233c3c455663148344cfb0af1",
+    "src/dgfl/cli.py": "f37271763519fa0f786e4f2937b472eff39f472b2ff2a0bfe5765503fc54b6d7",
     "src/dgfl/crypto/__init__.py": "9bdb23747149eb3d4ce691dacab2a994757bdcd922932a1c6695e6c639bd2542",
-    "src/dgfl/crypto/backend.py": "c68aa4b1467e7a5feccc9065f8b4bbe9c218e15340debdc9867759a16fc3f8af",
+    "src/dgfl/crypto/backend.py": "4ec82c83ba9b8f97a428a7af8b754ecd1dd72fb60a624c8a2346469a49f33d6a",
     "src/dgfl/crypto/compact.py": "a9d90db1b003fe9d5dbb2ca07e277a68bbf8b27ed1b3e191694ced558a491658",
     "src/dgfl/crypto/cuda_scheduler.py": "b80eaf5df5dc609dc8c494bac3ebb33b75b92183f47a78a0ebb39704a6e09643",
-    "src/dgfl/crypto/discrete_log.py": "746ceadc1408c9d3d2d35512ba96c508d1445277f56c18bf4cafd796bc3102aa",
+    "src/dgfl/crypto/discrete_log.py": "ea1459ef994997c0edf309299a133604ce01ec105131db98f8e6bbe97ce3ae1b",
     "src/dgfl/crypto/gpu.py": "512ab509983bbd9bc7fb32db1c80e0a88a013d8a2be96f7d50b0af04db67fbc8",
     "src/dgfl/crypto/gpu_profile.py": "502b3408fbb57e5d31bb64494c6359cb4e7f7c0ad622773b4eaee506fa7157ba",
     "src/dgfl/crypto/ipa.py": "c06dbcf4463bebb6effc080c8cf4f31c1a92b1b1a2d22e4b16ed00c989faf785",
     "src/dgfl/crypto/lego.py": "a46d3e4d85d29ab6dffac372f0683307530ba9efcbce9a94e564ea13298a186c",
-    "src/dgfl/crypto/lego_registry.py": "092bc5c4a004a4c3bee77dca5d66406e034206a2271dccc4796016d046082aa8",
+    "src/dgfl/crypto/lego_registry.py": "903e5830f0a3b4fe38367e32d94126b7bce5dd1218f1fd239d246ed9d6c505ca",
     "src/dgfl/crypto/linkage.py": "ba75064b646bd2686410c773d414c47cbf79f40ca4b054923b4dde0b6d495b08",
     "src/dgfl/crypto/protocol.py": "3bced67cadbc7d7c4f0852c96007da030b713c67506ea87980523eaf553f74ea",
     "src/dgfl/crypto/provenance.py": "39fe75b34d863b23bf5c12be5137b4b2c50c7caf8fd09745567873c04e79b0da",
-    "src/dgfl/deployment.py": "10e3b08948da56831a57e4b6cb57c25ff5d743a5ce4aeb18019cebaa339a78c7",
+    "src/dgfl/deployment.py": "315e6a98d8985ff83ba9134ac79f98189f448d02ca55bf8e5c90465f890b14ee",
     "src/dgfl/experiments/__init__.py": "6bad8bd12ebf56560051273fa15d05d2ffa941f355b635d1e3548c93efa88347",
     "src/dgfl/experiments/attack_metrics.py": "064215e950545890cdf069adcf6da3f22a834ef39a10185641536ee722273d26",
-    "src/dgfl/experiments/checkpoint.py": "4529a4dd159300dfcd9fa6309957c2d807987f01a5c3651c8f2c611311ff293e",
-    "src/dgfl/experiments/evidence.py": "e2983667467144a317a6e9c54e82d04cba5f9f222208907195c1b0421cd2ac63",
+    "src/dgfl/experiments/checkpoint.py": "c778edf1fb9b7a904dd3195deab5b961388d06044829b51a9619881752477643",
+    "src/dgfl/experiments/evidence.py": "116fdfcabccc9be86386c1d3440499b096f668914646ab3d1996c0dd8ee15c8e",
     "src/dgfl/experiments/hardware.py": "14fd5c28f39551af3e7fcb9503c99bc2438a6481970215635de7913d3a1cea33",
-    "src/dgfl/experiments/monitoring.py": "cfb223a5555cba3d451c45a9d2f0067b16adfc4758981c1deeb3aa8591e03fa4",
-    "src/dgfl/experiments/resources.py": "64b6c4d46c75dcd9d85c6471c927c5daa05586a336e7b615974c17cf2d9b895b",
-    "src/dgfl/experiments/runner.py": "d68881ae1ceadf3bb97a7f23bf2d3be5e572bb8b0919bbbcaf0809d609f60ff3",
-    "src/dgfl/experiments/telemetry.py": "3006c17e4d8eb5af2961e305f8d4f691f504e40598fff08e987126b9c4690f3b",
-    "src/dgfl/experiments/tensorboard.py": "c6a1fd1dcc02555ccbd4b922403917575c716fd479291ddff9aacdfaafab273d",
+    "src/dgfl/experiments/metadata.py": "d72ede785240d7d90123fe1a45bcb8114c1f88d0c07b67eedb5ad76f301c65a9",
+    "src/dgfl/experiments/monitor_series.py": "662cd70d17392c99d5333c70878b6d9fd108207c5856d5dfe1d801ac478fda2f",
+    "src/dgfl/experiments/monitoring.py": "ff4e99b5d27ca43ca706d0fbfac4f92309290672a0f7d898cacdb4d7e113fcb8",
+    "src/dgfl/experiments/resources.py": "ccd804b348ee6a4e3add63c66c5f4e02a2928e2dd85294ce2310e99f51b04801",
+    "src/dgfl/experiments/runner.py": "5d558631697e854914be3401d711c638188913bd8916ee9e5db70b4a4a77271d",
+    "src/dgfl/experiments/telemetry.py": "da0feed7906772294c5bd14c7ad563430495e7f76031f1e972fc69801871c17a",
+    "src/dgfl/experiments/tensorboard.py": "6157788e6d30dd35a1b6f885c6322d9512d7465f6272734091304075e4c26176",
     "src/dgfl/material_authenticity.py": "bc6118ab27e3b88468eebfe568fa09a3b7b3a03138b3e93346a9cd4e45b57581",
-    "src/dgfl/registration.py": "1b7ed560fc424a6b6b97fff841818a44e9a716bd4dff4407f1d663cb8e09f63d",
+    "src/dgfl/registration.py": "1d601e38d658aa6752ee7eda664c0f2416f200d75610e77b34ec41e1b524bdb1",
     "src/dgfl/services/__init__.py": "e9cd4c247c0ab26528bce1a967c13693a6d696593973a22ae373c7a59abcf3de",
-    "src/dgfl/services/control.py": "566ac52bd2e1e71e7969a95ed14653f749cc14eb504bde26aed2a28eb13bba4b",
+    "src/dgfl/services/control.py": "cebf5046df4de0f9ba226c3eb911d4b6de9a67a1260336ac66a94525f902aa1f",
     "src/dgfl/services/node.py": "29ee129a16ed600bd922ddb3deb4baf1ba578563ff938c1adf9d6c9b9ece8815",
-    "src/dgfl/services/roles.py": "131f7b530b7785cb6c9b02bbd147d555414a5b0eca476d7ecacb6f6235de7842",
+    "src/dgfl/services/roles.py": "e4bb78c0d933cd7ef4f4e0d3086606a3a27f3cd479c0fba2ce17ef41c020f550",
     "src/dgfl/services/telemetry.py": "1ad07e6e7d10c1f97e1bd2dc936ec3501b537f9371f7cc02a04cabd9a0428696",
-    "src/dgfl/services/tensorboard.py": "a4ff596fca5a3ef3024f09841dad3f9b699390026537019578b419abef0b830e",
+    "src/dgfl/services/tensorboard.py": "2694e8a47d4de4ad6ca5d36d31febe2c13548d3c1beb98e930fafd9f807e9e47",
     "src/dgfl/services/tensorboard_metrics.py": "9f2baaa340d6ec6d5dcb5b87e0dc8e3a70c5410e780d76d864bd6498acf5ff92",
     "src/dgfl/system_info.py": "7a89f8f4d9ecec35fdb72117af7be01680316e779eb290f282a94ee00174eaef",
     "src/dgfl/tamper_playground.py": "581edce3b2d344f4ecbc896b633cf6b1435e127968f8415e2f94106bc8e2d9d3",
@@ -50,17 +57,17 @@
     "src/dgfl/training/data.py": "c2b95a2de225cced0e53d320d7322cd624a0cee6913d6afc36d0f03c8f7189b8",
     "src/dgfl/training/datasets.py": "e5ae4aadd0aa267c4c8a5fdb0f27ff022f0acb66fb601f7f25c52eea4c7fd4b8",
     "src/dgfl/training/model.py": "3ebecc8707596f815743b469ad57e9ce49897b05ffd3404caefa51fe5d800efd",
-    "src/dgfl/training/model_adapter.py": "c308e5b164508703942972309a9d9ac2d23ffb947f01f358b518ebecf28f6ebd",
-    "src/dgfl/training/model_contracts.py": "7e2749531fe729ed3ac0732321c32065a776d0242170a29c119b282a398efd25",
-    "src/dgfl/training/original_images.py": "3059606025eb2b8501f34162977cc04f787033bf1cfac579a0c50cf2119ae708",
-    "src/dgfl/training/paper_models.py": "a33798e0cdd39628c89175e63ee97db418a5bc6fd93b1172fd8012922f4d3ab9",
+    "src/dgfl/training/model_adapter.py": "9955620d0ca8dfaa6a331312a9d033795073bc50da6e3efa36ee51230489c5e6",
+    "src/dgfl/training/model_contracts.py": "3292df4115901d0c22bc788db502ddd5ee557d6571378946413b41b970a8ab36",
+    "src/dgfl/training/original_images.py": "5f0cf771df0abe149ad2f4854cb5c2538067b80f82337ff910b9298bad0df44b",
+    "src/dgfl/training/paper_models.py": "16db435ef79736c5e31365cc35730b7065191a8176b1069327cd89f68358d459",
     "src/dgfl/transport/__init__.py": "2e94ce5f239100c42ad877fed472bb004918f0f22b3d13fe43fd2de4201bb50e",
-    "src/dgfl/transport/binary.py": "8aba3ea35d92d98291dd2330b744971a45737fda2b62866f89d22ce9fe300df4",
+    "src/dgfl/transport/binary.py": "38b402ace6e078f90d4bf91b059d2d4e41c7be52d0741aee9d2eedd677f83867",
     "src/dgfl/transport/chunking.py": "46db16b945b285adaad54e36b5600dddcdf44909e61feeff2152dc1d274028dc",
-    "src/dgfl/transport/client.py": "ec35d9eb2a1dd6ac83b75da82bab104dbc3405093001630d3865e92c2fe3c472",
-    "src/dgfl/transport/security.py": "00903a5146cf65f962ac86644cfd68d96c6be2079c0c20c1cd05d64217ce481d",
+    "src/dgfl/transport/client.py": "76ccdfcb72e0fcd67cc30a9589e12df92ff463818aa636a99c72c2dde7cf9660",
+    "src/dgfl/transport/security.py": "578604e21bc3601e4ad41acaed2b65e732b6faf8c035cd53036019bb94739c16",
     "src/dgfl/validation/__init__.py": "b74367160ca1699c2a3e820c7c1ff8dab6b0a90b26ee5228c811bf0e1bd13cef",
-    "src/dgfl/validation/policy.py": "25f5bf4881b5721263c4fd9429b218b7de5a0ae69e3f9daa73a053af3085ffc7",
+    "src/dgfl/validation/policy.py": "82e049a7aeed784758b8d4808e84a4786ccf1901a4edbc2d217a500ad5bc916b",
     "src/dgfl/verification_materials.py": "2150f8ce2c279cdc86eec1e0b705220a8e657dcedbef9f4fc2724c296572b982",
     "src/dgfl/versioning.py": "75f2a9fcc76153e8eee908f8f008a154fd90b959fc498e3b75fa10e877518575"
   },
@@ -75,37 +82,47 @@
       "declared_source_unchanged": true,
       "declared_files": 51,
       "declared_source_matches_itself": true,
-      "current_files": 57,
+      "current_files": 59,
       "changed": [
         {
           "path": "src/dgfl/cli.py",
           "frozen_sha256": "b7b5a1de3808cb28ae22b14b2a42870df1844db810a5aadbb662f72129b665cd",
-          "current_sha256": "c56cea89bdc6b21f972fac11278f8fa582ec439233c3c455663148344cfb0af1"
+          "current_sha256": "f37271763519fa0f786e4f2937b472eff39f472b2ff2a0bfe5765503fc54b6d7"
         },
         {
           "path": "src/dgfl/crypto/lego_registry.py",
           "frozen_sha256": "6d154560918b9fbfd0d279d764e5fe18bcfdd90ec5bd3d83616fe61922ca2daf",
-          "current_sha256": "092bc5c4a004a4c3bee77dca5d66406e034206a2271dccc4796016d046082aa8"
+          "current_sha256": "903e5830f0a3b4fe38367e32d94126b7bce5dd1218f1fd239d246ed9d6c505ca"
         },
         {
           "path": "src/dgfl/deployment.py",
           "frozen_sha256": "b57ffd359887b6b610b12cd5e28c1def0333721a37a64cbe829def22a2ccd8f5",
-          "current_sha256": "10e3b08948da56831a57e4b6cb57c25ff5d743a5ce4aeb18019cebaa339a78c7"
+          "current_sha256": "315e6a98d8985ff83ba9134ac79f98189f448d02ca55bf8e5c90465f890b14ee"
+        },
+        {
+          "path": "src/dgfl/experiments/evidence.py",
+          "frozen_sha256": "e2983667467144a317a6e9c54e82d04cba5f9f222208907195c1b0421cd2ac63",
+          "current_sha256": "116fdfcabccc9be86386c1d3440499b096f668914646ab3d1996c0dd8ee15c8e"
+        },
+        {
+          "path": "src/dgfl/experiments/monitoring.py",
+          "frozen_sha256": "cfb223a5555cba3d451c45a9d2f0067b16adfc4758981c1deeb3aa8591e03fa4",
+          "current_sha256": "ff4e99b5d27ca43ca706d0fbfac4f92309290672a0f7d898cacdb4d7e113fcb8"
         },
         {
           "path": "src/dgfl/experiments/resources.py",
           "frozen_sha256": "68037215993411d7123125442cca4051c1c1800ebda3ab6502becd5202a57a9e",
-          "current_sha256": "64b6c4d46c75dcd9d85c6471c927c5daa05586a336e7b615974c17cf2d9b895b"
+          "current_sha256": "ccd804b348ee6a4e3add63c66c5f4e02a2928e2dd85294ce2310e99f51b04801"
         },
         {
           "path": "src/dgfl/experiments/runner.py",
           "frozen_sha256": "5d7cf72784448868530e842e9db75b63baa4e6437645df98ea355121a26f98b7",
-          "current_sha256": "d68881ae1ceadf3bb97a7f23bf2d3be5e572bb8b0919bbbcaf0809d609f60ff3"
+          "current_sha256": "5d558631697e854914be3401d711c638188913bd8916ee9e5db70b4a4a77271d"
         },
         {
           "path": "src/dgfl/services/control.py",
           "frozen_sha256": "116800f32f79b7043d935cb41af8330e7447061c7b466fd4ea57f45083128393",
-          "current_sha256": "566ac52bd2e1e71e7969a95ed14653f749cc14eb504bde26aed2a28eb13bba4b"
+          "current_sha256": "cebf5046df4de0f9ba226c3eb911d4b6de9a67a1260336ac66a94525f902aa1f"
         },
         {
           "path": "src/dgfl/services/node.py",
@@ -115,12 +132,12 @@
         {
           "path": "src/dgfl/services/roles.py",
           "frozen_sha256": "32b13162fb61d552186509a5e1a6a45196e70f0a93d844030ce8c9035927dea9",
-          "current_sha256": "131f7b530b7785cb6c9b02bbd147d555414a5b0eca476d7ecacb6f6235de7842"
+          "current_sha256": "e4bb78c0d933cd7ef4f4e0d3086606a3a27f3cd479c0fba2ce17ef41c020f550"
         },
         {
           "path": "src/dgfl/services/tensorboard.py",
           "frozen_sha256": "52af3361c7485acb6da13a5e0e48dedd5a894f50434d3ce6503f132df5cac324",
-          "current_sha256": "a4ff596fca5a3ef3024f09841dad3f9b699390026537019578b419abef0b830e"
+          "current_sha256": "2694e8a47d4de4ad6ca5d36d31febe2c13548d3c1beb98e930fafd9f807e9e47"
         },
         {
           "path": "src/dgfl/topology.py",
@@ -130,17 +147,22 @@
         {
           "path": "src/dgfl/transport/binary.py",
           "frozen_sha256": "917c4e82f3af06f6dba6a14ffb2e755889e96f9a52d49ebb041e34a766f91946",
-          "current_sha256": "8aba3ea35d92d98291dd2330b744971a45737fda2b62866f89d22ce9fe300df4"
+          "current_sha256": "38b402ace6e078f90d4bf91b059d2d4e41c7be52d0741aee9d2eedd677f83867"
         },
         {
           "path": "src/dgfl/transport/client.py",
           "frozen_sha256": "fa83151a69289533e9a6ba2431124c283dee6b976059736087d9c0927e848264",
-          "current_sha256": "ec35d9eb2a1dd6ac83b75da82bab104dbc3405093001630d3865e92c2fe3c472"
+          "current_sha256": "76ccdfcb72e0fcd67cc30a9589e12df92ff463818aa636a99c72c2dde7cf9660"
+        },
+        {
+          "path": "src/dgfl/transport/security.py",
+          "frozen_sha256": "00903a5146cf65f962ac86644cfd68d96c6be2079c0c20c1cd05d64217ce481d",
+          "current_sha256": "578604e21bc3601e4ad41acaed2b65e732b6faf8c035cd53036019bb94739c16"
         },
         {
           "path": "src/dgfl/validation/policy.py",
           "frozen_sha256": "62ec71f76abbb981d9640061eeeff7fe905b22f3553a0cf2895263d0d4fc8d80",
-          "current_sha256": "25f5bf4881b5721263c4fd9429b218b7de5a0ae69e3f9daa73a053af3085ffc7"
+          "current_sha256": "82e049a7aeed784758b8d4808e84a4786ccf1901a4edbc2d217a500ad5bc916b"
         }
       ],
       "absent_from_current_tree": [
@@ -149,6 +171,8 @@
       "added_since_freeze": [
         "src/dgfl/crypto/provenance.py",
         "src/dgfl/experiments/checkpoint.py",
+        "src/dgfl/experiments/metadata.py",
+        "src/dgfl/experiments/monitor_series.py",
         "src/dgfl/material_authenticity.py",
         "src/dgfl/registration.py",
         "src/dgfl/tamper_playground.py",

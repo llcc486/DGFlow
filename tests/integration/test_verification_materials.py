@@ -112,12 +112,14 @@ def test_the_cli_reports_the_proof_and_marks_the_inner_product_unverified(tmp_pa
     assert '验证函数钥门限' not in output
 
 
-def test_the_cli_recomputes_the_inner_product_when_the_function_keys_are_given(tmp_path, capsys):
+@pytest.mark.parametrize('epoch_suffix', ['', '-012345abcdef'])
+def test_the_cli_recomputes_the_inner_product_when_the_function_keys_are_given(tmp_path, capsys, epoch_suffix):
     """With the restricted layer the authorized inner product is really recomputed."""
     from dgfl.cli import main
     _material, restricted, _, _ = _cli_material(tmp_path)
     keys_dir = tmp_path/'edge-store'
-    write_restricted(restricted_materials_path(keys_dir, 'cli-run', 1), restricted)
+    target = restricted_materials_path(keys_dir, 'cli-run', 1)
+    write_restricted(target.with_stem(target.stem + epoch_suffix), restricted)
     code = main(['verify-authorization', '--run', 'cli-run',
                  '--materials-dir', str(tmp_path/'runtime'/'results'/'cli-run'/SUBDIRECTORY),
                  '--restricted-dir', str(keys_dir/'cli-run'/'restricted-materials')])

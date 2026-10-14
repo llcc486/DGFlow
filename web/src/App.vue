@@ -15,27 +15,9 @@ const VIEWS = ['home', 'dashboard', 'deploy', 'monitor', 'validation', 'comparis
 const initial = window.location.hash.slice(1)
 const page = ref(VIEWS.includes(initial) ? initial : 'home')
 const monitorMounted = ref(page.value === 'monitor')
-let preloadHandle = null, idlePreload = false
-
-function cancelPreload() {
-  if (preloadHandle === null) return
-  if (idlePreload) window.cancelIdleCallback?.(preloadHandle)
-  else window.clearTimeout(preloadHandle)
-  preloadHandle = null
-}
-
-// Mount once after the foreground has its initial data. Keep the actual iframe
-// alive across navigation so its native zoom, smoothing and loaded JS survive.
-watch([page, store.initialLoading, store.connected], () => {
-  if (page.value === 'monitor') {
-    cancelPreload()
-    monitorMounted.value = true
-  } else if (!monitorMounted.value && !store.initialLoading.value && store.connected.value && preloadHandle === null) {
-    const preload = () => { preloadHandle = null; monitorMounted.value = true }
-    idlePreload = typeof window.requestIdleCallback === 'function'
-    preloadHandle = idlePreload ? window.requestIdleCallback(preload, { timeout: 1500 }) : window.setTimeout(preload, 500)
-  }
-}, { immediate: true })
+// Retain the visited workspace and native analysis state across navigation.
+// TensorBoard itself is mounted only when the user opens its analysis tab.
+watch(page, value => { if (value === 'monitor') monitorMounted.value = true }, { immediate: true })
 
 const activeRunId = computed(() => store.status.value?.active_run_id || '')
 const onlineNodes = computed(() => store.nodes.value.filter(n => n.status === 'online').length)
@@ -57,7 +39,6 @@ onMounted(() => {
   store.start()
 })
 onBeforeUnmount(() => {
-  cancelPreload()
   window.removeEventListener('hashchange', syncHash)
   store.stop()
 })
@@ -89,16 +70,10 @@ onBeforeUnmount(() => {
         <Deploy v-else-if="page === 'deploy'" @deployed="navigate('monitor')" />
         <Validation v-else-if="page === 'validation'" @navigate="navigate" />
         <Comparison v-else-if="page === 'comparison'" @navigate="navigate" />
-        <Monitor v-if="monitorMounted" :active="page === 'monitor'" :class="{ 'monitor-preloading': page !== 'monitor' }"
+        <Monitor v-if="monitorMounted" v-show="page === 'monitor'" :active="page === 'monitor'"
                  :aria-hidden="page !== 'monitor'" :inert="page !== 'monitor'" @navigate="navigate" />
       </div>
     </main>
 
   </div>
 </template>
-
-<style scoped>
-/* Preserve a real viewport while loading charts, without occupying page space
-   or exposing the background frame to pointer, keyboard or screen readers. */
-.monitor-preloading { position: fixed; inset: var(--nb-header-h) 0 0; width: 100%; height: calc(100dvh - var(--nb-header-h)); visibility: hidden; pointer-events: none; z-index: -1; }
-</style>

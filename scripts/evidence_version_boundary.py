@@ -43,10 +43,28 @@ def normalise(name: str) -> str:
     return name.replace('\\', '/')
 
 
+def source_digest(path: Path) -> str:
+    """Hash source text with LF endings, independent of Git checkout settings."""
+    return hashlib.sha256(path.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+
+
+def matches_frozen_source(path: Path, expected: str) -> bool:
+    """Compare historical raw fingerprints without treating LF/CRLF as edits.
+
+    Frozen records contain both Windows and Unix byte hashes. Keep those records
+    intact and compare the current source in either newline representation. Only
+    newline encoding is ignored; all other source bytes must still match.
+    """
+    raw = path.read_bytes()
+    lf = raw.replace(b'\r\n', b'\n')
+    return any(hashlib.sha256(value).hexdigest() == expected
+               for value in (raw, lf, lf.replace(b'\n', b'\r\n')))
+
+
 def current_files(root: Path) -> dict[str, str]:
-    """Digests of every Python file in the shipped source package."""
+    """LF-normalised digests of every Python file in the shipped source package."""
     source = root / 'src' / 'dgfl'
-    return {str(path.relative_to(root)).replace('\\', '/'): digest(path)
+    return {str(path.relative_to(root)).replace('\\', '/'): source_digest(path)
             for path in sorted(source.rglob('*.py'))}
 
 
@@ -81,7 +99,8 @@ def compare(root: Path, document_path: str, before_field: str, after_field: str)
         'declared_source_matches_itself': frozen == frozen_after,
         'current_files': len(now),
         'changed': [{'path': name, 'frozen_sha256': frozen[name], 'current_sha256': now[name]}
-                    for name in sorted(frozen) if name in now and frozen[name] != now[name]],
+                    for name in sorted(frozen)
+                    if name in now and not matches_frozen_source(root / name, frozen[name])],
         'absent_from_current_tree': sorted(name for name in frozen if name not in now),
         'added_since_freeze': sorted(name for name in now if name not in frozen),
     }
@@ -100,6 +119,11 @@ def build(root: Path) -> dict:
         'scope': ('Maps each frozen acceptance record to the source version it describes. A record with '
                   'accurate_for_current_tree false is a real result for the version it names and is not '
                   'evidence about this checkout.'),
+        'source_hash_policy': {
+            'current': 'SHA-256 of source bytes with CRLF normalised to LF',
+            'frozen': 'Original raw SHA-256 retained; matched against LF and CRLF source representations',
+            'scope': 'Only source newline encoding is ignored; archive and delivery hashes remain byte-exact',
+        },
         'measured_utc': datetime.now(UTC).isoformat(),
         'commit': git_value(root, 'rev-parse', 'HEAD'),
         'commit_subject': git_value(root, 'log', '-1', '--pretty=%s'),

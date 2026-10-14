@@ -14,10 +14,10 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.datastructures import URL, Headers
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -32,6 +32,8 @@ from dgfl.deployment import (
     start_nodes,
     validate_machine,
 )
+from dgfl.experiments.metadata import normalize_text
+from dgfl.experiments.monitor_series import MonitorSeries
 from dgfl.experiments.runner import RunManager
 from dgfl.services.node import training_backends
 from dgfl.services.tensorboard import EmbeddedTensorBoard
@@ -54,8 +56,10 @@ GPU_AUTOMATIC_RETRY_ROUNDS = 15
 #: functional-decryption material is never part of a run record, so it cannot
 #: appear here; this list exists so that stays true when the record grows.
 EXPORT_RECORD_FIELDS = (
-    'run_id', 'status', 'config', 'created_at', 'current_round', 'rounds', 'events', 'error',
+    'run_id', 'name', 'description', 'status', 'config', 'created_at', 'current_round', 'rounds', 'events', 'error',
     'summary', 'evidence', 'initial_metrics',
+    'logical_experiment_id', 'execution_attempt_id', 'parent_run_id', 'start_round',
+    'resumed_from', 'checkpoints', 'stop',
 )
 #: Per-round fields a downloadable record may carry.
 EXPORT_ROUND_FIELDS = (
@@ -133,6 +137,22 @@ def _declared_body_allowed(lengths:list[str]):
     return len(digits)<=len(str(CONTROL_BODY_LIMIT)) and int(digits)<=CONTROL_BODY_LIMIT
 
 
+class ControlHostMiddleware(TrustedHostMiddleware):
+    """Preserve the host allowlist while parsing bracketed IPv6 correctly."""
+
+    async def __call__(self,scope:Scope,receive:Receive,send:Send):
+        if scope['type'] in ('http','websocket'):
+            hosts=Headers(scope=scope).getlist('host')
+            if hosts and hosts[0].startswith('['):
+                parsed=_origin(f"http://{hosts[0]}")
+                if len(hosts)==1 and parsed and f'[{parsed[1]}]' in self.allowed_hosts:
+                    await self.app(scope,receive,send)
+                else:
+                    await Response('Invalid host header',status_code=400)(scope,receive,send)
+                return
+        await super().__call__(scope,receive,send)
+
+
 class ControlSafetyMiddleware:
     """Check browser origin and bound actual bytes before any control action."""
 
@@ -187,6 +207,8 @@ class ControlSafetyMiddleware:
 class ArchivedRunConfig(BaseModel):
     """Read-only validation of historical declarations and experiment evidence."""
     model_config=ConfigDict(extra='forbid')
+    name:str|None=Field(None,strict=True,max_length=80)
+    description:str|None=Field(None,strict=True,max_length=1000)
     dataset:Literal['mnist','cifar10']='mnist'
     # Optional metadata: None means the unchanged historical linear path.
     model_name:Literal['linear','paper_cnn_mnist','paper_cnn_cifar10']|None=None
@@ -252,6 +274,11 @@ class ArchivedRunConfig(BaseModel):
     cluster_low_center_max:float=Field(0.25,ge=-1,le=1,allow_inf_nan=False,strict=True)
     cluster_iterations:int=Field(32,ge=1,le=4096,strict=True)
     cluster_tolerance:float=Field(1e-12,gt=0,le=1e-3,allow_inf_nan=False,strict=True)
+
+    @field_validator('name','description',mode='before')
+    @classmethod
+    def normalize_user_metadata(cls,value,info):
+        return normalize_text(value,field=info.field_name)
 
     @model_validator(mode='after')
     def crs_matches_suite(self):
@@ -389,7 +416,7 @@ def _registration_commands(node, state):
 
 def create_control_app(runtime, *, auto_prepare_compute=True):
     runtime=Path(runtime).resolve(); manager=RunManager(runtime)
-    tensorboard=EmbeddedTensorBoard(manager.tensorboard)
+    tensorboard=EmbeddedTensorBoard(manager.tensorboard,run_labels=manager.tensorboard_run_labels)
     compute_shutdown=threading.Event(); compute_wakeup=threading.Event()
 
     @asynccontextmanager
@@ -414,8 +441,9 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     app.state.manager=manager
     app.state.tensorboard=tensorboard
     app.add_middleware(ControlSafetyMiddleware)
-    app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
+    app.add_middleware(ControlHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
     monitor={'time':0.,'nodes':[]}; monitor_lock=threading.Lock(); prepare_lock=threading.Lock()
+    monitor_series = MonitorSeries(runtime)
     compute_lock=threading.Lock()
     compute_preparation={'state':'idle','reason':''}
     app.state.compute_preparation=compute_preparation
@@ -830,7 +858,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     @app.get('/api/runs')
     def listing():
         with manager.lock:
-            return {'runs':[{k:r[k] for k in ('run_id','mode','status','created_at','config','summary') if k in r}
+            return {'runs':[{k:r[k] for k in ('run_id','name','description','mode','status','created_at','config','summary') if k in r}
                             | {'mode':r['config']['mode']} for r in reversed(list(manager.records.values()))]}
 
     @app.get('/api/runs/{run_id}')
@@ -842,6 +870,33 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def monitor_detail(run_id:str):
         try: return manager.monitor_snapshot(run_id)
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+
+    @app.get('/api/runs/{run_id}/monitor/series')
+    def monitor_series_detail(run_id: str, scope: Literal['node', 'machine'],
+                              target: Annotated[str, Query(min_length=1, max_length=128)],
+                              metric: Annotated[str, Query(min_length=1, max_length=128)],
+                              start: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+                              end: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+                              limit: Annotated[int, Query(ge=1, le=600)] = 300,
+                              cursor: Annotated[str | None, Query(min_length=1, max_length=32768)] = None):
+        # Capture only references to already cached immutable observations. The
+        # query itself has bounded disk IO and never asks a role or sensor for data.
+        with manager.lock:
+            if run_id not in manager.records:
+                raise HTTPException(404, '任务不存在')
+            source = manager.records[run_id]
+            evidence = dict(source.get('evidence') or {})
+            collector = manager._node_monitors.get(run_id)
+            if collector is not None:
+                evidence['node_monitoring'] = collector.snapshot()
+            record = {'run_id': run_id, 'evidence': evidence}
+        try:
+            return monitor_series.query(record, scope=scope, target=target, metric=metric,
+                                        start=start, end=end, limit=limit, cursor=cursor)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(503, '监控历史暂时无法读取，请稍后重试') from exc
 
     @app.get('/api/registration/status')
     def registration_status(machine:str|None=None):
@@ -869,6 +924,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         """Checkpoint summaries. Never returns the model vector or any material."""
         try: return manager.checkpoints(run_id)
         except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+        except (ValueError,OSError) as exc: raise HTTPException(409,'检查点无法读取：'+str(exc)) from exc
 
     @app.get('/api/runs/{run_id}/recovery')
     def recovery(run_id:str):
@@ -885,9 +941,15 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         idempotency key returns the execution already created for it.
         """
         body=request or ResumeRequest()
-        try: return manager.resume(run_id,idempotency_key=body.idempotency_key)
-        except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
-        except ValueError as exc: raise HTTPException(409,str(exc)) from exc
+        with manager.lock:
+            if prepare_lock.locked():
+                raise HTTPException(409,'数据正在准备，请等待完成后再恢复实验')
+            with compute_lock:
+                if compute_preparation['state']=='initializing':
+                    raise HTTPException(409,'GPU 后端正在初始化，请等待完成后再恢复实验')
+            try: return manager.resume(run_id,idempotency_key=body.idempotency_key)
+            except KeyError as exc: raise HTTPException(404,'任务不存在') from exc
+            except ValueError as exc: raise HTTPException(409,str(exc)) from exc
 
     @app.post('/api/runs/{run_id}/stop')
     def stop(run_id:str):
@@ -920,10 +982,15 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             raise HTTPException(404,f'机器 {machine} 在此部署中没有节点')
         staging=runtime/('.bundle-'+secrets.token_hex(8))
         try:
-            exports=bundle_cluster(source,staging,machine=machine)
+            from dgfl.deployment import IDENTITY_SCHEME_REGISTERED, identity_scheme, registration_bundle
+
+            if identity_scheme(source)==IDENTITY_SCHEME_REGISTERED:
+                root=Path(registration_bundle(source,machine,staging)['output'])
+            else:
+                exports=bundle_cluster(source,staging,machine=machine)
+                root=Path(exports[machine])
             buffer=io.BytesIO()
             with zipfile.ZipFile(buffer,'w',zipfile.ZIP_DEFLATED) as archive:
-                root=Path(exports[machine])
                 for path in sorted(root.rglob('*')):
                     if path.is_file():
                         archive.write(path,Path(f'dgflow-{machine}')/path.relative_to(root))

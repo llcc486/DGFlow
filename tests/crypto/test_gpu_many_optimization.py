@@ -14,9 +14,9 @@ U = 0xd201000000010000
 @pytest.fixture(scope='module')
 def cuda():
     capability = gpu.compute_capabilities()['gpu']
-    if not capability.get('hardware_available') and not capability.get('available'):
-        pytest.skip('CUDA driver/NVRTC is unavailable')
-    # Present hardware must compile and match CPU; execution errors fail tests.
+    if not capability.get('driver_available') or not capability.get('compiler_available'):
+        pytest.skip('CUDA driver/NVRTC is unavailable: '+capability.get('reason', ''))
+    # Present hardware, driver and NVRTC must compile and match the CPU oracle.
     gpu.require_gpu()
     return gpu
 

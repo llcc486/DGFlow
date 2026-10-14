@@ -11,6 +11,7 @@ import { createComparison } from '../lib/comparison.js'
 import { bestAccuracy } from '../lib/runRecords.js'
 import { attackName, bytes, date, modeName, percent, proofSuiteName, proofSuiteShort, seconds } from '../lib/format'
 import { datasetName, runDatasetName } from '../lib/datasets.js'
+import { runName, runDescription } from '../lib/experiments.js'
 
 const emit = defineEmits(['navigate'])
 const COLORS = ['#1f6fb2', '#f5a623', '#2f9e5f', '#8e6bbf']
@@ -48,7 +49,7 @@ const series = computed(() =>
     const details = record || eligible.value.find(item => item.run_id === id)
     return {
       id,
-      label: `${runDatasetName(details)} · ${modeName(details?.config?.mode || details?.mode)} · ${id.slice(0, 8)}`,
+      label: runName(details),
       rounds: record?.rounds || [],
       color: COLORS[index],
     }
@@ -101,11 +102,12 @@ const series = computed(() =>
             ><LabIcon v-if="selected.includes(run.run_id)" name="check" :size="11" /></span>
             <div class="nb-picker-body">
               <div>
-                <strong>{{ modeName(run.mode || run.config?.mode) }}</strong>
+                <strong :title="`实验编号：${run.run_id}`">{{ runName(run) }}</strong>
                 <StatusBadge :status="run.status" />
               </div>
-              <span class="nb-run-id">{{ run.run_id }}</span>
+              <p v-if="runDescription(run)" class="experiment-description">{{ runDescription(run) }}</p>
               <div class="nb-run-meta">
+                <span>{{ modeName(run.mode || run.config?.mode) }}</span>
                 <span>{{ runDatasetName(run) }}</span>
                 <span>{{ date(run.created_at) }}</span>
                 <span>{{ attackName(run.config?.attack) }}</span>
@@ -156,9 +158,9 @@ const series = computed(() =>
               <tbody>
                 <tr v-for="record in records" :key="record.run_id">
                   <td>
-                    <span class="nb-cell-id">
+                    <span class="nb-cell-id experiment-name" :title="`实验编号：${record.run_id}`">
                       <i class="nb-legend-dot" :style="{ background: COLORS[selected.indexOf(record.run_id)] }"></i>
-                      {{ record.run_id.slice(0, 10) }}
+                      {{ runName(record) }}
                     </span>
                   </td>
                   <td>{{ runDatasetName(record) }}</td>
@@ -195,7 +197,7 @@ const series = computed(() =>
               </thead>
               <tbody>
                 <tr v-for="record in records" :key="record.run_id">
-                  <td class="mono">{{ record.run_id.slice(0, 10) }}</td>
+                  <td class="experiment-name" :title="`实验编号：${record.run_id}`">{{ runName(record) }}</td>
                   <td>{{ runDatasetName(record) }} / {{ record.config?.grid ?? 8 }}×{{ record.config?.grid ?? 8 }}</td>
                   <td class="mono" :title="proofSuiteName(record.config?.proof_suite)">{{ proofSuiteShort(record.config?.proof_suite) }}</td>
                   <!-- Cryptographic cost, kept separate from training cost: a
@@ -223,3 +225,9 @@ const series = computed(() =>
     </div>
   </div>
 </template>
+
+<style scoped>
+.nb-picker-body strong { overflow-wrap: anywhere; }
+.experiment-description { margin: 7px 0 0; color: var(--nb-muted); font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.experiment-name { font-family: inherit; white-space: normal; overflow-wrap: anywhere; min-width: 120px; max-width: 280px; }
+</style>

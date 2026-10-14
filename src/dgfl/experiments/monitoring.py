@@ -10,6 +10,7 @@ import math
 import re
 import threading
 import uuid
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -91,7 +92,7 @@ def monitor_snapshot(record, live=None):
         nodes = [{'id': name, 'role': _NODE.fullmatch(name)[1], 'machine': None, 'host': None, 'authority': None}
                  for name in names if isinstance(name, str) and _NODE.fullmatch(name)]
     for row in nodes:
-        row.update(status='missing', last_seen=None, latest={}, training={}, error=None)
+        row.update(status='missing', last_seen=None, resource_time=None, latest={}, training={}, error=None)
     return {'run_id': record['run_id'], 'status': record.get('status'), 'interval_seconds': 5,
             'nodes': nodes, 'machines': [], 'summary': {'bytes_sent': 0}, 'legacy': True}
 
@@ -206,7 +207,7 @@ class RunNodeMonitor:
             machine = node.get('machine')
             if machine is not None and machine != local_machine and node['id'] in self._eligible:
                 self._sources.setdefault(machine, node['id'])
-            self._rows[node['id']] = {**node, 'status': 'starting', 'last_seen': None,
+            self._rows[node['id']] = {**node, 'status': 'starting', 'last_seen': None, 'resource_time': None,
                                      'latest': {}, 'training': {}, 'error': None}
             if node['id'] not in self._eligible:
                 self._rows[node['id']].update(status='missing', error='节点未提供逐节点遥测能力')
@@ -219,6 +220,10 @@ class RunNodeMonitor:
         self._epoch_seen = set()
         self._training_seen = set()
         self._local_seen = set()
+        self._local_persisted = set()
+        self._local_pending = set()
+        self._local_queue = deque()
+        self._local_writer = None
 
     def _failure(self, node_id, error):
         detail = f'{type(error).__name__}: {error}'.replace(str(self.runtime.parent), '[workspace]')[:300]
@@ -301,6 +306,7 @@ class RunNodeMonitor:
                     self._training_summary(node_id, payload)
                 else:
                     row['latest'] = deepcopy(payload.get('processes', {}))
+                    row['resource_time'] = event['time']
                     if payload.get('sampling_s') is not None:
                         self._summary['node_sampling_s'] = (self._summary['node_sampling_s'] or 0.) + payload['sampling_s']
                         self._summary['node_samples_timed'] += 1
@@ -380,7 +386,42 @@ class RunNodeMonitor:
             self._machines[self.local_machine] = {
                 'id': self.local_machine, 'source_node': 'coordinator',
                 'last_seen': sample.get('time'), 'status': 'online', 'latest': deepcopy(sample)}
+            if (type(key) is int and key >= 0 and key not in self._local_persisted
+                    and key not in self._local_pending):
+                if len(self._local_queue) >= 32:
+                    self._summary['log_failures'] += 1
+                    self._summary['last_error'] = '本地主机监控日志待写队列已满'
+                else:
+                    self._local_pending.add(key)
+                    self._local_queue.append((key, deepcopy(sample)))
+                    if self._local_writer is None:
+                        self._local_writer = threading.Thread(target=self._persist_local_samples, daemon=True,
+                                                               name='dgflow-local-monitor-journal')
+                        self._local_writer.start()
         self.tensorboard.write_machine_sample(self.run_id, self.local_machine, sample)
+
+    def _persist_local_samples(self):
+        """One bounded writer keeps disk waits off samplers and business locks."""
+        while True:
+            with self._lock:
+                if not self._local_queue:
+                    self._local_writer = None
+                    return
+                key, sample = self._local_queue.popleft()
+            failure = None
+            try:
+                event = clean_event({'sequence': key + 1, 'kind': 'resource',
+                                     'time': sample.get('time'), 'payload': sample}, self.local_epochs)
+                self._append('coordinator', event)
+            except Exception as exc:
+                failure = f'本地主机监控日志：{type(exc).__name__}'
+            with self._lock:
+                self._local_pending.discard(key)
+                if failure:
+                    self._summary['log_failures'] += 1
+                    self._summary['last_error'] = failure
+                else:
+                    self._local_persisted.add(key)
 
     def start(self):
         def loop():
@@ -417,5 +458,11 @@ class RunNodeMonitor:
             # must not hold up an experiment indefinitely.
             self._thread.join(timeout=6)
         with self._lock:
-            self._summary['cleanup_complete'] = not (self._thread and self._thread.is_alive())
+            local_writer = self._local_writer
+        if local_writer is not None:
+            local_writer.join(timeout=1)
+        with self._lock:
+            self._summary['local_journal_pending'] = len(self._local_pending)
+            self._summary['cleanup_complete'] = (not (self._thread and self._thread.is_alive())
+                                                 and not self._local_pending)
         return self.snapshot()

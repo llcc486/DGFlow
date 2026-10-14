@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "desktop overview, measured KPIs, real curve points, first-screen node row, lazy analysis",
+    "metric switching and chart round → event filtering → matching validation round",
+    "all-node workspace, role/search filters, and three distinct physical machines",
+    "browser-hidden history pauses requests and resumes the same entity and curves",
+    "real journal histories, null gaps, history-error preservation, keyboard close/focus return",
+    "machine history through real API and unavailable GPU retained as missing",
+    "real native TensorBoard loads, reads measured scalars, preserves iframe, pauses snapshots, filters node",
+    "1024/390 layouts and narrow-screen history drawer have no outer overflow",
+    "historical missing telemetry does not borrow the current experiment",
+    "engine disconnect preserves the last measured overview with a clear warning",
+    "no-experiment deployment preview and isolated analysis service failure"
+  ],
+  "errors": [],
+  "sample": "isolated acceptance records; not training measurements",
+  "date": "2026-10-13"
+}

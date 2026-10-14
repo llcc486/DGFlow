@@ -80,7 +80,8 @@ def instrumented(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, 'load_mnist', lambda *a, **k: (None, None, None, None))
     monkeypatch.setattr(runner, 'preprocessing_description', lambda *a, **k: {'schema': 'fixture'})
     monkeypatch.setattr(runner, 'initial_model',
-                        lambda seed, features=FEATURES: np.full(features, seed % 5, dtype=np.float64))
+                        lambda seed, features=GRID * GRID: np.full(10 * (features + 1), seed % 5,
+                                                                  dtype=np.float64))
     monkeypatch.setattr(runner, 'evaluate', lambda *a, **k: {'accuracy': 0.5})
     monkeypatch.setattr(runner, 'implementation_evidence', lambda: {'source_sha256': 'fixture'})
     return _runtime(tmp_path)
@@ -104,7 +105,7 @@ def wait_for(manager, run_id, timeout=30.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         record = manager.snapshot(run_id)
-        if record['status'] in ('completed', 'failed', 'aborted') and manager.active is None:
+        if record['status'] in ('completed', 'failed', 'aborted', 'stopped') and manager.active is None:
             return record
         time.sleep(0.02)
     raise AssertionError(f'run {run_id} did not settle: {manager.snapshot(run_id)["status"]}')
@@ -178,6 +179,68 @@ def test_a_checkpoint_chain_with_a_missing_link_is_refused(instrumented):
         cp.verify_chain(remaining)
 
 
+def test_recovery_checks_the_entire_chain_not_just_the_latest_round(instrumented):
+    manager, record = run_rounds(instrumented, 3)
+    cp.checkpoint_path(instrumented/'results', record['run_id'], 2).unlink()
+    assert manager.recovery_status(record['run_id'])['resumable'] is False
+    with pytest.raises(ValueError, match='断裂'):
+        manager.resume(record['run_id'])
+
+
+@pytest.mark.parametrize('field', ['config', 'plan'])
+def test_recovery_refuses_a_modified_configuration_or_plan(instrumented, field):
+    manager, record = run_rounds(instrumented, 1)
+    path = cp.checkpoint_path(instrumented/'results', record['run_id'], 1)
+    document = cp.load(path)
+    document[field]['seed'] += 1
+    from dgfl.transport.binary import packb
+    path.write_bytes(packb(document))
+    status = manager.recovery_status(record['run_id'])
+    assert status['resumable'] is False
+    assert 'digest' in status['reason']
+
+
+@pytest.mark.parametrize('field,value', [('max_norm_ratio', 3), ('local_epochs', 2),
+                                        ('authority_threshold', 3), ('proof_suite', 'legacy')])
+def test_recovery_refuses_training_screening_or_crypto_policy_changes(instrumented, field, value):
+    manager, record = run_rounds(instrumented, 1)
+    manager.records[record['run_id']]['config'][field] = value
+    assert manager.recovery_status(record['run_id'])['resumable'] is False
+
+
+def _secure_checkpoint(tmp_path):
+    run_id = 'secure-run'
+    model = [1, 2]
+    context = {'task_id': run_id, 'round_id': 1, 'key_epoch': 'old-epoch',
+               'dimension': 2, 'authority_count': 3}
+    config = {'mode': 'encrypted', 'authority_threshold': 2}
+    document = cp.build(round_id=1, reference=model, context=context, config=config,
+                        plan={'authority_threshold': 2}, key_epoch='old-epoch')
+    written = cp.write(cp.checkpoint_path(tmp_path, run_id, 1), document)
+    return run_id, document, written
+
+
+def test_secure_recovery_requires_the_matching_commit_record(tmp_path):
+    run_id, document, written = _secure_checkpoint(tmp_path)
+    assert cp.resume_plan(tmp_path, run_id)['resumable'] is False
+    certificate = cp.commit_certificate(round_id=1, checkpoint_sha256=written['sha256'],
+        confirmations=[{'node_id': f'authority{i}', 'model_hash': document['model_hash'],
+                        'matches': True} for i in range(1, 4)], threshold=2)
+    cp.write_certificate(tmp_path, run_id, certificate)
+    assert cp.resume_plan(tmp_path, run_id)['resumable'] is True
+    path = cp.certificate_path(tmp_path, run_id, 1)
+    certificate['confirmations'][0]['model_hash'] = '0' * 64
+    path.write_text(json.dumps(certificate), encoding='utf8')
+    assert cp.resume_plan(tmp_path, run_id)['resumable'] is False
+
+
+def test_plain_checkpoints_do_not_report_missing_secure_confirmations(instrumented):
+    manager, record = run_rounds(instrumented, 1)
+    assert record['evidence']['checkpoints']['latest_round'] == 1
+    assert 'error' not in record['evidence']['checkpoints']
+    assert manager.recovery_status(record['run_id'])['resumable'] is True
+
+
 def test_a_run_without_a_checkpoint_reports_missing_material(instrumented):
     """A run that never completed a round is not resumable, and does not guess."""
     manager = runner.RunManager(instrumented)
@@ -249,6 +312,31 @@ def test_a_different_idempotency_key_after_the_continuation_is_another_execution
     one = manager.resume(first['run_id'], idempotency_key='first')
     wait_for(manager, one['run_id'])
     assert one['reused'] is False
+
+
+def test_a_resumed_execution_can_resume_again_after_manager_restart(instrumented):
+    manager, first = run_rounds(instrumented, 1, name='恢复实验', description='保留实验描述')
+    continued = manager.resume(first['run_id'], idempotency_key='continuation-1')
+    wait_for(manager, continued['run_id'])
+    restarted = runner.RunManager(instrumented)
+    assert restarted.recovery_status(continued['run_id'])['start_round'] == 3
+    next_run = restarted.resume(continued['run_id'], idempotency_key='continuation-2')
+    record = wait_for(restarted, next_run['run_id'])
+    assert record['status'] == 'completed', record.get('error')
+    assert [row['round'] for row in record['rounds']] == [3]
+    assert record['name'] == '恢复实验' and record['description'] == '保留实验描述'
+    assert restarted.tensorboard_run_labels()[next_run['run_id']] == '恢复实验'
+    assert record['parent_run_id'] == continued['run_id']
+    assert record['logical_experiment_id'] == first['run_id']
+
+
+def test_stopped_continuation_retains_resume_idempotency(instrumented):
+    manager, first = run_rounds(instrumented, 1)
+    continued = manager.resume(first['run_id'], idempotency_key='stopped-continuation')
+    wait_for(manager, continued['run_id'])
+    manager.records[continued['run_id']]['status'] = 'stopped'
+    repeated = manager.resume(first['run_id'], idempotency_key='stopped-continuation')
+    assert repeated['reused'] is True and repeated['run_id'] == continued['run_id']
 
 
 def test_a_resume_is_refused_while_a_run_is_active(instrumented):

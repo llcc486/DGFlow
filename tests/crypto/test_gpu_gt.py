@@ -9,9 +9,9 @@ from dgfl.crypto import gpu
 @pytest.fixture(scope='module')
 def cuda_runtime():
     capability = gpu.compute_capabilities()['gpu']
-    if not capability.get('hardware_available') and not capability.get('available'):
-        pytest.skip('CUDA driver/NVRTC is unavailable')
-    # Available hardware must compile and execute correctly; do not hide a
+    if not capability.get('driver_available') or not capability.get('compiler_available'):
+        pytest.skip('CUDA driver/NVRTC is unavailable: '+capability.get('reason', ''))
+    # Present hardware, driver and NVRTC must compile and execute; do not hide a
     # broken implementation behind a skipped test or a CPU fallback.
     return gpu.runtime()
 

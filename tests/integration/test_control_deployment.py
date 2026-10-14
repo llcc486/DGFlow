@@ -74,6 +74,27 @@ def test_busy_control_rejects_topology_data_and_new_runs(control_app,monkeypatch
         if busy=='compute':assert client.post('/api/runs',json={'mode':'plain'}).status_code==409
 
 
+def test_compute_preparation_blocks_resume_before_creating_a_run(control_app,monkeypatch):
+    control_app.state.compute_preparation.update(state='initializing')
+    monkeypatch.setattr(control_app.state.manager,'resume',
+                        lambda *args,**kwargs:pytest.fail('resume bypassed compute admission'))
+    with TestClient(control_app) as client:
+        response=client.post('/api/runs/previous/resume',json={'idempotency_key':'once'})
+    assert response.status_code==409
+    assert '初始化' in response.json()['detail']
+
+
+def test_damaged_checkpoint_is_reported_without_a_server_error(control_app,tmp_path):
+    control_app.state.manager.records['archived']={'run_id':'archived','status':'completed'}
+    target=tmp_path/'results'/'archived'/'checkpoints'/'checkpoint-round-1.bin'
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b'not a checkpoint')
+    with TestClient(control_app) as client:
+        response=client.get('/api/runs/archived/checkpoints')
+    assert response.status_code==409
+    assert '检查点无法读取' in response.json()['detail']
+
+
 def test_run_count_defaults_and_malicious_count_bound(control_app,monkeypatch):
     app=control_app;received=[]
     def start(config):

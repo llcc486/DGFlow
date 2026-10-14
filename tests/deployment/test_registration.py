@@ -201,6 +201,14 @@ def test_a_registry_entry_with_a_forged_signature_is_refused(machine, authority)
                             authority_certificate=(Path(other_authority)/'ca.pem').read_text('ascii'))
 
 
+def test_signed_registry_entries_cannot_be_relabelled_as_other_nodes(machine, authority):
+    issued = issue_for(machine, 'authority1', authority)
+    registry = reg.registry_from_entries([issued], authority_certificate=issued['ca_certificate'])
+    registry['nodes']['authority2'] = registry['nodes'].pop('authority1')
+    with pytest.raises(reg.RegistrationError, match='名称或版本与登记表不符'):
+        reg.verify_registry(registry, authority_certificate=issued['ca_certificate'])
+
+
 def test_check_local_identity_refuses_a_replaced_or_missing_identity(machine, authority):
     issued = issue_for(machine, 'authority1', authority)
     reg.install(machine, issued, authority_certificate=issued['ca_certificate'])
@@ -214,6 +222,28 @@ def test_check_local_identity_refuses_a_replaced_or_missing_identity(machine, au
     identity_path.write_text(json.dumps(private), encoding='utf8')
     with pytest.raises(reg.RegistrationError, match='不匹配'):
         reg.check_local_identity(machine, registry, 'authority1')
+
+
+def test_check_local_identity_rejects_a_replaced_tls_private_key(machine, authority, tmp_path):
+    issued = issue_for(machine, 'authority1', authority)
+    reg.install(machine, issued, authority_certificate=issued['ca_certificate'])
+    registry = reg.registry_from_entries([issued], authority_certificate=issued['ca_certificate'])
+    foreign = tmp_path/'foreign'
+    reg.create_local_identity(foreign, 'authority2', host=TOPOLOGY['authority2']['host'])
+    (machine/'authority1'/'tls-key.pem').write_bytes((foreign/'authority2'/'tls-key.pem').read_bytes())
+    with pytest.raises(reg.RegistrationError, match='TLS 私钥或证书与登记公钥不匹配'):
+        reg.check_local_identity(machine, registry, 'authority1')
+
+
+def test_check_local_identity_uses_installed_ca_instead_of_embedded_registry_ca(machine, authority, tmp_path):
+    issued = issue_for(machine, 'authority1', authority)
+    reg.install(machine, issued, authority_certificate=issued['ca_certificate'])
+    other_authority = reg.create_authority(tmp_path/'foreign-signing')['authority']
+    foreign_issued = issue_for(machine, 'authority1', other_authority)
+    foreign_registry = reg.registry_from_entries([foreign_issued],
+                                                 authority_certificate=foreign_issued['ca_certificate'])
+    with pytest.raises(reg.RegistrationError, match='签名与签发环境不符'):
+        reg.check_local_identity(machine, foreign_registry, 'authority1')
 
 
 def test_two_machines_cannot_register_the_same_node(tmp_path, authority):

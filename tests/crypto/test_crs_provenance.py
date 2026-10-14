@@ -180,6 +180,17 @@ def test_a_verified_credential_passes_the_registry_gate(tmp_path, monkeypatch):
     assert registry.provenance['checked'] is True
 
 
+def test_requiring_provenance_with_an_anchor_still_refuses_a_missing_credential(tmp_path, monkeypatch):
+    registry = lego_registry.Registry(tmp_path)
+    folder = registry._folder(MANIFEST['crs_hash'])
+    folder.mkdir(parents=True)
+    monkeypatch.setenv(provenance.REQUIRE_ENV, '1')
+    monkeypatch.setenv(provenance.TRUST_ANCHOR_ENV, ISSUER.hex())
+    with pytest.raises(ValueError, match='未安装可验证的来源凭据'):
+        registry._provenance(folder, MANIFEST)
+    assert registry.provenance is None
+
+
 def test_a_tampered_installed_manifest_is_refused_when_an_anchor_is_pinned(tmp_path, monkeypatch):
     registry = lego_registry.Registry(tmp_path)
     folder = registry._folder(MANIFEST['crs_hash'])

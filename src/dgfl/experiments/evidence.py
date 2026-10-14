@@ -20,7 +20,7 @@ def validate_suite(value, *, normalize=True, new=False):
         if not re.fullmatch('[a-z0-9_-]{1,80}',name) or name in seen: raise ValueError('unsafe or duplicate case name')
         config=config_model(**case['config']).model_dump()
         config={key:item for key,item in config.items()
-                if key not in ('model_name','model_descriptor','bits','scale') or item is not None}
+                if key not in ('name','description','model_name','model_descriptor','bits','scale') or item is not None}
         seen.add(name); cases.append({'name':name,'config':config if normalize else dict(case['config'])})
     return {'cases':cases}
 
@@ -45,7 +45,7 @@ def validate_record(record, requested, run_id, *, resolved_config=None):
     expected=RunConfig(**requested).model_dump()
     observed=RunConfig.model_validate({k:v for k,v in actual.items() if k!='client_authorities'},
                                       strict=True).model_dump()
-    optional=('model_name','model_descriptor','bits','scale')
+    optional=('name','description','model_name','model_descriptor','bits','scale')
     expected={key:item for key,item in expected.items() if key not in optional or item is not None}
     observed={key:item for key,item in observed.items() if key not in optional or item is not None}
     from dgfl.experiments.resources import model_configuration

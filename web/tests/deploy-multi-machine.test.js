@@ -20,6 +20,7 @@ import * as training from '../src/lib/trainingBackends.js'
 import * as clouds from '../src/lib/cloudStrategies.js'
 import { trainingEligibility } from '../src/lib/trainingEligibility.js'
 import * as batching from '../src/lib/batchGrouping.js'
+import * as experiments from '../src/lib/experiments.js'
 import { api, errorText } from '../src/lib/api.js'
 import { consoleStore as store } from '../src/lib/store.js'
 
@@ -33,7 +34,7 @@ function setup() {
   store.selectedDataset.value = 'mnist'
   const stops = []
   const context = createContext({
-    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching,
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
     LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {},
     onMounted() {}, onUnmounted() {},

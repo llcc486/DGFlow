@@ -6,7 +6,7 @@ export const monitorStatus = status => ({
   stopped: '采集已停止', completed: '已记录',
 })[status] || '未记录'
 
-export function useNodeMonitor(runId, { schedule = setTimeout, cancel = clearTimeout } = {}) {
+export function useNodeMonitor(runId, { active = ref(true), schedule = setTimeout, cancel = clearTimeout } = {}) {
   const snapshot = ref(null), busy = ref(false), error = ref(''), updatedAt = ref('')
   let timer = null, timeout = null, controller = null, generation = 0, disposed = false
   function cancelWork() {
@@ -16,9 +16,10 @@ export function useNodeMonitor(runId, { schedule = setTimeout, cancel = clearTim
     timer = timeout = null
     controller?.abort()
     controller = null
+    busy.value = false
   }
   async function refresh() {
-    if (!runId.value || disposed) return
+    if (!runId.value || !active.value || disposed) return
     cancelWork()
     const token = generation, selected = runId.value, activeController = new AbortController()
     controller = activeController
@@ -40,7 +41,7 @@ export function useNodeMonitor(runId, { schedule = setTimeout, cancel = clearTim
         timeout = null
         controller = null
         busy.value = false
-        timer = schedule(refresh, 5000)
+        if (active.value) timer = schedule(refresh, 5000)
       }
     }
   }
@@ -50,8 +51,12 @@ export function useNodeMonitor(runId, { schedule = setTimeout, cancel = clearTim
     error.value = ''
     updatedAt.value = ''
     busy.value = false
-    if (runId.value) void refresh()
+    if (runId.value && active.value) void refresh()
   }, { immediate: true, flush: 'sync' })
+  watch(active, visible => {
+    cancelWork()
+    if (visible && runId.value) void refresh()
+  }, { flush: 'sync' })
   onScopeDispose(() => { disposed = true; cancelWork() })
   return { snapshot, busy, error, updatedAt, refresh }
 }

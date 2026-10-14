@@ -50,6 +50,7 @@ def test_the_stage_that_honoured_the_request_is_recorded(manager):
     register(manager, 'run-1')
     manager._begin_stage('training')
     manager.stop('run-1')
+    assert manager.stop_requested_stage == 'training'
     # The request is made during training; it is honoured where the check runs next.
     manager._begin_stage('proof_verification')
     with pytest.raises(InterruptedError):

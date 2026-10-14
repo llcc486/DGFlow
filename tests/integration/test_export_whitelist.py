@@ -63,6 +63,20 @@ def test_round_rows_and_validations_are_filtered_too():
     assert validation['client_id'] == 'client1' and validation['proof_valid'] is True
 
 
+def test_download_preserves_experiment_metadata_and_recovery_history():
+    record = sample_record()
+    record.update(name='恢复实验', description='保留历史轮次',
+                  logical_experiment_id='logical-1', execution_attempt_id='attempt-2',
+                  parent_run_id='parent-1', start_round=2,
+                  resumed_from={'checkpoint_round': 1, 'start_round': 2},
+                  checkpoints=[{'round': 1, 'sha256': 'ab' * 32}],
+                  stop={'requested': True, 'honoured_stage': 'train'})
+    view = export_view(record)
+    for field in ('name', 'description', 'logical_experiment_id', 'execution_attempt_id',
+                  'parent_run_id', 'start_round', 'resumed_from', 'checkpoints', 'stop'):
+        assert view[field] == record[field]
+
+
 def test_no_exported_field_name_suggests_restricted_or_secret_content():
     for field in (*EXPORT_RECORD_FIELDS, *EXPORT_ROUND_FIELDS, *EXPORT_VALIDATION_FIELDS):
         lowered = field.lower()

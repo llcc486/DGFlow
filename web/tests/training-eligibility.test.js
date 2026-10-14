@@ -13,6 +13,7 @@ import * as training from '../src/lib/trainingBackends.js'
 import * as clouds from '../src/lib/cloudStrategies.js'
 import { trainingEligibility } from '../src/lib/trainingEligibility.js'
 import * as batching from '../src/lib/batchGrouping.js'
+import * as experiments from '../src/lib/experiments.js'
 import { api, errorText } from '../src/lib/api.js'
 import { consoleStore as store } from '../src/lib/store.js'
 
@@ -128,13 +129,14 @@ function formHarness(status) {
   store.runs.value = []; store.currentRun.value = null
   for (const name of ['preparing', 'submitting', 'deploying', 'stopping']) store[name].value = false
   const context = createContext({
-    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching,
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
     LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
   runInContext(executable, context)
   const form = context.component.setup({}, { expose() {}, emit() {} })
+  form.form.name = '训练门槛测试'
   form.proofParametersAvailable.value = true
   form.proofParameters.value = [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }]
   form.form.proof_crs_hash = 'a'.repeat(64)
@@ -144,6 +146,32 @@ function formHarness(status) {
     store.runs.value = []; store.selectedDataset.value = 'mnist'
   } }
 }
+
+test('experiment strategy requires a name and preserves trimmed metadata through presets and exported configuration', () => {
+  const harness = formHarness(registered())
+  try {
+    const actual = harness.form
+    actual.form.name = '  MNIST 防御对照  '
+    actual.form.description = '  观察标签翻转下的准确率。\n保留相同随机种子。  '
+    actual.applyPreset(actual.presets.find(preset => preset.id === 'standard'))
+    const exported = JSON.parse(JSON.stringify(actual.runConfiguration()))
+    assert.equal(exported.name, 'MNIST 防御对照')
+    assert.equal(exported.description, '观察标签翻转下的准确率。\n保留相同随机种子。')
+    actual.form.name = '🧪'.repeat(80)
+    actual.form.description = '🧪'.repeat(1000)
+    assert.equal(actual.formErrors.value.length, 0, 'limits count whole Unicode characters')
+    actual.form.name = '   '
+    assert.match(actual.formErrors.value[0], /请输入实验名称/)
+    actual.form.name = '名'.repeat(81)
+    assert.match(actual.formErrors.value[0], /80/)
+    actual.form.name = '可识别的名称'
+    actual.form.description = '描'.repeat(1001)
+    assert.match(actual.formErrors.value[0], /1000/)
+    actual.reset()
+    assert.equal(actual.form.name, '')
+    assert.equal(actual.form.description, '')
+  } finally { harness.close() }
+})
 
 test('the actual deployment form launches with a tolerated cloud absence and retains the original topology', async () => {
   const status = offline(registered(), 'aggregator4')
@@ -193,9 +221,7 @@ test('tolerated absences cannot bypass GPU, CRS, backend, dataset or configurati
     harness.form.proofParametersAvailable.value = true
     harness.form.proofParameters.value = [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }]
     await nextTick()
-    assert.match(harness.form.blockedReason.value, /请选择.*CRS/)
-    harness.form.form.proof_crs_hash = 'a'.repeat(64)
-    await nextTick()
+    assert.equal(harness.form.runConfiguration().proof_crs_hash, 'a'.repeat(64))
     assert.equal(harness.form.blockedReason.value, '')
     harness.form.form.backend = 'torch'
     store.status.value.capabilities.training_backends.torch = { available: false, reason: '注册客户端未在线', unsupported_nodes: ['client6'] }
@@ -238,13 +264,10 @@ test('deployment defaults, reset and all presets retain only LegoGroth16', () =>
     harness.form.reset()
     assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
     assert.equal(harness.form.form.mode, 'dgflow')
-    assert.equal(harness.form.form.proof_crs_hash, null)
+    assert.equal(harness.form.runConfiguration().proof_crs_hash, 'a'.repeat(64))
     const template = parse(source).descriptor.template.content
-    // The suite is pinned by the backend, so the form must not offer a choice:
-    // no proof-suite <select> at all, only a read-only statement of the scheme.
-    assert.equal(template.includes('<select v-model="form.proof_suite"'), false)
-    assert.match(template, /data-testid="proof-suite-fixed"/)
-    assert.match(template, /proofSuiteName\(form\.proof_suite\)/)
+    assert.doesNotMatch(template, /v-model="form\.proof_suite"|proof-suite-fixed|proofSuiteName\(form\.proof_suite\)/)
+    assert.doesNotMatch(template, /v-model="form\.proof_crs_hash"|可信设置摘要|请选择匹配的 CRS|刷新已安装参数/)
   } finally { harness.close() }
 })
 
@@ -450,14 +473,16 @@ test('every secure mode requires matching 8-bit CRS and explicit Lego node capab
       { dimension: 1930, bits: 8, crs_hash: 'c'.repeat(64) },
       { dimension: '650', bits: 8, crs_hash: 'd'.repeat(64) },
       { dimension: 650, bits: '8', crs_hash: 'e'.repeat(64) },
+      { dimension: 650, bits: 8, crs_hash: 'not-a-crs-hash' },
+      { dimension: 650, bits: 8, crs_hash: 'g'.repeat(64) },
     ]
     await nextTick()
     assert.equal(harness.form.matchingParameters.value.length, 0)
-    assert.match(harness.form.blockedReason.value, /没有匹配.*维度和 8 位/)
+    assert.match(harness.form.blockedReason.value, /没有可用模型/)
     harness.form.proofParameters.value = [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }]
     await nextTick()
     harness.form.form.proof_crs_hash = 'b'.repeat(64)
-    assert.match(harness.form.blockedReason.value, /请选择.*CRS/)
+    assert.match(harness.form.blockedReason.value, /证明参数未就绪/)
     harness.form.form.proof_crs_hash = 'a'.repeat(64)
     assert.equal(harness.form.blockedReason.value, '')
     const client = store.status.value.nodes.find(node => node.id === 'client1')
@@ -470,7 +495,7 @@ test('every secure mode requires matching 8-bit CRS and explicit Lego node capab
   } finally { harness.close() }
 })
 
-test('plain baseline launches without Lego, CRS or edge/cloud availability and never sends a stale CRS', async () => {
+test('plain baseline uses an installed model without requiring Lego or online edge/cloud nodes and omits its CRS', async () => {
   const status = registered()
   for (const node of status.nodes) {
     node.capabilities.lego_norm_v1 = false
@@ -483,9 +508,6 @@ test('plain baseline launches without Lego, CRS or edge/cloud availability and n
   try {
     harness.form.form.mode = 'plain'
     harness.form.proofParametersAvailable.value = false
-    harness.form.proofParametersLoading.value = true
-    harness.form.proofParametersError.value = 'CRS registry unavailable'
-    harness.form.proofParameters.value = []
     harness.form.form.proof_crs_hash = 'stale-history-crs'
     assert.equal(harness.form.blockedReason.value, '')
     assert.equal(Object.hasOwn(harness.form.runConfiguration(), 'proof_crs_hash'), false)
@@ -622,63 +644,189 @@ test('full CNN library requires explicit matching dataset plain Torch and strict
   assert.equal(datasets.modelConfigurationError({ dataset: 'mnist', model_name: null, bits: null, scale: null }), '')
 })
 
-test('full CNN selection preserves protocol backend and blocks unavailable combinations; explicit preset changes them', async () => {
+test('model selection combines Softmax type and geometry and keeps only installed CRS-backed choices in both modes', async () => {
   const status = registered(); status.datasets = { mnist: { ready: true }, cifar10: { ready: true } }
   const harness = formHarness(status)
   try {
     const actual = harness.form
+    actual.proofParameters.value = [
+      { dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) },
+      { dimension: 260, bits: 8, crs_hash: 'b'.repeat(64) },
+      { dimension: 260, bits: 8, crs_hash: 'c'.repeat(64) },
+      { dimension: 1930, bits: 8, crs_hash: 'd'.repeat(64) },
+    ]
+    await nextTick()
     assert.equal(actual.form.model_name, null)
+    assert.deepEqual(Array.from(actual.availableModels.value, model => model.id), ['softmax-mnist-5', 'softmax-mnist-8'])
+    assert.match(actual.availableModels.value[0].label, /Softmax 回归.*5×5.*260 参数/)
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-8')
     const original = actual.runConfiguration()
     for (const key of ['model_name', 'model_descriptor', 'bits', 'scale']) assert.equal(key in original, false)
-    actual.form.model_name = 'paper_cnn_mnist'
+    actual.selectedModel.value = 'softmax-mnist-5'
     await nextTick()
-    assert.equal(actual.form.mode, 'dgflow'); assert.equal(actual.form.backend, 'numpy')
-    assert.equal(actual.form.bits, 8); assert.equal(actual.form.scale, 128)
-    assert.match(actual.formErrors.value.join(' '), /仅支持明文/)
-    actual.applyCnnPlainPreset(); await nextTick()
-    assert.equal(actual.form.mode, 'plain'); assert.equal(actual.form.backend, 'torch')
-    assert.equal(actual.form.compute_device, 'cpu'); assert.equal(actual.form.proof_crs_hash, null)
-    assert.equal(actual.form.bits, 12); assert.equal(actual.form.scale, 2048)
-    assert.equal(actual.form.local_epochs, 10); assert.equal(actual.form.rounds, 10)
-    assert.equal(actual.geometry.value.dimension, 582026)
+    assert.equal(actual.form.grid, 5)
+    assert.equal(actual.geometry.value.dimension, 260)
+    assert.equal(actual.runConfiguration().grid, 5)
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'b'.repeat(64))
+    actual.form.mode = 'plain'
+    assert.deepEqual(Array.from(actual.availableModels.value, model => model.id), ['softmax-mnist-5', 'softmax-mnist-8'])
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-5')
     assert.equal(actual.blockedReason.value, '')
     const exported = actual.runConfiguration()
-    assert.equal(exported.model_name, 'paper_cnn_mnist'); assert.equal(exported.bits, 12); assert.equal(exported.scale, 2048)
-    assert.equal('model_descriptor' in exported, false); assert.equal('proof_crs_hash' in exported, false)
+    assert.equal(exported.grid, 5)
+    for (const key of ['model_name', 'model_descriptor', 'bits', 'scale', 'proof_crs_hash']) assert.equal(key in exported, false)
+    actual.selectedModel.value = 'paper_cnn_mnist'
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-5', 'unsupported choices cannot alter the form')
+    actual.form.mode = 'dgflow'
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-5')
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'b'.repeat(64))
   } finally { harness.close() }
 })
 
-test('full CNN mismatched dataset stays explicit until user chooses its preset and reset restores old defaults', async () => {
+test('dataset changes and registry refreshes preserve valid geometry or select an installed fallback', async () => {
   const status = registered(); status.datasets = { mnist: { ready: true }, cifar10: { ready: true } }
   const harness = formHarness(status)
   try {
     const actual = harness.form
-    actual.applyCnnPlainPreset(); await nextTick()
+    const parameter = (dimension, hash) => ({ dimension, bits: 8, crs_hash: hash.repeat(64) })
+    actual.proofParameters.value = [parameter(260, 'b'), parameter(650, 'a'), parameter(760, 'c')]
+    await nextTick()
+    actual.selectedModel.value = 'softmax-mnist-5'
     actual.form.dataset = 'cifar10'; await nextTick()
-    assert.equal(actual.form.model_name, 'paper_cnn_mnist')
-    assert.match(actual.formErrors.value.join(' '), /数据集匹配/)
-    actual.applyCnnPlainPreset(); await nextTick()
-    assert.equal(actual.form.model_name, 'paper_cnn_cifar10')
-    assert.equal(actual.geometry.value.dimension, 878538); assert.equal(actual.geometry.value.features, 3072)
-    actual.form.scale = ''; assert.match(actual.formErrors.value.join(' '), /量化比例/)
-    actual.form.scale = 65537; assert.match(actual.formErrors.value.join(' '), /量化比例/)
-    actual.form.scale = 2048
+    assert.equal(actual.selectedModel.value, 'softmax-cifar10-5', 'preserve the grid when the new dataset has matching parameters')
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'c'.repeat(64))
+    assert.equal(actual.geometry.value.dimension, 760)
+    actual.form.dataset = 'mnist'
+    await nextTick()
+    actual.proofParameters.value = [parameter(650, 'a'), parameter(100, 'd')]
+    await nextTick()
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-8', 'prefer the default grid when the selected CRS disappears')
+    actual.proofParameters.value = [parameter(100, 'd'), parameter(260, 'b')]
+    await nextTick()
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-3', 'otherwise select the first installed geometry')
+    actual.selectedModel.value = 'softmax-mnist-5'
+    actual.proofParameters.value = [parameter(260, 'b'), parameter(100, 'd')]
+    await nextTick()
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-5', 'registry ordering must not reset a valid choice')
     actual.reset(); await nextTick()
     assert.equal(actual.form.model_name, null); assert.equal(actual.form.bits, null); assert.equal(actual.form.scale, null)
     assert.equal(actual.form.local_epochs, 1); assert.equal(actual.form.rounds, 5)
     assert.equal(actual.form.mode, 'dgflow'); assert.equal(actual.form.backend, 'numpy')
-    assert.equal(actual.geometry.value.dimension, 650)
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-3', 'reset falls back when the default model has no installed CRS')
+    assert.equal(actual.geometry.value.dimension, 100)
     assert.equal('model_name' in actual.runConfiguration(), false)
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'd'.repeat(64))
+    actual.proofParameters.value = [parameter(260, 'b')]
+    actual.reset(); await nextTick()
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-5', 'a single installed nondefault model remains usable after reset')
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'b'.repeat(64))
+    actual.form.dataset = 'cifar10'; await nextTick()
+    assert.equal(actual.availableModels.value.length, 0, 'another dataset CRS cannot make this dataset selectable')
+    assert.equal(actual.selectedModel.value, '')
+    assert.match(actual.formErrors.value.join(' '), /没有可用模型/)
   } finally { harness.close() }
 })
 
-test('full CNN new model and quantization controls use explicit labels and honest CPU/plain wording', () => {
+test('model type has a single accessible combined selector and no separate size or CNN quantization inputs', () => {
   const template = parse(source).descriptor.template.content
-  for (const id of ['model-architecture', 'model-quantization-bits', 'model-quantization-scale']) {
-    assert.match(template, new RegExp(`<label for="${id}">`))
-    assert.match(template, new RegExp(`(?:select|input) id="${id}"`))
-  }
-  assert.match(template, /尚不支持加密协议|不能视为加密 DGFlow/)
+  assert.match(template, /<label for="model-architecture">模型类型<\/label>/)
+  assert.match(template, /<select id="model-architecture" v-model="selectedModel"[^>]*aria-describedby="model-availability"/)
+  assert.match(template, /v-for="model in availableModels"/)
+  assert.match(template, /:disabled="proofParametersLoading \|\| !availableModels.length"/)
+  assert.match(template, /暂无可用模型/)
+  assert.doesNotMatch(template, /model-quantization-|v-model(?:\.number)?="form\.(?:grid|model_name)"|availableModelSizes|availableArchitectures/)
+  assert.doesNotMatch(template, /现有线性模型|applyCnnPlainPreset|此预设明确选择/)
   assert.match(template, /上方 GPU 选项控制密码计算，二者独立/)
   assert.match(template, /明文对照不生成证明或执行鲁棒筛选/)
+})
+
+test('empty or failed model discovery blocks both modes before API dispatch and recovers when matching parameters return', async () => {
+  const harness = formHarness(registered()), previous = api.startRun
+  let requests = 0
+  api.startRun = async () => { requests += 1; assert.fail('unavailable model reached API') }
+  try {
+    const actual = harness.form
+    for (const mode of ['plain', 'dgflow']) {
+      actual.form.mode = mode
+      actual.proofParametersLoading.value = true
+      assert.match(actual.blockedReason.value, /正在检查可用模型/)
+      await actual.launch()
+      actual.proofParametersLoading.value = false
+      actual.proofParametersError.value = '模型参数服务暂不可用'
+      assert.match(actual.blockedReason.value, /模型参数服务暂不可用/)
+      await actual.launch()
+      actual.proofParametersError.value = ''
+      actual.proofParameters.value = []
+      await nextTick()
+      assert.equal(actual.selectedModel.value, '')
+      assert.match(actual.blockedReason.value, /没有可用模型/)
+      await actual.launch()
+    }
+    assert.equal(requests, 0)
+    actual.proofParameters.value = [{ dimension: 650, bits: 8, crs_hash: 'a'.repeat(64) }]
+    await nextTick()
+    assert.equal(actual.selectedModel.value, 'softmax-mnist-8')
+    assert.equal(actual.blockedReason.value, '')
+  } finally { api.startRun = previous; harness.close() }
+})
+
+test('automatic CRS selection is stable across refreshes and reselects when installed parameters change', async () => {
+  const harness = formHarness(registered())
+  try {
+    const actual = harness.form
+    const parameter = hash => ({ dimension: 650, bits: 8, crs_hash: hash.repeat(64) })
+    actual.proofParameters.value = [parameter('c'), parameter('b')]
+    await nextTick()
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'b'.repeat(64), 'initial choice must be deterministic')
+    actual.form.proof_crs_hash = 'c'.repeat(64)
+    actual.proofParameters.value = [parameter('b'), parameter('c'), parameter('a')]
+    await nextTick()
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'c'.repeat(64), 'a matching pinned choice survives registry refreshes')
+    actual.proofParameters.value = [parameter('b'), parameter('a')]
+    await nextTick()
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'a'.repeat(64))
+    actual.reset()
+    assert.equal(actual.runConfiguration().proof_crs_hash, 'a'.repeat(64), 'reset keeps a ready encrypted configuration')
+    actual.proofParameters.value = []
+    await nextTick()
+    assert.equal(actual.form.proof_crs_hash, null)
+    assert.match(actual.formErrors.value.join(' '), /没有可用模型/)
+  } finally { harness.close() }
+})
+
+test('loading or failed proof parameter discovery prevents encrypted API dispatch', async () => {
+  const harness = formHarness(registered()), previous = api.startRun
+  let requests = 0
+  api.startRun = async () => { requests += 1; assert.fail('unready proof parameters reached API') }
+  try {
+    harness.form.proofParametersLoading.value = true
+    assert.match(harness.form.blockedReason.value, /正在检查可用模型/)
+    await harness.form.launch()
+    harness.form.proofParametersLoading.value = false
+    harness.form.proofParametersError.value = '证明参数服务暂不可用'
+    assert.match(harness.form.blockedReason.value, /证明参数服务暂不可用/)
+    await harness.form.launch()
+    harness.form.proofParametersError.value = ''
+    harness.form.proofParameters.value = []
+    assert.match(harness.form.blockedReason.value, /没有可用模型/)
+    await harness.form.launch()
+    assert.equal(requests, 0)
+  } finally { api.startRun = previous; harness.close() }
+})
+
+test('execution exposes serial and parallel only and defaults to parallel after reset', () => {
+  const harness = formHarness(registered())
+  try {
+    const actual = harness.form
+    assert.equal(actual.runConfiguration().execution, 'parallel')
+    actual.form.execution = 'serial'
+    assert.equal(actual.runConfiguration().execution, 'serial')
+    actual.reset()
+    assert.equal(actual.runConfiguration().execution, 'parallel')
+    const template = parse(source).descriptor.template.content
+    const execution = template.match(/<select id="execution-strategy"[^>]*>([\s\S]*?)<\/select>/)?.[1]
+    assert.ok(execution)
+    assert.deepEqual(Array.from(execution.matchAll(/<option value="([^"]+)">([^<]+)<\/option>/g), match => [match[1], match[2]]),
+      [['serial', '串行'], ['parallel', '并行']])
+  } finally { harness.close() }
 })

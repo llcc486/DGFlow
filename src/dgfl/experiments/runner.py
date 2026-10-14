@@ -28,6 +28,7 @@ from dgfl.crypto import backend as b
 from dgfl.crypto import protocol as p
 from dgfl.deployment import cluster_topology
 from dgfl.experiments.attack_metrics import participation_metrics
+from dgfl.experiments.metadata import display_name, normalize_metadata, record_metadata
 from dgfl.experiments.monitoring import RunNodeMonitor, clean_event, frozen_nodes, monitor_snapshot
 from dgfl.experiments.resources import check_wire_resources, model_configuration, resource_layers
 from dgfl.experiments.telemetry import LocalProcessMonitor
@@ -399,6 +400,7 @@ class RunManager:
         for path in sorted((self.runtime/'results').glob('*/result.json')):
             try:
                 record=json.loads(path.read_text('utf8'))
+                record.update(record_metadata(record))
                 if record['status'] in ('queued','running','stopping'):
                     record['status']='aborted'; record['error']='控制进程曾停止；请创建新任务。'
                     atomic_json(path,record)
@@ -488,6 +490,10 @@ class RunManager:
     def _failure_detail(self,exc):
         return f'{type(exc).__name__}: {exc}'.replace(str(self.runtime.parent),'[workspace]')[:600]
 
+    def tensorboard_run_labels(self):
+        with self.lock:
+            return {run_id:display_name(record) for run_id,record in self.records.items()}
+
     def _round_plan(self,cfg,policy,batch_size,topology,descriptor):
         """The immutable per-round plan a checkpoint records.
 
@@ -543,11 +549,16 @@ class RunManager:
                               config=record['config'],plan=plan,key_epoch=epoch,
                               authorization_manifest_hash=manifest_hash,previous=previous)
             written=cp.write(cp.checkpoint_path(results,record['run_id'],round_id),document)
-            certificate=cp.commit_certificate(round_id=round_id,
-                                              checkpoint_sha256=written['sha256'],
-                                              confirmations=confirmation_rows,
-                                              threshold=int(authority_threshold))
-            cp.write_certificate(results,record['run_id'],certificate)
+            # A plain baseline has no authority confirmations. Persist its
+            # checkpoint without inventing a secure commit certificate.
+            if record['config']['mode']!='plain':
+                certificate=cp.commit_certificate(round_id=round_id,
+                                                  checkpoint_sha256=written['sha256'],
+                                                  confirmations=confirmation_rows,
+                                                  threshold=int(authority_threshold))
+                if not certificate['valid']:
+                    raise ValueError('round commit confirmation threshold not met')
+                cp.write_certificate(results,record['run_id'],certificate)
             record.setdefault('checkpoints',[]).append(
                 {'round':round_id,'sha256':written['sha256'],'bytes':written['bytes'],
                  'model_hash':document['model_hash'],
@@ -585,7 +596,7 @@ class RunManager:
         on the new execution rather than re-derived, so the continuation provably
         begins from the checkpoint a reader can inspect.
         """
-        config={key:value for key,value in config.items()
+        config={key:value for key,value in normalize_metadata(config).items()
                 if key not in ('model_name','model_descriptor','bits','scale') or value is not None}
         if resume_from:
             config['resume_from']=dict(resume_from)
@@ -679,7 +690,8 @@ class RunManager:
             elif config.pop('proof_crs_hash',None) is not None:
                 raise ValueError('明文基线不使用证明或 CRS 摘要')
             run_id=uuid.uuid4().hex
-            record={'run_id':run_id,'status':'queued','config':dict(config),'created_at':utc(),'current_round':0,
+            record={'run_id':run_id,'name':config.get('name'),'description':config.get('description'),
+                    'status':'queued','config':dict(config),'created_at':utc(),'current_round':0,
                     'rounds':[],'events':[],'error':None,'summary':{},'evidence':{
                         'data':dataset_spec(config['dataset'])['name']+' public replay',
                         'dataset':config['dataset'],
@@ -747,7 +759,7 @@ class RunManager:
                 finally:
                     self.active=None
                 raise ValueError(record['error']) from exc
-            return {'run_id':run_id,'status':'queued'}
+            return {'run_id':run_id,'name':record['name'],'description':record['description'],'status':'queued'}
 
     def checkpoints(self,run_id):
         """Public summaries of a run's checkpoints, without any model vector."""
@@ -807,7 +819,7 @@ class RunManager:
                     if (other.get('parent_run_id')==run_id
                             and resumed.get('idempotency_key')==idempotency_key
                             and other.get('status') in ('queued','running','stopping','completed',
-                                                        'failed','aborted')):
+                                                        'failed','aborted','stopped')):
                         return {'run_id':other['run_id'],'status':other['status'],
                                 'reused':True,'parent_run_id':run_id,
                                 'checkpoint_round':resumed.get('checkpoint_round'),
@@ -827,7 +839,8 @@ class RunManager:
                     {'time':utc(),'stage':'superseded',
                      'message':'创建恢复执行，旧执行终止并隔离','round':0})
                 self._save(parent)
-            checkpoint={'run_id':run_id,'start_round':plan['start_round'],'model':plan['model'],
+            checkpoint={'run_id':run_id,'parent_run_id':run_id,
+                        'start_round':plan['start_round'],'model':plan['model'],
                         'checkpoint_round':plan['checkpoint']['round'],
                         'checkpoint_sha256':plan['checkpoint']['sha256'],
                         'idempotency_key':idempotency_key}
@@ -867,7 +880,7 @@ class RunManager:
                 raise ValueError('该任务未在运行')
             if not self.stop_event.is_set():
                 self.stop_requested_at=time.time()
-                self.stop_requested_stage=None
+                self.stop_requested_stage=self.current_stage
                 self.stop_event.set()
             self.records[run_id]['status']='stopping'
             self._save(self.records[run_id])
@@ -1245,6 +1258,10 @@ class RunManager:
                 if cfg['mode']!='plain':
                     t=time.perf_counter(); event('dkg','密钥节点共同建钥，核对同一公开转录',round_id)
                     begin={'context':ctx,'reference':reference,'clients':len(members),'mode':cfg['mode'],'policy':policy}
+                    if resume_from and round_id==start_round:
+                        begin['recovery']={'parent_task_id':resume_from['run_id'],
+                                           'checkpoint_round':resume_from['checkpoint_round'],
+                                           'checkpoint_sha256':resume_from['checkpoint_sha256']}
                     commits=many([(a,'begin',begin) for a in authorities])
                     if not dkg_ready:
                         acks=many([(a,'transcript',{'commitments':commits}) for a in authorities])

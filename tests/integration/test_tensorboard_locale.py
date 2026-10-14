@@ -316,6 +316,28 @@ assert.equal(select.children[2].value, '^887e7f260038415f8e2081c3c5957ec6/nodes/
 assert.equal(select.children[3].value, '^run \\(seed 42\\)\\+x$');
 assert.equal(select.children[4].value, '^887e7f');
 
+// User-facing names affect option text only, including the console's generated
+// experiment+nodes filter. Native values continue to identify opaque runs.
+const nativeRoot = runs[0], customName = '<img src=x onerror=alert(1)> 我的实验';
+const consoleFilter = '^' + nativeRoot + '(?:[/\\\\](?:nodes|machines)[/\\\\][^/\\\\]+)?$';
+input.value = consoleFilter;
+assert.equal(dropdown.setRuns(runs, {[nativeRoot]: customName}), true);
+assert.equal(select.children[1].textContent, customName);
+assert.equal(select.children[2].textContent, customName + '/nodes/client1');
+assert.equal(select.children[1].value, '^' + nativeRoot + '$');
+assert.equal(select.children[4].value, consoleFilter);
+assert.equal(select.children[4].textContent, '当前筛选：' + customName + '（实验及节点记录）');
+assert.equal(select.value, consoleFilter);
+assert.equal(input.value, consoleFilter);
+assert.deepEqual(input.dispatched, []);
+assert.equal(dropdown.setRuns(runs, {[nativeRoot]: customName}), false);
+// A label-only update is meaningful even if the IDs have not changed.
+assert.equal(dropdown.setRuns(runs, {[nativeRoot]: '修改后的名称'}), true);
+assert.equal(select.children[1].textContent, '修改后的名称');
+assert.equal(dropdown.setRuns(runs, {[nativeRoot]: '同名实验', [runs[2]]: '同名实验'}), true);
+assert.equal(select.children[1].textContent, select.children[3].textContent);
+assert.notEqual(select.children[1].value, select.children[3].value);
+
 // Choosing a run drives the native input through its own keyup contract.
 select.value = select.children[2].value;
 select.dispatchEvent(new window.Event('change'));
@@ -352,6 +374,127 @@ assert.equal(empty.apply(), false);
 // A minimal document (no querySelector at all) must not throw.
 const minimal = ui.runFilterDropdown({}, window);
 assert.equal(minimal.flush(), false);
+"""
+    result = subprocess.run([node, '-', str(script)], input=program, capture_output=True,
+                            text=True, encoding='utf8', timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_run_name_adapter_aliases_only_native_presentation_and_retains_identifiers():
+    node = shutil.which('node')
+    if node is None:
+        pytest.skip('Node.js is required to execute the packaged browser adapter')
+    script = Path(__file__).resolve().parents[2] / 'src/dgfl/services/assets/zh-CN.js'
+    program = r"""
+const assert = require('node:assert/strict');
+const ui = require(process.argv[2]);
+const first = '6632fc839e5a4240974dfd500b80ec93', second = '887e7f260038415f8e2081c3c5957ec6';
+const labels = {[first]: '<b>中文名称 & seed 42</b>', [second]: '另一个实验'};
+assert.equal(ui.runLabel(first, labels), labels[first]);
+assert.equal(ui.runLabel(' ' + first + '\\nodes\\client1\n', labels), ' ' + labels[first] + '\\nodes\\client1\n');
+assert.equal(ui.runLabel(first + '/machines/local', labels), labels[first] + '/machines/local');
+assert.equal(ui.runLabel('prefix-' + first, labels), 'prefix-' + first);
+assert.equal(ui.runLabel(first + '-suffix', labels), first + '-suffix');
+assert.equal(ui.runLabel(first, []), first);
+assert.equal(ui.runLabel('toString', {}), 'toString');
+const separator = '[/\\\\]';
+assert.equal(ui.runFilterLabel('^' + first + separator + 'nodes' + separator + 'client1$', labels), labels[first] + ' / nodes / client1');
+assert.equal(ui.runFilterLabel('^' + first + separator + 'machines' + separator + 'local$', labels), labels[first] + ' / machines / local');
+assert.equal(ui.runFilterLabel('^' + first + separator + 'nodes' + separator + '(?:client1|client2)$', labels), labels[first] + ' / nodes / client1、client2');
+assert.equal(ui.runFilterLabel('^' + first + '.*$', labels), '^' + first + '.*$');
+
+// A small DOM model exercises the shipped adapter rather than matching source
+// strings. These scopes are the native sidebar/card/tooltip presentation slots.
+function element(tag, scope, attributes = {}) {
+  const result = {nodeType: 1, tagName: tag, scope, attributes: {...attributes}, children: [], parentElement: null,
+    append(child) { this.children.push(child); child.parentElement = this; return child; },
+    getAttribute(name) { return Object.hasOwn(this.attributes, name) ? this.attributes[name] : null; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    matches(selector) {
+      if (selector.startsWith('runs-data-table .table-column-run')) return this.scope;
+      if (selector === '.header > tb-data-table-header-cell') return this.tagName === 'tb-data-table-header-cell';
+      return this.tagName === selector;
+    },
+    closest(selector) {
+      for (let current = this; current; current = current.parentElement) {
+        if (selector.startsWith('runs-data-table .table-column-run')) {
+          if (current.scope) return current;
+        } else if (selector === 'scalar-card-data-table') {
+          if (current.tagName === selector) return current;
+        } else if (['input', 'textarea', 'option', 'select', 'tb-experiment-alias'].includes(current.tagName) || current.tagName === 'user-tag') return current;
+      }
+      return null;
+    },
+    querySelector(selector) {
+      if (selector === 'tb-data-table-header span') return descendants(this).find(child => child.tagName === 'span') || null;
+      return descendants(this).find(child => child.nodeType === 1 && child.matches(selector)) || null;
+    },
+    querySelectorAll(selector) { return descendants(this).filter(child => child.nodeType === 1 && child.matches(selector)); },
+    set innerHTML(_) { throw Error('user names must never be parsed as HTML'); }};
+  return result;
+}
+function text(value) { return {nodeType: 3, nodeValue: value, parentElement: null}; }
+function descendants(element) { return element.children.flatMap(child => [child, ...(child.children ? descendants(child) : [])]); }
+const document = {createTreeWalker(element) {
+  const nodes = descendants(element); let position = 0;
+  return {nextNode() { return nodes[position++] || null; }};
+}};
+const page = element('html', false);
+const sidebar = page.append(element('tb-data-table-content-cell', true, {'data-id': first, title: first}));
+const path = sidebar.append(element('tb-truncated-path', false, {title: first + '/nodes/client1'}));
+const prefix = path.append(element('span', false)).append(text(first + '/nodes'));
+const suffix = path.append(element('span', false)).append(text('/client1'));
+const input = sidebar.append(element('input', false, {title: first})); input.value = first;
+const tag = sidebar.append(element('user-tag', false)).append(text(first));
+const chart = page.append(element('card-run-name-component', true, {title: first}));
+const chartText = chart.append(element('span', false)).append(text(first));
+const experimentAlias = chart.append(element('tb-experiment-alias', false)).append(text(first));
+const tooltip = page.append(element('td', true));
+const tooltipText = tooltip.append(text(' ' + first + '\\machines\\local '));
+const userText = page.append(element('p', false)).append(text(first));
+const stepTable = page.append(element('scalar-card-data-table', false));
+const headerRow = stepTable.append(element('div', false));
+for (const label of ['', '实验记录', '自定义参数']) {
+  const header = headerRow.append(element('tb-data-table-header-cell', false));
+  header.append(element('tb-data-table-header', false)).append(element('span', false)).textContent = label;
+}
+const stepRow = stepTable.append(element('tb-data-table-content-row', false));
+stepRow.append(element('tb-data-table-content-cell', false)).append(text('0.5'));
+const stepRun = stepRow.append(element('tb-data-table-content-cell', false)).append(element('div', false)).append(text(' ' + first + ' '));
+const hparam = stepRow.append(element('tb-data-table-content-cell', false)).append(text(first));
+const adapt = ui.runNameAdapter(document);
+adapt(page, labels);
+assert.equal(prefix.nodeValue, labels[first] + '/nodes');
+assert.equal(suffix.nodeValue, '/client1');
+assert.equal(path.getAttribute('title'), labels[first] + '/nodes/client1');
+assert.equal(sidebar.getAttribute('data-id'), first);
+assert.equal(chartText.nodeValue, labels[first]);
+assert.equal(chart.getAttribute('title'), labels[first]);
+assert.equal(tooltipText.nodeValue, ' ' + labels[first] + '\\machines\\local ');
+assert.equal(input.value, first); assert.equal(input.getAttribute('title'), first);
+assert.equal(tag.nodeValue, first); assert.equal(experimentAlias.nodeValue, first); assert.equal(userText.nodeValue, first);
+assert.equal(stepRun.nodeValue, ' ' + labels[first] + ' ');
+assert.equal(hparam.nodeValue, first);
+// Reordering the native run column changes its index but not the alias target.
+headerRow.children = [headerRow.children[1], headerRow.children[0], headerRow.children[2]];
+stepRow.children = [stepRow.children[1], stepRow.children[0], stepRow.children[2]];
+stepRun.nodeValue = first;
+adapt(stepRun.parentElement, labels);
+assert.equal(stepRun.nodeValue, labels[first]);
+assert.equal(hparam.nodeValue, first);
+// Angular may reuse a node or write the original name again after a refresh.
+chartText.nodeValue = second;
+adapt(chartText.parentElement, labels);
+assert.equal(chartText.nodeValue, labels[second]);
+chartText.nodeValue = first;
+adapt(chart, labels);
+assert.equal(chartText.nodeValue, labels[first]);
+// An experiment may even be named after another ID: repeated adaptation must
+// not reinterpret the user name as a different experiment's native identity.
+const colliding = {...labels, [first]: second};
+adapt(page, colliding); adapt(page, colliding);
+assert.equal(prefix.nodeValue, second + '/nodes');
+assert.equal(chartText.nodeValue, second);
 """
     result = subprocess.run([node, '-', str(script)], input=program, capture_output=True,
                             text=True, encoding='utf8', timeout=15)
