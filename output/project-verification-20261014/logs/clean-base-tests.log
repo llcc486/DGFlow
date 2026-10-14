@@ -1,0 +1,299 @@
+.................ssssss.................................s............... [  1%]
+.........................sssssssssssssssssssssssssssssssssssssssssssssss [  3%]
+sssss................................................................... [  5%]
+........................................................................ [  7%]
+.................................................ssssssssssssss.ssssssss [  9%]
+ss................................ssssssssssssssssssssssssssssssssssssss [ 10%]
+ssssssssssssssssssssssssssssssss.ss..................................... [ 12%]
+..........sssssssssssssss........sssssssssssssssssssss.................. [ 14%]
+...ss.sssssssssssssssssssss............................................. [ 16%]
+.........................s.............................................. [ 18%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+..........................................................sss........... [ 23%]
+.............................................ssssssssssssssss........... [ 25%]
+........................................................................ [ 27%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+................s...................................ssssss.sssss........ [ 36%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 43%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+..............s......................................................... [ 49%]
+........................................................................ [ 51%]
+.....ssssssssssssssssssssssss........................................... [ 53%]
+........................................sss............................. [ 54%]
+........................................................................ [ 56%]
+.....................................................................s.. [ 58%]
+..................................................................s..... [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 64%]
+...............................s.................................ssssss. [ 65%]
+.......sss..................................F.....s..................... [ 67%]
+.....................................s.................................. [ 69%]
+........................................................................ [ 71%]
+.............................s.........................s................ [ 73%]
+........................s..............................ss............... [ 75%]
+........................................................................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+................................................s...............s.s.s.s. [ 84%]
+........................................sss............................. [ 86%]
+......................................s....ssssssssssssssssssssss....... [ 87%]
+................................sssssss................................. [ 89%]
+...............sssssss.....................................ssss......... [ 91%]
+........sss............................................................. [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+............................................                             [100%]
+================================== FAILURES ===================================
+_ test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof _
+
+tmp_path = WindowsPath('C:/Users/eeeee/AppData/Local/Temp/dgfb-1c0e5d83/test_training_receives_owner_k0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000026A20F1A330>
+
+    def test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof(tmp_path,monkeypatch):
+        topology=validate_topology(2,2,2,2,2)
+        topology['client_authorities']=client_authorities(2,2)
+        nodes=['authority1','authority2','aggregator1','aggregator2','client1','client2']
+        create_cluster(tmp_path/'keys',dict.fromkeys(['coordinator',*nodes],'127.0.0.1'))
+        (tmp_path/'cluster.json').write_text(json.dumps({**topology,'deployment':'single_host',
+            'nodes':{node:{'url':'https://test.invalid'} for node in nodes}}),encoding='utf8')
+        workers={node:roles.RoleWorker(node,tmp_path,Identity(tmp_path/'keys',node)) for node in nodes}
+        reference=[1]*20
+        policy={**topology,'mode':'encrypted','members':['client1','client2'],'batch_size':2,
+                'bits':4,'scale':16,'dimension':20}
+        ctx={**topology,'task_id':'owner-train','round_id':1,'key_epoch':'owner-training-epoch',
+             'model_hash':b.digest(reference),'bits':4,'scale':16,'dimension':20}
+        x=np.ones((8,1)); y=np.arange(8)%10
+        monkeypatch.setattr(training_data,'load_mnist',lambda *args,**kwargs:(x,y,x,y))
+        monkeypatch.setattr(training_model,'train_local',lambda *args,**kwargs:np.array(reference,dtype=float)/16)
+        edges=[workers['authority1'],workers['authority2']]; client=workers['client1']
+        try:
+            commits=[a.execute('begin',{'context':ctx,'reference':reference,'clients':2,'mode':'encrypted','policy':policy}) for a in edges]
+            acks=[a.execute('transcript',{'commitments':commits}) for a in edges]
+            for dealer in edges:
+                for receiver in edges:
+                    receiver.execute('receive_share',{'message':dealer.execute('share',{'recipient':receiver.node_id})})
+            for a in edges: a.execute('finalize',{'acks':acks})
+            messages=[a.execute('client_key',{'client_id':'client1'}) for a in edges]
+            with pytest.raises(ValueError):
+                edges[0].identity.open(messages[1],'client-key',roles.envelope_context(ctx),'authority2')
+            with pytest.raises(ValueError,match='another authority'):
+                edges[1].execute('forward_client_keys',{'client_id':'client1','key_messages':messages})
+            bundle=edges[0].execute('forward_client_keys',{'client_id':'client1','key_messages':messages})
+            opened=client.identity.open(bundle,'owned-client-keys',roles.envelope_context(ctx),'authority1')['payload']
+            assert opened=={'context':ctx,'reference':reference,'key_messages':messages}
+            client.execute('prepare_data',{'task_id':ctx['task_id'],'train_limit':8,'seed':42,'non_iid':False,'policy':policy})
+            args={'context':ctx,'reference':reference,'mode':'encrypted','local_epochs':1,
+                  'seed':42,'backend':'numpy','policy':policy,'key_messages':bundle}
+            wrong=edges[1].identity.seal('client1','owned-client-keys',opened,roles.envelope_context(ctx))
+            with pytest.raises(ValueError): client.execute('train',{**args,'key_messages':wrong})
+            changed=edges[0].identity.seal('client1','owned-client-keys',{**opened,'reference':[2]*20},roles.envelope_context(ctx))
+            with pytest.raises(ValueError,match='pinned round'):
+                client.execute('train',{**args,'key_messages':changed})
+            result=client.execute('train',args)
+>           assert set(result)=={'packet','training_s','encrypt_s','proof_s','training_metrics',
+                                 'metrics_eval_s','metrics_callback_s'}
+E                                AssertionError: assert {'encrypt_s',...ecution', ...} == {'encrypt_s',...metrics', ...}
+E                                  
+E                                  Extra items in the left set:
+E                                  'training_execution'
+E                                  Use -v to get more diff
+
+tests\integration\test_owned_topology_roles.py:232: AssertionError
+============================== warnings summary ===============================
+tmp\project-verification-20261014\clean-env\Lib\site-packages\fastapi\testclient.py:1
+  D:\Desktop\全国密码技术竞赛\Project\fuben\DGFlow\tmp\project-verification-20261014\clean-env\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+src\dgfl\services\tensorboard.py:10
+  D:\Desktop\全国密码技术竞赛\Project\fuben\DGFlow\src\dgfl\services\tensorboard.py:10: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+    from starlette.middleware.wsgi import WSGIMiddleware
+
+tests/deployment/test_cli.py::test_demo_releases_lifecycle_lock_for_controller_topology_changes
+  D:\Desktop\全国密码技术竞赛\Project\fuben\DGFlow\tmp\project-verification-20261014\clean-env\Lib\site-packages\tensorboard\_vendor\bleach\_vendor\html5lib\filters\sanitizer.py:29: DeprecationWarning: html5lib's sanitizer is deprecated; see https://github.com/html5lib/html5lib-python/issues/443 and please let us know if Bleach is unsuitable for your needs
+    warnings.warn(_deprecation_msg, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\crypto\test_lego.py:7: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\training\test_cnn_monitoring.py:7: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_paper_models.py:8: could not import 'torch': No module named 'torch'
+SKIPPED [6] tests\crypto\test_acceleration.py:77: compact format only
+SKIPPED [1] tests\crypto\test_acceleration.py:93: optional native extension
+SKIPPED [3] tests\crypto\test_aggregate_native.py:44: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [6] tests\crypto\test_aggregate_native.py:56: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_aggregate_native.py:75: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [19] tests\crypto\test_aggregate_native.py:97: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [2] tests\crypto\test_aggregate_native.py:136: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [2] tests\crypto\test_aggregate_native.py:150: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [4] tests\crypto\test_aggregate_native.py:156: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\crypto\test_aggregate_native.py:170: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_aggregate_native.py:191: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [5] tests\crypto\test_aggregate_native.py:205: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [6] tests\crypto\test_aggregate_native.py:241: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_gpu_aggregate.py:45: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_aggregate.py:56: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [6] tests\crypto\test_gpu_aggregate.py:76: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_aggregate.py:97: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [3] tests\crypto\test_gpu_aggregate.py:110: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_aggregate.py:141: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_aggregate.py:149: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [2] tests\crypto\test_gpu_aggregate.py:166: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_aggregate.py:198: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_arithmetic.py:27: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_arithmetic.py:47: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [3] tests\crypto\test_gpu_arithmetic.py:61: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_arithmetic.py:93: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_arithmetic.py:111: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [24] tests\crypto\test_gpu_fused_g1.py:50: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [6] tests\crypto\test_gpu_fused_g1.py:64: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_fused_g1.py:82: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [3] tests\crypto\test_gpu_fused_g1.py:96: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [4] tests\crypto\test_gpu_gt.py:70: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:84: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:95: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:105: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [2] tests\crypto\test_gpu_gt.py:111: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:125: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:140: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:155: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:164: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:176: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_gt.py:184: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:105: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:118: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:135: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:165: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [2] tests\crypto\test_gpu_many_optimization.py:207: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [5] tests\crypto\test_gpu_many_optimization.py:218: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:239: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [2] tests\crypto\test_gpu_many_optimization.py:254: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:264: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:284: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [2] tests\crypto\test_gpu_many_optimization.py:297: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [3] tests\crypto\test_gpu_many_optimization.py:312: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:337: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_gpu_many_optimization.py:350: CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用
+SKIPPED [1] tests\crypto\test_lego_registry.py:22: persistent Lego native extension required
+SKIPPED [1] tests\crypto\test_lego_registry.py:46: persistent Lego native extension required
+SKIPPED [1] tests\crypto\test_lego_registry.py:73: persistent Lego native extension required
+SKIPPED [2] tests\crypto\test_lego_registry.py:85: persistent Lego native extension required
+SKIPPED [7] tests\crypto\test_lego_registry.py:95: persistent Lego native extension required
+SKIPPED [1] tests\crypto\test_lego_registry.py:105: persistent Lego native extension required
+SKIPPED [1] tests\crypto\test_lego_registry.py:115: persistent Lego native extension required
+SKIPPED [1] tests\crypto\test_lego_registry.py:125: persistent Lego native extension required
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:39: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:51: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:76: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:88: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:106: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:125: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [4] tests\crypto\test_native_batch_optimization.py:136: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:155: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [4] tests\crypto\test_native_batch_optimization.py:185: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\crypto\test_native_batch_optimization.py:194: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:200: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:220: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_native_batch_optimization.py:231: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [2] tests\crypto\test_paper_dimension_native.py:8: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\crypto\test_partial_batch_optimization.py:52: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_partial_batch_optimization.py:66: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_partial_batch_optimization.py:79: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_partial_batch_optimization.py:87: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_partial_batch_optimization.py:96: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\crypto\test_partial_batch_optimization.py:118: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\crypto\test_partial_batch_optimization.py:130: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [4] tests\crypto\test_partial_batch_optimization.py:142: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_partial_batch_optimization.py:148: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\crypto\test_partial_batch_optimization.py:167: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\crypto\test_screening_information.py:17: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\deployment\test_proof_parameter_setup.py:264: persistent Lego native extension is unavailable
+SKIPPED [2] tests\deployment\test_proof_parameter_setup.py:280: persistent Lego native extension is unavailable
+SKIPPED [1] tests\deployment\test_start_script.py:302: A native Unix Bash is required
+SKIPPED [4] tests\deployment\test_start_script.py:313: A native Unix Bash is required
+SKIPPED [2] tests\deployment\test_start_script.py:336: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:347: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:355: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:363: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:374: A native Unix Bash is required
+SKIPPED [2] tests\deployment\test_start_script.py:395: A native Unix Bash is required
+SKIPPED [3] tests\deployment\test_start_script.py:409: A native Unix Bash is required
+SKIPPED [1] tests\experiments\test_monitor_series.py:473: symlink permission unavailable
+SKIPPED [1] tests\experiments\test_paper_diagnostic_vectors.py:83: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\experiments\test_paper_diagnostic_vectors.py:95: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\experiments\test_paper_diagnostic_vectors.py:141: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\experiments\test_paper_diagnostic_vectors.py:170: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\experiments\test_paper_diagnostic_vectors.py:193: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\experiments\test_paper_diagnostic_vectors.py:208: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\experiments\test_paper_diagnostic_vectors.py:222: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\experiments\test_paper_diagnostic_vectors.py:235: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\experiments\test_tensorboard.py:167: symlink creation unavailable
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:174: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:202: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:216: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:233: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:247: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:316: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [2] tests\integration\test_attack_policy_binding.py:334: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\integration\test_attack_policy_binding.py:344: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:364: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:372: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:399: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:413: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:427: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:447: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:464: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [5] tests\integration\test_attack_policy_binding.py:498: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_attack_policy_binding.py:524: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [3] tests\integration\test_cnn_plain_model_contract.py:174: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\integration\test_configurable_batches.py:72: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_control_lan_deployment.py:264: native Lego registry required
+SKIPPED [1] tests\integration\test_cuda_training.py:9: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\integration\test_lan_distributed_training.py:95: native Lego extension required
+SKIPPED [1] tests\integration\test_lan_distributed_training.py:142: native Lego extension required
+SKIPPED [4] tests\integration\test_lan_distributed_training.py:163: native Lego extension required
+SKIPPED [3] tests\integration\test_lego_roles.py:97: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_registration_onboarding.py:204: persistent Lego native extension required
+SKIPPED [1] tests\integration\test_tamper_playground.py:137: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_verification_materials.py:204: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\integration\test_web_deployment.py:121: persistent Lego native extension required
+SKIPPED [1] tests\packaging\test_full_offline_native.py:22: could not import 'dgfl_native': No module named 'dgfl_native'
+SKIPPED [1] tests\packaging\test_package_submission.py:234: Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_symbolic_link_escape_reje0\\outside\\secret.txt' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_symbolic_link_escape_reje0\\project\\src\\dgfl\\link'
+SKIPPED [1] tests\packaging\test_package_submission.py:234: Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_symbolic_link_escape_reje1\\outside' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_symbolic_link_escape_reje1\\project\\src\\dgfl\\link'
+SKIPPED [1] tests\training\test_data.py:358: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_epoch_metrics.py:18: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_epoch_metrics.py:37: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_epoch_metrics.py:54: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_exact_optimization.py:72: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_exact_optimization.py:96: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_model.py:125: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_model_adapter.py:69: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_model_adapter.py:92: could not import 'torch': No module named 'torch'
+SKIPPED [6] tests\training\test_model_adapter.py:110: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_model_adapter.py:131: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_model_adapter.py:152: could not import 'torch': No module named 'torch'
+SKIPPED [8] tests\training\test_model_adapter.py:181: could not import 'torch': No module named 'torch'
+SKIPPED [4] tests\training\test_model_adapter.py:270: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_model_adapter.py:277: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_model_adapter.py:284: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_original_image_dispatch.py:111: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_original_image_dispatch.py:125: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_original_image_dispatch.py:140: could not import 'torch': No module named 'torch'
+SKIPPED [2] tests\training\test_original_image_dispatch.py:150: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej0\\cifar10\\raw\\cifar-10-batches-bin\\batches.meta.txt-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej0\\cifar10\\raw\\cifar-10-batches-bin\\batches.meta.txt'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej1\\cifar10\\raw\\cifar-10-batches-bin\\data_batch_5.bin-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej1\\cifar10\\raw\\cifar-10-batches-bin\\data_batch_5.bin'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej2\\cifar10\\raw\\cifar-10-batches-bin\\test_batch.bin-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej2\\cifar10\\raw\\cifar-10-batches-bin\\test_batch.bin'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej3\\cifar10\\raw\\cifar-10-batches-bin-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfb-1c0e5d83\\test_cifar_actual_symlinks_rej3\\cifar10\\raw\\cifar-10-batches-bin'
+SKIPPED [2] tests\training\test_paper_attack_contract.py:105: could not import 'torch': No module named 'torch'
+SKIPPED [1] tests\training\test_training_devices.py:8: could not import 'torch': No module named 'torch'
+FAILED tests/integration/test_owned_topology_roles.py::test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof
+1 failed, 3586 passed, 348 skipped, 3 warnings in 313.95s (0:05:13)

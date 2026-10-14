@@ -1,0 +1,4 @@
+🐍 Found CPython 3.12 at D:\Desktop\全国密码技术竞赛\Project\fuben\DGFlow\.venv\Scripts\python.exe
+🔗 Found pyo3 bindings
+    Finished `release` profile [optimized] target(s) in 0.20s
+📦 Built wheel for CPython 3.12 to D:\Desktop\全国密码技术竞赛\Project\fuben\DGFlow\tmp\project-verification-20261014\native-wheels\dgfl_native-0.2.0-cp312-cp312-win_amd64.whl

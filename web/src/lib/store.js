@@ -118,7 +118,8 @@ const inviteParticipation = config => participationAction(signal => api.invitePa
 const respondParticipation = decision => {
   const id = participation.value?.session?.session_id
   if (!id) return Promise.resolve(false)
-  return participationAction(signal => api.respondParticipation(id, decision, signal))
+  return participationAction(signal => api.respondParticipation(id,
+    typeof decision === 'object' ? decision.decision : decision, signal, decision?.devices))
 }
 const cancelParticipation = () => participationAction(signal => api.cancelParticipation(signal))
 
@@ -252,7 +253,8 @@ async function poll() {
     connected.value = true
     connectionError.value = ''
     await loadParticipation(signal)
-    if (!listLoaded || pollCount % 5 === 0) await refreshRuns(signal)
+    const sharedId = participation.value?.session?.run?.run_id
+    if (!listLoaded || pollCount % 5 === 0 || sharedId && !runs.value.some(run => run.run_id === sharedId)) await refreshRuns(signal)
     if (!selectedRunId.value) selectedRunId.value = defaultRunId(data.active_run_id)
     if (selectedRunId.value) {
       const requestedId = selectedRunId.value

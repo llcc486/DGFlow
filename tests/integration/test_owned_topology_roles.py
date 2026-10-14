@@ -230,7 +230,8 @@ def test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_pr
             client.execute('train',{**args,'key_messages':changed})
         result=client.execute('train',args)
         assert set(result)=={'packet','training_s','encrypt_s','proof_s','training_metrics',
-                             'metrics_eval_s','metrics_callback_s'}
+                             'metrics_eval_s','metrics_callback_s','training_execution'}
+        assert result['training_execution']=={'backend':'numpy','device':'cpu','trained':True}
         assert isinstance(result['packet'],bytes)
         packet=edges[0].identity.open(result['packet'],'client-submission',roles.envelope_context(ctx),'client1')['payload']
         assert packet['context']==ctx and packet['client_id']=='client1' and 'proof' in packet

@@ -36,8 +36,10 @@ function stable(value) {
 /** The server includes defaults; compare every value the operator will submit. */
 export function sessionMatches(session, configuration) {
   if (!session?.config || !configuration) return false
+  const normalize = (key, value) => ['name', 'description'].includes(key) && typeof value === 'string'
+    ? value.trim() || null : value ?? null
   return Object.entries(configuration).every(([key, value]) => value === undefined
-    || JSON.stringify(stable(session.config[key] ?? null)) === JSON.stringify(stable(value)))
+    || JSON.stringify(stable(normalize(key, session.config[key]))) === JSON.stringify(stable(normalize(key, value))))
 }
 export function consentError(participation, configuration, error = '') {
   if (error) return `无法确认主机同意状态：${error}`

@@ -132,7 +132,7 @@ function formHarness(status) {
   const context = createContext({
     ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {}, onMounted() {}, onUnmounted() {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, HostDevices: {}, DeploymentImportPanel: {}, onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
   runInContext(executable, context)
@@ -853,7 +853,7 @@ test('model type has a single accessible combined selector and no separate size 
   assert.match(template, /暂无可用模型/)
   assert.doesNotMatch(template, /model-quantization-|v-model(?:\.number)?="form\.(?:grid|model_name)"|availableModelSizes|availableArchitectures/)
   assert.doesNotMatch(template, /现有线性模型|applyCnnPlainPreset|此预设明确选择/)
-  assert.match(template, /上方 GPU 选项控制密码计算，二者独立/)
+  assert.match(template, /选择 GPU 训练的主机使用 PyTorch CUDA；设备由各主机分别选择/)
   assert.match(template, /明文对照不生成证明或执行鲁棒筛选/)
 })
 

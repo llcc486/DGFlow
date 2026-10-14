@@ -143,8 +143,8 @@ def _execution(descriptor, backend, device):
     if type(device) is not str:
         raise ValueError("device must be an explicit CPU or CUDA string")
     if descriptor["model_name"] == "linear":
-        if device != "cpu":
-            raise ValueError("linear training/evaluation supports only an explicit CPU device")
+        if device not in ('cpu', 'cuda') or (device != 'cpu' and backend != 'torch'):
+            raise ValueError("linear device must be cpu, or cuda with the Torch backend")
     elif backend != "torch":
         raise ValueError("CNN requires explicit backend='torch'; NumPy is not a CNN backend")
     else:
@@ -187,7 +187,7 @@ def train_local(descriptor: dict, weights: np.ndarray, x: np.ndarray, y: np.ndar
     if descriptor["model_name"] == "linear":
         return linear.train_local(weights, x, y, features=descriptor["input_shape"][0], epochs=epochs,
                                   learning_rate=0.3 if learning_rate is None else learning_rate,
-                                  batch_size=batch_size, seed=seed, backend=backend, on_epoch=on_epoch)
+                                  batch_size=batch_size, seed=seed, backend=backend, device=device, on_epoch=on_epoch)
     return _paper_models().train_local(descriptor["model_name"], weights,
                                        architecture_hash=descriptor["architecture_hash"], x=x, y=y,
                                        epochs=epochs, learning_rate=0.01 if learning_rate is None else learning_rate,

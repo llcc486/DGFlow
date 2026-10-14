@@ -30,7 +30,7 @@ RPC_TIMEOUT = 3
 STALE_AFTER = 60
 TERMINAL = frozenset(('completed', 'failed', 'stopped', 'cancelled', 'expired'))
 RPC_ACTIONS = frozenset('participation_' + name for name in
-                        ('invite', 'status', 'prepare', 'commit', 'state', 'cancel'))
+                        ('invite', 'status', 'prepare', 'commit', 'state', 'cancel', 'record'))
 _locks_guard = threading.Lock()
 _locks: dict[str, threading.RLock] = {}
 
@@ -40,7 +40,11 @@ def public_config(config):
     from dgfl.experiments.config import RunConfig
     selected = {key: value for key, value in dict(config).items()
                 if key in RunConfig.model_fields and key != 'model_descriptor'}
-    return RunConfig.model_validate(selected).model_dump(mode='json')
+    result = RunConfig.model_validate(selected).model_dump(mode='json')
+    # Keep hashes of invitations created before host device selection stable.
+    if result['device_policy'] == 'coordinator' and result['training_device'] == 'cpu':
+        result.pop('device_policy'); result.pop('training_device')
+    return result
 
 
 def hash_config(config):
@@ -66,6 +70,8 @@ class Participation:
     def __init__(self, runtime):
         self.runtime = Path(runtime).resolve()
         self.path = self.runtime / 'participation.json'
+        self._record_acks = {}
+        self._history_acks = {}
 
     @contextmanager
     def _lock(self):
@@ -195,7 +201,7 @@ class Participation:
         session['last_seen_epoch'] = time.time()
         session['updated_at'] = _now_iso(session['last_seen_epoch'])
 
-    def _health(self, rpc, cluster):
+    def _health(self, rpc, cluster, config=None):
         def one(item):
             name, _node = item
             try:
@@ -205,6 +211,9 @@ class Participation:
                 require_protocol(reply.get('protocol_version'), subject=name)
                 if reply.get('capabilities', {}).get('participation_v1') is not True:
                     raise ValueError('节点版本不支持主机批准，请更新并重启')
+                if ((config or {}).get('device_policy') == 'per_host'
+                        and reply.get('capabilities', {}).get('per_host_devices_v1') is not True):
+                    raise ValueError('节点尚不支持各主机独立选择设备，请更新并重启')
                 return name, ''
             except Exception as exc:
                 return name, str(exc)[:240]
@@ -214,6 +223,9 @@ class Participation:
     def invite(self, config):
         cluster = self._cluster(); self._require_coordinator(cluster)
         config = public_config(config)
+        from dgfl.devices import validate_local_devices
+        own_devices = (validate_local_devices(config, {key: config[key] for key in ('training_device', 'compute_device')})
+                       if config.get('device_policy') == 'per_host' else None)
         with self._lock():
             old = self._read(cluster)
         if old and old['status'] in ('pending', 'ready'):
@@ -231,10 +243,12 @@ class Participation:
             for machine in session['machines']:
                 if machine['machine'] == 'A':
                     machine['state'] = 'approved'
+                    if own_devices is not None:
+                        machine['devices'] = own_devices
             atomic_json(self.path, session)
         rpc = RPCClient(self.runtime, cluster['nodes'])
         try:
-            health = self._health(rpc, cluster)
+            health = self._health(rpc, cluster, config)
             for machine in session['machines']:
                 failures = [f'{name}: {reason}' for name, reason in health.items()
                             if cluster['nodes'][name]['machine'] == machine['machine'] and reason]
@@ -263,12 +277,21 @@ class Participation:
             rpc.close()
         return self.refresh()
 
-    def respond(self, session_id, decision):
+    def respond(self, session_id, decision, devices=None):
         if decision not in ('approved', 'rejected'):
             raise ValueError('请选择同意或拒绝')
         cluster = self._cluster()
         if cluster['deployment'] != 'lan' or self._role(cluster) != 'participant':
             raise ValueError('仅参与机可以在本地确认邀请')
+        # Device probes may compile kernels. Keep them outside the consent lock
+        # so status remains readable; recheck session identity after the probe.
+        checked_devices = None
+        snapshot = self.local_state().get('session')
+        if decision == 'approved' and snapshot and snapshot['config'].get('device_policy') == 'per_host':
+            if devices is None:
+                raise ValueError('请先选择本机模型训练和密码计算设备')
+            from dgfl.devices import validate_local_devices
+            checked_devices = validate_local_devices(snapshot['config'], devices)
         with self._lock():
             session = self._read(cluster)
             if not session or session['session_id'] != session_id:
@@ -276,7 +299,11 @@ class Participation:
             if session['status'] not in ('pending', 'ready'):
                 raise ValueError('邀请已失效或训练已开始')
             own = next(row for row in session['machines'] if row['machine'] == self._machine(cluster))
+            if own['state'] == 'approved' and checked_devices is not None and own.get('devices') != checked_devices:
+                raise ValueError('设备选择已锁定，请先退出邀请再重新确认')
             own.update(state=decision, reason='本机已同意' if decision == 'approved' else '本机已拒绝')
+            if checked_devices is not None:
+                own['devices'] = checked_devices
             session['ready'] = False
             atomic_json(self.path, session)
             return self._view(cluster, session)
@@ -300,15 +327,23 @@ class Participation:
                         own = next(item for item in remote['machines'] if item['machine'] == row['machine'])
                         if remote['status'] not in ('pending', 'ready'):
                             raise ValueError('参与机邀请已失效')
-                        return row['machine'], own['state'], own.get('reason', '')
+                        devices = own.get('devices')
+                        if session['config'].get('device_policy') == 'per_host' and own['state'] == 'approved':
+                            from dgfl.devices import HostDevices
+                            if devices is None:
+                                raise ValueError('参与机尚未确认本机计算设备')
+                            devices = HostDevices.model_validate(devices).model_dump()
+                        return row['machine'], own['state'], own.get('reason', ''), devices
                     except Exception as exc:
-                        return row['machine'], 'offline', str(exc)[:240]
-                results = {machine: (state, reason) for machine, state, reason in self._parallel(
+                        return row['machine'], 'offline', str(exc)[:240], None
+                results = {machine: (state, reason, devices) for machine, state, reason, devices in self._parallel(
                            (row for row in session['machines'] if row['machine'] != 'A'), poll)}
                 for row in session['machines']:
                     if row['machine'] in results:
-                        state, reason = results[row['machine']]
+                        state, reason, devices = results[row['machine']]
                         row.update(state=state, reason=reason)
+                        if devices is not None:
+                            row['devices'] = devices
                 session['ready'] = all(row['state'] == 'approved' for row in session['machines'])
                 session['status'] = 'ready' if session['ready'] else 'pending'
             with self._lock():
@@ -404,8 +439,10 @@ class Participation:
         rpc = RPCClient(self.runtime, cluster['nodes'])
         payload = {'session_id': session['session_id'], 'run_id': run_id,
                    'config_digest': session['config_digest'], 'cluster_fingerprint': session['cluster_fingerprint']}
+        if session['config'].get('device_policy') == 'per_host':
+            payload['devices'] = {row['machine']: row['devices'] for row in session['machines']}
         try:
-            failures = {name: error for name, error in self._health(rpc, cluster).items() if error}
+            failures = {name: error for name, error in self._health(rpc, cluster, session['config']).items() if error}
             if failures:
                 raise ValueError('节点连接复核失败：' + '; '.join(f'{name}: {error}' for name, error in failures.items()))
             others = [row for row in session['machines'] if row['machine'] != 'A']
@@ -483,6 +520,48 @@ class Participation:
         finally:
             rpc.close()
 
+    def sync_record(self, record):
+        """Retry public evidence independently of training RPC and its byte counters."""
+        from dgfl.experiments.shared_records import history_chunks, public_record
+        cluster = self._cluster()
+        if cluster['deployment'] != 'lan' or self._role(cluster) != 'coordinator':
+            return
+        with self._lock():
+            session = self._read(cluster)
+        if not session or session.get('prepared_run') != record['run_id'] or not session.get('run'):
+            return
+        public = public_record(record)
+        digest = _digest(public)
+        payload = {'session_id': session['session_id'], 'cluster_fingerprint': session['cluster_fingerprint'],
+                   'config_digest': session['config_digest'], 'run_id': record['run_id'],
+                   'sequence': session['seq'], 'record': public}
+        rpc = RPCClient(self.runtime, cluster['nodes'])
+        failures = []
+        try:
+            for row in session['machines']:
+                key = (session['session_id'], row['machine'])
+                if row['machine'] == 'A':
+                    continue
+                offsets = self._history_acks.setdefault(key, {})
+                chunks = history_chunks(self.runtime, record['run_id'], offsets)
+                if self._record_acks.get(key) == digest and not chunks:
+                    continue
+                try:
+                    result = self._call(rpc, row, 'participation_record', {**payload, 'history': chunks})
+                    if result.get('run_id') != record['run_id']:
+                        raise ValueError('shared experiment acknowledgement mismatch')
+                    self._record_acks[key] = digest
+                    for chunk in chunks:
+                        position = result.get('history_offsets', {}).get(chunk['file'])
+                        if type(position) is int and 0 <= position <= chunk['offset'] + len(chunk['data'].encode('utf8')):
+                            offsets[chunk['file']] = position
+                except (ValueError, OSError, RuntimeError) as exc:
+                    failures.append(f"{row['machine']}: {type(exc).__name__}")
+        finally:
+            rpc.close()
+        if failures:
+            raise ValueError('实验记录同步等待重试：' + ', '.join(failures))
+
     def rpc(self, action, payload):
         if action not in RPC_ACTIONS or not isinstance(payload, dict):
             raise ValueError('invalid participation action')
@@ -506,6 +585,7 @@ class Participation:
                     own = next(row for row in incoming['machines'] if row['machine'] == self._machine(cluster))
                     if self._machine(cluster) != 'A':
                         own.update(state='pending', reason='等待本机确认')
+                        own.pop('devices', None)
                     incoming.update(ready=False, run=None)
                 else:
                     if not current or current['session_id'] != incoming['session_id']:
@@ -518,6 +598,9 @@ class Participation:
                     own = next(row for row in current['machines'] if row['machine'] == self._machine(cluster))
                     remote_own = next(row for row in incoming['machines'] if row['machine'] == self._machine(cluster))
                     remote_own.update(state=own['state'], reason=own.get('reason', ''))
+                    remote_own.pop('devices', None)
+                    if 'devices' in own:
+                        remote_own['devices'] = copy.deepcopy(own['devices'])
                     if incoming['status'] in ('starting', 'running', 'completed', 'failed', 'stopped'):
                         startup_failure = (incoming['status'] == 'failed'
                                            and current['status'] in ('pending', 'ready', 'starting')
@@ -543,6 +626,23 @@ class Participation:
                 raise ValueError('邀请不存在或已被替换')
             if payload.get('cluster_fingerprint') != current['cluster_fingerprint']:
                 raise ValueError('部署身份不匹配')
+            if action == 'participation_record':
+                from dgfl.experiments.shared_records import SharedRecords, receive_history
+                record = payload.get('record')
+                own = next(row for row in current['machines'] if row['machine'] == self._machine(cluster))
+                if (self._role(cluster) != 'participant' or own['state'] != 'approved'
+                        or not isinstance(record, dict) or not current.get('prepared_run')
+                        or payload.get('run_id') != current['prepared_run']
+                        or record.get('run_id') != current['prepared_run']
+                        or payload.get('config_digest') != current['config_digest']
+                        or hash_config(record.get('config', {})) != current['config_digest']
+                        or type(payload.get('sequence')) is not int
+                        or payload['sequence'] > current['seq']
+                        or record.get('status') not in ('queued', 'running', 'stopping', 'completed', 'failed', 'stopped', 'aborted')):
+                    raise ValueError('实验记录与本机已批准的训练不匹配')
+                saved = SharedRecords(self.runtime).save(record, {**current, 'seq': payload['sequence']})
+                offsets = receive_history(self.runtime, saved['run_id'], payload.get('history', []))
+                return {'run_id': saved['run_id'], 'sequence': saved['shared_run']['sequence'], 'history_offsets': offsets}
             if action == 'participation_cancel':
                 if current['status'] == 'running' and not (payload.get('rollback') is True
                         and payload.get('run_id') == current.get('prepared_run')):
@@ -557,6 +657,9 @@ class Participation:
             own = next(row for row in current['machines'] if row['machine'] == self._machine(cluster))
             if own['state'] != 'approved':
                 raise ValueError('本机尚未同意训练')
+            if (current['config'].get('device_policy') == 'per_host'
+                    and (not own.get('devices') or payload.get('devices', {}).get(self._machine(cluster)) != own['devices'])):
+                raise ValueError('主控启动设备与本机已同意的选择不一致')
             if action == 'participation_prepare':
                 if current['status'] not in ('pending', 'ready', 'starting'):
                     raise ValueError('邀请已失效或已使用')
@@ -595,6 +698,27 @@ class Participation:
                 raise ValueError('invalid participation status')
         except (KeyError, TypeError) as exc:
             raise ValueError('invalid participation machines') from exc
+
+    def execution_devices(self, run_id):
+        """Read the immutable local choice, never a coordinator-supplied override."""
+        # Embedded role workers and historical single-host simulations may have
+        # only a topology declaration, without network endpoint metadata. Host
+        # consent belongs to LAN execution; do not impose its network schema on
+        # those existing local training paths.
+        path = self.runtime / 'cluster.json'
+        if not path.exists() or json.loads(path.read_text('utf8')).get('deployment') != 'lan':
+            return None
+        cluster = self._cluster()
+        with self._lock():
+            session = self._read(cluster)
+            if not session or session.get('prepared_run') != run_id:
+                return None
+            if session['config'].get('device_policy') != 'per_host':
+                return None
+            own = next(row for row in session['machines'] if row['machine'] == self._machine(cluster))
+            if own['state'] != 'approved' or not own.get('devices'):
+                raise ValueError('本机尚未确认计算设备')
+            return copy.deepcopy(own['devices'])
 
     def authorize(self, action, payload, context=None):
         """Fail closed for LAN business RPC not bound to this consented run."""

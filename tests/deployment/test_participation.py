@@ -44,7 +44,7 @@ def cluster(tmp_path, monkeypatch):
                 raise ValueError('offline test peer')
             if action == 'health':
                 return {'node_id': node, 'protocol_version': PROTOCOL_VERSION,
-                        'capabilities': {'participation_v1': True}}
+                        'capabilities': {'participation_v1': True, 'per_host_devices_v1': True}}
             return peers[machine].rpc(action, copy.deepcopy(payload or {}))
 
     monkeypatch.setattr(participation, 'RPCClient', RPC)
@@ -62,6 +62,155 @@ def approve(cluster):
     peers['C'].respond(session_id, 'approved')
     assert peers['A'].refresh()['session']['ready']
     return session_id
+
+
+def test_host_devices_are_locally_chosen_frozen_and_cannot_be_overridden(cluster, monkeypatch):
+    from dgfl import devices
+    # Only the capability probe is simulated here; execution is covered by
+    # model tests and the isolated runtime integration tests.
+    monkeypatch.setattr(devices, 'training_capabilities', lambda: {'gpu': {'available': True}})
+    peers, _, config, _, calls = cluster
+    config.update(device_policy='per_host', training_device='cpu', compute_device='cpu')
+    session = peers['A'].invite(config)['session']
+    cpu = {'training_device': 'cpu', 'compute_device': 'cpu'}
+    gpu = {'training_device': 'gpu', 'compute_device': 'cpu'}
+    with pytest.raises(ValueError, match='选择本机'):
+        peers['B'].respond(session['session_id'], 'approved')
+    peers['B'].respond(session['session_id'], 'approved', gpu)
+    peers['C'].respond(session['session_id'], 'approved', cpu)
+    with pytest.raises(ValueError, match='锁定'):
+        peers['B'].respond(session['session_id'], 'approved', cpu)
+    ready = peers['A'].refresh()['session']
+    assert {r['machine']: r['devices'] for r in ready['machines']} == {'A': cpu, 'B': gpu, 'C': cpu}
+    # A cannot change B's local approval through a state broadcast.
+    forged = json.loads(peers['A'].path.read_text('utf8')); forged['seq'] += 1
+    next(row for row in forged['machines'] if row['machine'] == 'B')['devices'] = cpu
+    peers['B'].rpc('participation_state', {'session': forged})
+    assert next(row for row in peers['B'].local_state()['session']['machines'] if row['machine'] == 'B')['devices'] == gpu
+    bad = {'session_id':session['session_id'], 'run_id':'device-test',
+           'cluster_fingerprint':session['cluster_fingerprint'], 'config_digest':session['config_digest'],
+           'devices':{'A':cpu, 'B':cpu, 'C':cpu}}
+    with pytest.raises(ValueError, match='不一致'):
+        peers['B'].rpc('participation_prepare', bad)
+    peers['A'].begin(config, 'device-test')
+    assert peers['B'].execution_devices('device-test') == gpu
+    assert peers['A'].execution_devices('device-test') == cpu
+    assert peers['C'].execution_devices('device-test') == cpu
+    assert peers['B'].execution_devices('another-run') is None
+    for machine, action, payload in calls:
+        if action in ('participation_prepare', 'participation_commit'):
+            assert payload['devices'][machine] == (gpu if machine == 'B' else cpu)
+
+
+def test_gpu_rejection_does_not_approve_or_silently_switch_to_cpu(cluster, monkeypatch):
+    from dgfl import devices
+    monkeypatch.setattr(devices, 'training_capabilities', lambda: {'gpu': {'available': False, 'reason': 'CUDA unavailable'}})
+    peers, _, config, _, _ = cluster
+    session = peers['A'].invite({**config, 'device_policy':'per_host'})['session']
+    with pytest.raises(ValueError, match='CUDA unavailable'):
+        peers['B'].respond(session['session_id'], 'approved', {'training_device':'gpu', 'compute_device':'cpu'})
+    assert next(r for r in peers['B'].local_state()['session']['machines'] if r['machine']=='B')['state'] == 'pending'
+
+
+def test_participant_gpu_detection_needs_no_coordinator_key_or_remote_rpc(cluster, monkeypatch):
+    import time
+
+    from dgfl.crypto import gpu
+    from dgfl.services import control
+    _, runtimes, _, _, _ = cluster
+    runtime = runtimes['B']
+    assert not (runtime/'keys/coordinator/identity.json').exists()
+    capability = {'cpu':{'available':True}, 'gpu':{'hardware_available':True, 'driver_available':True,
+                  'compiler_available':True, 'available':False, 'verified':False, 'reason':'pending'}}
+    monkeypatch.setattr(gpu, 'compute_capabilities', lambda: copy.deepcopy(capability))
+    def prepare():
+        capability['gpu'].update(available=True, verified=True, reason='')
+        return capability['gpu']
+    monkeypatch.setattr(gpu, 'require_gpu', prepare)
+    monkeypatch.setattr(control, 'RPCClient', lambda *a, **kw: pytest.fail('B must not load the coordinator identity'))
+    app = control.create_control_app(runtime)
+    with TestClient(app) as http:
+        deadline = time.monotonic()+5
+        while app.state.compute_preparation['state'] != 'ready' and time.monotonic()<deadline:
+            time.sleep(.01)
+        assert app.state.compute_preparation['state'] == 'ready', app.state.compute_preparation
+        status = http.get('/api/status').json()
+        assert status['capabilities']['compute']['gpu']['available'] is True
+        assert status['local_machine'] == 'B'
+        assert all(row['status']=='unverified' for row in status['nodes'])
+
+
+def test_shared_records_survive_restart_and_supply_monitor_and_history(cluster):
+    from dgfl.experiments.runner import RunManager
+    from dgfl.services.control import create_control_app
+    peers, runtimes, config, failures, _calls = cluster
+    session_id = approve(cluster)
+    peers['A'].begin(config, 'shared-training')
+    record = {'run_id': 'shared-training', 'name': 'Shared experiment', 'config': config,
+              'created_at': '2026-10-14T10:00:00+00:00', 'status': 'running', 'current_round': 1,
+              'rounds': [{'round': 1, 'accuracy': .75, 'loss': .8, 'accepted_clients': ['client1', 'client2']}],
+              'events': [{'stage': 'training', 'message': 'real event'}],
+              'evidence': {'node_snapshot': [{'id': 'client1', 'role': 'client', 'machine': 'A'}]},
+              'summary': {'accuracy': .75}}
+    journal = runtimes['A'] / 'monitoring/shared-training' / ('client1.' + 'a'*32 + '.jsonl')
+    journal.parent.mkdir(parents=True)
+    observation = {'node_id': 'client1', 'event': {'sequence': 1, 'time': '2026-10-14T10:00:00+00:00',
+                   'kind': 'resource', 'payload': {'sample_index': 1, 'processes': {'cpu_percent': 12.5}}}}
+    journal.write_text(json.dumps(observation) + '\n', encoding='utf8')
+    peers['A'].publish(record)
+    failures.add(('B', 'participation_record'))
+    with pytest.raises(ValueError, match='同步等待重试'):
+        peers['A'].sync_record(record)
+    assert not (runtimes['B'] / 'shared-runs/shared-training.json').exists()
+    failures.clear()
+    peers['A'].sync_record(record)
+    assert RunManager(runtimes['B']).snapshot('shared-training')['status'] == 'running'
+    assert not (runtimes['B'] / 'results/shared-training').exists()
+    record.update(status='completed')
+    peers['A'].publish(record)
+    peers['A'].sync_record(record)
+    for machine in ('B', 'C'):
+        stored = json.loads((runtimes[machine] / 'shared-runs/shared-training.json').read_text('utf8'))
+        assert stored['rounds'] == record['rounds']
+        assert stored['shared_run']['session_id'] == session_id
+        assert stored['status'] == 'completed'
+        assert (runtimes[machine] / 'monitoring/shared-training' / journal.name).read_bytes() == journal.read_bytes()
+        with TestClient(create_control_app(runtimes[machine], auto_prepare_compute=False)) as http:
+            assert http.get('/api/runs').json()['runs'][0]['run_id'] == 'shared-training'
+            assert http.get('/api/runs/shared-training').json()['rounds'] == record['rounds']
+            assert http.get('/api/runs/shared-training/monitor').json()['nodes'][0]['id'] == 'client1'
+            history = http.get('/api/runs/shared-training/monitor/series', params={
+                'scope': 'node', 'target': 'client1', 'metric': 'processes.cpu_percent'})
+            assert history.status_code == 200, history.text
+            assert history.json()['points'][0]['value'] == 12.5
+            assert http.get('/api/runs/shared-training/recovery').json()['resumable'] is False
+            assert http.post('/api/runs/shared-training/stop').status_code == 409
+            assert http.post('/api/runs/shared-training/resume', json={}).status_code == 409
+    # A retry after a process restart cannot duplicate already persisted samples.
+    peers['A']._record_acks.clear(); peers['A']._history_acks.clear()
+    peers['A'].sync_record(record)
+    assert (runtimes['B'] / 'monitoring/shared-training' / journal.name).read_bytes() == journal.read_bytes()
+
+
+def test_shared_record_rejects_changed_identity_config_and_unapproved_hosts(cluster):
+    peers, runtimes, config, _, calls = cluster
+    approve(cluster); peers['A'].begin(config, 'shared')
+    record = {'run_id': 'shared', 'config': config, 'status': 'completed', 'rounds': [], 'evidence': {}}
+    peers['A'].publish(record); peers['A'].sync_record(record)
+    payload = next(payload for machine, action, payload in calls if machine == 'B' and action == 'participation_record')
+    for update in ({'run_id': '../escape'}, {'session_id': 'other'}, {'config_digest': 'changed'},
+                   {'record': {**record, 'config': {**config, 'rounds': 2}}}, {'sequence': 999999}):
+        with pytest.raises(ValueError):
+            peers['B'].rpc('participation_record', {**payload, **update})
+    with pytest.raises(ValueError, match='monitoring chunk'):
+        peers['B'].rpc('participation_record', {**payload, 'history': [{'file': '../escape', 'offset': 0, 'data': '{}\n'}]})
+    with peers['B']._lock():
+        session = json.loads(peers['B'].path.read_text('utf8'))
+        next(row for row in session['machines'] if row['machine'] == 'B')['state'] = 'rejected'
+        atomic_json(peers['B'].path, session)
+    with pytest.raises(ValueError, match='不匹配'):
+        peers['B'].rpc('participation_record', payload)
+    assert not (runtimes['B'].parent / 'escape').exists()
 
 
 def test_single_host_has_no_consent_requirement(tmp_path):

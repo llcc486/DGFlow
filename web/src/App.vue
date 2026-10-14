@@ -20,8 +20,28 @@ const monitorMounted = ref(page.value === 'monitor')
 // TensorBoard itself is mounted only when the user opens its analysis tab.
 watch(page, value => { if (value === 'monitor') monitorMounted.value = true }, { immediate: true })
 
-const activeRunId = computed(() => store.status.value?.active_run_id || '')
+const activeRunId = computed(() => store.status.value?.active_run_id
+  || (['starting', 'running'].includes(store.participation.value?.session?.status)
+    ? store.participation.value.session.run?.run_id : '') || '')
 const onlineNodes = computed(() => store.nodes.value.filter(n => n.status === 'online').length)
+const followedRuns = new Set()
+watch(() => {
+  const session = store.participation.value?.session
+  return { id: session?.run?.run_id, status: session?.status, sessionId: session?.session_id }
+}, ({ id, status, sessionId }, previous) => {
+  if (!id || followedRuns.has(id)) return
+  const finishedWhileWaiting = previous?.sessionId === sessionId
+    && ['pending', 'ready', 'starting', 'running'].includes(previous.status)
+    && ['completed', 'failed', 'stopped'].includes(status)
+  if (!['running', 'starting'].includes(status) && !finishedWhileWaiting) return
+  followedRuns.add(id)
+  store.chooseRun(id)
+  navigate('monitor')
+})
+watch(() => store.participation.value?.session?.session_id, id => {
+  if (id && store.participation.value?.role === 'participant'
+      && store.participation.value.session.status === 'pending') navigate('deploy')
+})
 
 function navigate(id) {
   if (!VIEWS.includes(id)) return
@@ -58,7 +78,7 @@ onBeforeUnmount(() => {
 
     <main class="nb-main">
       <div class="nb-container wide">
-        <ParticipationPanel v-if="store.participation.value?.role === 'participant'"
+        <ParticipationPanel v-if="page === 'deploy' && store.participation.value?.role === 'participant'"
           :participation="store.participation.value" :busy="store.participationBusy.value"
           :error="store.participationError.value || (!store.connected.value ? '本地控制服务连接中断' : '')" @respond="store.respondParticipation($event)" />
         <div v-if="page !== 'monitor' && !store.connected.value && !store.initialLoading.value" class="nb-notice warning" style="margin-top:24px">

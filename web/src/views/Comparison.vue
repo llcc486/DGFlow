@@ -210,7 +210,7 @@ const series = computed(() =>
                   <td class="mono">{{ record.config?.train_limit ?? '—' }} / {{ record.config?.test_limit ?? '—' }}</td>
                   <td class="mono">{{ record.config?.client_count ?? '—' }} / {{ record.config?.authority_count ?? '—' }} / {{ record.config?.aggregator_count ?? '—' }}</td>
                   <td class="mono">{{ record.config?.authority_threshold ?? '—' }} / {{ record.config?.aggregator_threshold ?? '—' }}</td>
-                  <td class="mono">{{ record.config?.backend || record.evidence?.training_backend || '—' }}</td>
+                  <td class="mono">{{ record.config?.device_policy === 'per_host' ? '各主机独立选择' : record.config?.training_device === 'gpu' ? 'torch CUDA' : record.config?.backend || record.evidence?.training_backend || '—' }}</td>
                 </tr>
               </tbody>
             </table>

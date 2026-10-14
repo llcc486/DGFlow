@@ -54,67 +54,18 @@ GPU_AUTOMATIC_REFRESH_SECONDS = 30
 GPU_AUTOMATIC_RETRY_SECONDS = 1
 GPU_AUTOMATIC_RETRY_ROUNDS = 15
 
-#: Fields a downloadable run record may carry.
-#:
-#: An allowlist rather than a denylist: the record is written by the runner, and a
-#: denylist would silently start exporting any secret a future field happens to
-#: hold. Per-round rows are filtered by the same rule one level down. Restricted
-#: functional-decryption material is never part of a run record, so it cannot
-#: appear here; this list exists so that stays true when the record grows.
-EXPORT_RECORD_FIELDS = (
-    'run_id', 'name', 'description', 'status', 'config', 'created_at', 'current_round', 'rounds', 'events', 'error',
-    'summary', 'evidence', 'initial_metrics',
-    'logical_experiment_id', 'execution_attempt_id', 'parent_run_id', 'start_round',
-    'resumed_from', 'checkpoints', 'stop',
+from dgfl.experiments.records import (
+    EXPORT_RECORD_FIELDS as EXPORT_RECORD_FIELDS,
 )
-#: Per-round fields a downloadable record may carry.
-EXPORT_ROUND_FIELDS = (
-    'round', 'accuracy', 'loss', 'samples', 'attack_success_rate', 'attack_success_count',
-    'attack_success_denominator', 'attack_eligible_samples', 'attack_eligible_success_rate',
-    'attack_target_class', 'duration_s', 'bytes_sent', 'stage_times', 'controller_cpu_s',
-    'validations', 'model_hash', 'protocol_evidence', 'crypto_context', 'client_failures',
-    'reference_norm_squared', 'accepted_clients', 'rejected_clients', 'collateral_clients',
-    'attack_configured', 'attack_accepted', 'attack_submitted', 'attack_not_submitted',
-    'attack_validation_rejected', 'attack_collateral', 'honest_total', 'honest_submitted',
-    'honest_rejected', 'honest_not_submitted', 'honest_validation_rejected', 'honest_collateral',
-    'attacker_acceptance_rate', 'honest_exclusion_rate', 'metrics_eval_s',
-    'monitoring_overhead', 'client_training_metrics', 'cloud_selection',
-    'proof_verification_metrics', 'proof_generation_metrics', 'combine_metrics',
-    # The screening decision record: centres, sizes, dispersions, separation and the
-    # thresholds applied. Public observations about the rule, not secret material.
-    'screening_decision', 'screening_counts',
+from dgfl.experiments.records import (
+    EXPORT_ROUND_FIELDS as EXPORT_ROUND_FIELDS,
 )
-#: Per-client validation fields a downloadable record may carry.
-EXPORT_VALIDATION_FIELDS = (
-    'client_id', 'proof_valid', 'score', 'decision', 'reason', 'rejection_reason',
-    'proof_suite', 'proof_crs_hash', 'norm_squared', 'proof_hash', 'packet_hash',
-    'exit_stage',
+from dgfl.experiments.records import (
+    EXPORT_VALIDATION_FIELDS as EXPORT_VALIDATION_FIELDS,
 )
-
-
-def _whitelist(mapping, fields):
-    return {key: mapping[key] for key in fields if key in mapping}
-
-
-def export_view(record):
-    """Return the downloadable view of a run record.
-
-    The record itself is untouched: this returns a filtered copy, so the control
-    plane keeps whatever it needs to operate while a download carries only the
-    fields declared here.
-    """
-    view = _whitelist(record, EXPORT_RECORD_FIELDS)
-    if isinstance(view.get('rounds'), list):
-        view['rounds'] = []
-        for row in record['rounds']:
-            if not isinstance(row, dict):
-                continue
-            entry = _whitelist(row, EXPORT_ROUND_FIELDS)
-            if isinstance(entry.get('validations'), list):
-                entry['validations'] = [_whitelist(item, EXPORT_VALIDATION_FIELDS)
-                                        for item in entry['validations'] if isinstance(item, dict)]
-            view['rounds'].append(entry)
-    return view
+from dgfl.experiments.records import (
+    export_view,
+)
 
 
 def _origin(value: str):
@@ -242,6 +193,7 @@ class ParticipationDecision(BaseModel):
     model_config=ConfigDict(extra='forbid')
     session_id:str=Field(pattern=r'^[0-9a-f]{32}$')
     decision:Literal['approved','rejected']
+    devices:dict|None=None
 
 
 MachineName = Annotated[str, Field(strict=True, min_length=1, max_length=2), AfterValidator(validate_machine)]
@@ -336,7 +288,14 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
                         record=(dict(source, rounds=list(source.get('rounds', []))) if source else None)
                     if record:
                         participation.publish(record)
+                        try:
+                            participation.sync_record(manager.snapshot(run_id,include_history=False))
+                            app.state.record_sync_error=None
+                        except (ValueError,OSError,RuntimeError,httpx.HTTPError) as exc:
+                            app.state.record_sync_error=str(exc)[:500]
                     participation.refresh()
+                elif state['enabled']:
+                    manager.load_shared_records()
                 app.state.participation_error=None
             except (ValueError,OSError,RuntimeError,httpx.HTTPError) as exc:
                 app.state.participation_error=type(exc).__name__
@@ -388,7 +347,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             and any(row['machine']==state['local_machine'] and row['state']=='approved'
                     for row in session.get('machines',[])))
 
-    def idle_for_deployment():
+    def idle_for_deployment(*, local_node_start=False):
         if manager.active is not None:
             raise HTTPException(409,'实验运行中不能修改部署、启动或释放节点')
         if participant_busy():
@@ -396,7 +355,10 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         if prepare_lock.locked():
             raise HTTPException(409,'数据正在准备，暂时不能修改部署')
         with compute_lock:
-            if compute_preparation['state']=='initializing':
+            # LAN discovery only compiles in this controller process. Starting
+            # its local role processes does not change the configuration or
+            # interrupt that self-test (and must not race activation at boot).
+            if compute_preparation['state']=='initializing' and not local_node_start:
                 raise HTTPException(409,'GPU 后端正在初始化，暂时不能修改部署')
 
     def invalidate_nodes():
@@ -456,7 +418,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     @app.get('/api/participation')
     def participation_state():
         try:
-            return participation.local_state()
+            return {**participation.local_state(), 'record_sync_error':getattr(app.state,'record_sync_error',None)}
         except (ValueError,OSError,RuntimeError) as exc:
             raise HTTPException(409,str(exc)) from exc
 
@@ -478,7 +440,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
                 if compute_preparation['state']=='initializing':
                     raise HTTPException(409,'本机 GPU 正在初始化，请稍后确认加入')
             try:
-                return participation.respond(config.session_id,config.decision)
+                return participation.respond(config.session_id,config.decision,config.devices)
             except (ValueError,OSError,RuntimeError) as exc:
                 raise HTTPException(409,str(exc)) from exc
 
@@ -593,7 +555,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
 
     def operate_nodes(selection,action,*,local_lan=False):
         with manager.lock:
-            idle_for_deployment()
+            idle_for_deployment(local_node_start=local_lan and action=='start')
             try:
                 with runtime_lifecycle_lock(runtime):
                     cluster=load_cluster(runtime)
@@ -717,13 +679,16 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             unsupported.append(client_id); details.append(f'{client_id}（{reason}）')
         # Only clients run Torch. A LAN controller can evaluate with NumPy while
         # every remote client has Torch; its local installed flag is diagnostic.
-        backends['torch'].update(available=not unsupported and not cluster_error,
+        if (runtime/'keys'/'coordinator'/'identity.json').exists():
+            backends['torch'].update(available=not unsupported and not cluster_error,
                                  unsupported_nodes=unsupported,
                                  reason=('以下训练客户端无法使用 PyTorch：'+', '.join(details) if unsupported
                                          else '部署配置不完整：'+cluster_error if cluster_error else ''))
         with compute_lock:
             compute['preparation']=dict(compute_preparation)
-        if compute['gpu']['available']:
+        # LAN pages report this computer's capability. A participant has no
+        # coordinator credential and cannot authenticate remote node health.
+        if compute['gpu']['available'] and cluster['deployment']!='lan':
             unsupported=[node['id'] for node in nodes if node['role']=='authority'
                          and (node['status']!='online'
                               or not node['capabilities'].get('compute',{}).get('gpu',{}).get('available')
@@ -754,6 +719,16 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
         with manager.lock:
             return status_snapshot()
 
+    @app.get('/api/training/devices')
+    def training_devices(refresh:bool=False):
+        from dgfl.devices import training_capabilities
+        if refresh:
+            with manager.lock:
+                if manager.active is not None or participant_busy():
+                    raise HTTPException(409,'训练设备已锁定，请在本次实验结束后重新检测')
+                training_capabilities.cache_clear()
+        return training_capabilities()
+
     def begin_compute():
         from dgfl.crypto.gpu import compute_capabilities, require_gpu
         if manager.active is not None:
@@ -783,6 +758,9 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
                 if compute_shutdown.is_set():
                     return
                 require_gpu()
+                if cluster['deployment']=='lan':
+                    outcome='ready'; reason='本机 CUDA 密码内核已通过自检；参与节点会在训练开始时独立核验'
+                    return
                 rpc=RPCClient(runtime,cluster['nodes'])
                 rpc.client.timeout=httpx.Timeout(300,connect=3)
                 def one(node):
@@ -822,7 +800,7 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
             with compute_lock:
                 if compute_preparation['state']=='initializing':
                     return False
-            if manager.active is not None or prepare_lock.locked():
+            if manager.active is not None or prepare_lock.locked() or participant_busy():
                 automatic_compute_state('waiting','当前任务完成后自动核验 GPU；CPU 计算可用')
                 return True
         capability=compute_capabilities()['gpu']
@@ -836,6 +814,12 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
                 return False
             cluster=json.loads((runtime/'cluster.json').read_text('utf8'))
             topology=cluster_topology(cluster)
+            if cluster['deployment']=='lan':
+                if capability.get('available') is True and capability.get('verified') is True:
+                    automatic_compute_state('ready','本机 CUDA 密码内核已通过自检')
+                else:
+                    begin_compute()
+                return False
         authorities=[f'authority{i}' for i in range(1,topology['authority_count']+1)]
         rpc=RPCClient(runtime,cluster['nodes'])
         rpc.client.timeout=httpx.Timeout(2,connect=.5)
@@ -949,8 +933,9 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
 
     @app.get('/api/runs')
     def listing():
+        manager.load_shared_records()
         with manager.lock:
-            return {'runs':[{k:r[k] for k in ('run_id','name','description','mode','status','created_at','config','summary') if k in r}
+            return {'runs':[{k:r[k] for k in ('run_id','name','description','mode','status','created_at','config','summary','shared_run') if k in r}
                             | {'mode':r['config']['mode']} for r in reversed(list(manager.records.values()))]}
 
     @app.get('/api/runs/{run_id}')
@@ -1022,7 +1007,10 @@ def create_control_app(runtime, *, auto_prepare_compute=True):
     def recovery(run_id:str):
         """The latest checkpoint, whether the run can continue, and what blocks it."""
         try:
+            manager.load_shared_records()
             plan=manager.recovery_status(run_id)
+            if manager.records[run_id].get('shared_run'):
+                return plan
             cluster_path=runtime/'cluster.json'
             if cluster_path.exists() and json.loads(cluster_path.read_text('utf8')).get('deployment')=='lan':
                 from dgfl.participation import public_config

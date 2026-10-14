@@ -399,6 +399,7 @@ class RunManager:
         self._monitors={}
         self._node_monitors={}
         self.tensorboard=TensorBoardLogs(self.runtime)
+        self._shared_versions={}
         for path in sorted((self.runtime/'results').glob('*/result.json')):
             try:
                 record=json.loads(path.read_text('utf8'))
@@ -408,8 +409,20 @@ class RunManager:
                     atomic_json(path,record)
                 self.records[record['run_id']]=record
             except (ValueError,KeyError): continue
+        self.load_shared_records()
+
+    def load_shared_records(self):
+        from dgfl.experiments.shared_records import SharedRecords
+        with self.lock:
+            for filename, signature, record in SharedRecords(self.runtime).changed(self._shared_versions):
+                existing=self.records.get(record['run_id'])
+                if existing is not None and not existing.get('shared_run'):
+                    continue
+                self.records[record['run_id']]=record
+                self._shared_versions[filename]=signature
 
     def snapshot(self,run_id,*,include_history=True):
+        self.load_shared_records()
         def resource_view(value):
             if include_history or not isinstance(value,dict): return value
             result=dict(value)
@@ -444,6 +457,7 @@ class RunManager:
         return record
 
     def monitor_snapshot(self,run_id):
+        self.load_shared_records()
         with self.lock:
             if run_id not in self.records: raise KeyError(run_id)
             source=self.records[run_id]
@@ -629,6 +643,9 @@ class RunManager:
             if not capability['available']:
                 raise ValueError(capability['reason'])
         config['compute_device']=compute_device
+        if config.get('training_device')=='gpu':
+            from dgfl.devices import validate_local_devices
+            validate_local_devices(config, {'training_device':'gpu','compute_device':compute_device})
         config.update(screening_settings(config,defaults=True))
         config.setdefault('batch_size',2)
         execution,workers=execution_settings(config)
@@ -636,6 +653,9 @@ class RunManager:
             if self.active is not None: raise ValueError('已有任务正在运行')
             if not (self.runtime/'cluster.json').exists(): raise ValueError('请先执行 dgflow init 和 dgflow start')
             cluster=json.loads((self.runtime/'cluster.json').read_text('utf8'))
+            per_host=config.get('device_policy')=='per_host'
+            if per_host and cluster.get('deployment')!='lan':
+                raise ValueError('各主机独立选择设备仅用于多机部署')
             members = _run_members(config,cluster)
             validate_batch_configuration(len(members),config['batch_size'],config['batch_strategy'])
             resource_checks=check_wire_resources(config)
@@ -658,7 +678,7 @@ class RunManager:
                     require_client_training_backend(health, backend, members)
                 finally:
                     rpc.close()
-            if compute_device=='gpu':
+            if compute_device=='gpu' and not per_host:
                 rpc=RPCClient(self.runtime,cluster['nodes'])
                 rpc.client.timeout=httpx.Timeout(3,connect=.5)
                 try:
@@ -704,7 +724,8 @@ class RunManager:
                         'proof':proof_description(suite) if config['mode']!='plain' else 'none (plain baseline)',
                         'wire_format':'binary-v2: raw curve points, chunked above 24 MiB, hash domain revised',
                         'wire_measurement':'application request + response bytes, excluding TLS/HTTP framing',
-                        'training_backend':config.get('backend','numpy'),
+                        'training_backend':('per_host' if per_host else 'torch' if config.get('training_device')=='gpu'
+                                            else config.get('backend','numpy')),
                         'compute':{'requested':compute_device,'resolved':compute_device},
                         'execution':{'requested':config.get('execution','auto'),'resolved':execution,'rpc_workers':workers},
                         'cloud_strategy':{'requested':config['cloud_strategy'],'resolved':None},
@@ -737,6 +758,10 @@ class RunManager:
             session_id=(self.participation.begin(consent_config,run_id) if cluster.get('deployment')=='lan' else None)
             if session_id:
                 record['evidence']['participation']={'session_id':session_id,'all_hosts_approved':True}
+                if per_host:
+                    session=self.participation.local_state()['session']
+                    record['evidence']['host_devices']={row['machine']:dict(row['devices']) for row in session['machines']}
+                    record['evidence']['compute'].update(scope='coordinator',policy='per_host')
             try:
                 self._save(record)
             except Exception as exc:
@@ -801,6 +826,9 @@ class RunManager:
         with self.lock:
             if run_id not in self.records: raise KeyError(run_id)
             record=self.records[run_id]
+            if record.get('shared_run'):
+                return {'run_id':run_id,'resumable':False,'checkpoint':None,
+                        'reason':'这是主控同步的实验记录；恢复训练请在主控 A 操作。'}
             running=self.active is not None
         plan=cp.resume_plan(self.runtime/'results',run_id,config=dict(record.get('config') or {}))
         plan.pop('model',None)
@@ -827,6 +855,8 @@ class RunManager:
         with self.lock:
             if run_id not in self.records: raise KeyError(run_id)
             parent=self.records[run_id]
+            if parent.get('shared_run'):
+                raise ValueError('同步实验只能由主控 A 恢复训练')
             # Idempotency is checked before the busy check: a repeated request for a
             # continuation that already exists returns it, including while that
             # continuation is still running. Otherwise a retried or double-clicked
@@ -890,6 +920,8 @@ class RunManager:
         request time is kept so the wait can be measured and published.
         """
         with self.lock:
+            if self.records.get(run_id,{}).get('shared_run'):
+                raise ValueError('同步实验只能由主控 A 停止训练')
             if self.active!=run_id:
                 existing=self.records.get(run_id)
                 if existing is not None and existing.get('status') in ('stopped','aborted','failed','completed'):
@@ -1079,21 +1111,26 @@ class RunManager:
                 for s in self.last_nodes) for node in cloud_nodes)
             record['evidence']['execution']['compact_aggregate_materials']=compact_aggregate_materials
             record['evidence']['execution']['ciphertext_only_aggregation']=ciphertext_only_aggregation
-            if cfg.get('compute_device','cpu')=='gpu':
-                required=set(authorities)
+            host_devices=record['evidence'].get('host_devices',{})
+            gpu_authorities=[a for a in authorities if
+                (host_devices.get(cluster['nodes'][a].get('machine'),cfg).get('compute_device','cpu')=='gpu')]
+            if cfg.get('compute_device','cpu')=='gpu' or gpu_authorities:
+                required=set(gpu_authorities)
                 unsupported=[node['id'] for node in self.last_nodes if node['id'] in required
-                             and (node['status']!='online' or not node['capabilities'].get('compute',{}).get('gpu',{}).get('available'))]
+                             and (node['status']!='online' or not node['capabilities'].get('compute',{}).get('gpu',{}).get(
+                                 'hardware_available' if host_devices else 'available'))]
                 if unsupported:
                     raise ValueError('以下授权节点不能执行 GPU 密码计算：'+', '.join(unsupported))
                 from dgfl.crypto.gpu import require_gpu
                 from dgfl.crypto.gpu import runtime as gpu_runtime
                 event('gpu_prepare','自检并初始化各节点的 CUDA 密码批处理后端')
-                coordinator_gpu=require_gpu()
-                gpu_device=gpu_runtime(); gpu_before=gpu_device.stats_snapshot()
-                gpu_roles=many([(a,'prepare_compute',{'compute_device':'gpu'}) for a in authorities])
-                record['evidence']['compute'].update(coordinator=coordinator_gpu,
-                                                    authorities=dict(zip(authorities,gpu_roles)),
-                                                    accelerated_operations=coordinator_gpu['accelerated_operations'])
+                if cfg.get('compute_device','cpu')=='gpu':
+                    coordinator_gpu=require_gpu()
+                    gpu_device=gpu_runtime(); gpu_before=gpu_device.stats_snapshot()
+                    record['evidence']['compute'].update(coordinator=coordinator_gpu,
+                                                        accelerated_operations=coordinator_gpu['accelerated_operations'])
+                gpu_roles=many([(a,'prepare_compute',{'compute_device':'gpu'}) for a in gpu_authorities])
+                record['evidence']['compute']['authorities']=dict(zip(gpu_authorities,gpu_roles))
             screening=screening_settings(cfg,defaults=True)
             batch_size=cfg.get('batch_size',2)
             record['evidence']['batching']={
@@ -1180,7 +1217,7 @@ class RunManager:
                 reference=quantize(initial_model(cfg['seed'],features=features),scale,bits)
                 initial=evaluate(np.asarray(reference)/scale,tx,ty,features=features)
             else:
-                model_options={'backend':cfg.get('backend','numpy'),'device':cfg.get('training_device','cpu')}
+                model_options={'backend':cfg.get('backend','numpy'),'device':'cpu'}
                 reference=quantize(model_adapter.initial_model(descriptor,cfg['seed'],**model_options),scale,bits)
                 initial=model_adapter.evaluate(descriptor,np.asarray(reference,dtype=descriptor['input_dtype'])/scale,tx,ty,**model_options)
             record['initial_metrics']=initial
@@ -1325,7 +1362,9 @@ class RunManager:
                           'seed':cfg['seed']+round_id-1,'backend':cfg.get('backend','numpy'),
                           'attack':cfg['attack'] if cid in attack_ids else 'none','key_messages':key_messages[cid],
                           'attack_target_class':cfg.get('attack_target_class',0),'policy':policy}
-                    if descriptor is not None: args['training_device']=cfg.get('training_device','cpu')
+                    from dgfl.devices import execution_backend
+                    devices=host_devices.get(cluster['nodes'][cid].get('machine'),cfg)
+                    args['backend'],args['training_device']=execution_backend(cfg,{'training_device':devices.get('training_device','cpu')})
                     jobs.append((cid,'train',args))
                 training_failures = {}
                 raw_results=optional(jobs,'client_unavailable',round_id,failures=training_failures)
@@ -1642,6 +1681,8 @@ class RunManager:
                     if accepted: client_metrics[cid]=accepted
                     if node_monitor is not None: node_monitor.observe_training(cid,accepted)
                 row['client_training_metrics']=client_metrics
+                row['client_execution']={cid:reply['training_execution'] for cid,reply in replies.items()
+                                         if isinstance(reply.get('training_execution'),dict)}
                 row['metrics_eval_s']=(sum(epoch.get('metrics_eval_s') or 0.
                     for epochs in client_metrics.values() for epoch in epochs) if client_metrics else None)
                 if combine_verification_metrics is not None:

@@ -12,6 +12,8 @@ const props = defineProps({
   updatedAt: { type: String, default: '' },
   compact: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
+  execution: { type: Object, default: () => ({}) },
+  executionRound: { type: Number, default: null },
 })
 const emit = defineEmits(['inspect', 'snapshot', 'refresh', 'open-resources'])
 const external = computed(() => props.snapshot !== undefined)
@@ -63,7 +65,7 @@ watch(() => props.runId, () => { search.value = ''; role.value = machine.value =
         <tbody>
           <tr v-for="node in displayedNodes" :key="node.id">
             <td><button class="node-id" @click="emit('inspect', { kind: 'node', id: node.id })">{{ node.id }}</button><small>{{ roleName(node.role) }}</small></td>
-            <td>{{ node.machine || '未记录' }}<small v-if="!compact">{{ node.host || '—' }}</small></td>
+            <td>{{ node.machine || '未记录' }}<small v-if="!compact">{{ node.host || '—' }}</small><small v-if="execution?.[node.id]">第 {{ executionRound }} 轮 · {{ execution[node.id].trained ? (execution[node.id].device === 'cuda' ? 'GPU 训练' : 'CPU 训练') : '未执行本地训练' }}</small></td>
             <td><span :class="['nb-badge', tone(node.status)]">{{ monitorStatus(node.status) }}</span><small v-if="node.error" class="node-error" :title="node.error">{{ node.error }}</small></td>
             <td class="mono numeric">{{ measuredPercent(node.latest?.cpu_percent) }}</td>
             <td class="mono numeric">{{ bytes(node.latest?.rss_bytes) }}</td>

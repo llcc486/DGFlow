@@ -36,7 +36,7 @@ function component(name, dependencies = {}) {
 }
 
 const ParticipationPanel = component('ParticipationPanel', {
-  ...participation, modeName, LabIcon: { props: ['name'], template: '<svg></svg>' },
+  ...participation, modeName, HostDevices: {}, LabIcon: { props: ['name'], template: '<svg></svg>' },
 })
 const RecoveryPanel = component('RecoveryPanel', {
   ...participation, ParticipationPanel,

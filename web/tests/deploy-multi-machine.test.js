@@ -37,7 +37,7 @@ function setup(extra = {}) {
   const context = createContext({
     ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, HostDevices: {}, DeploymentImportPanel: {},
     onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
     ...extra,

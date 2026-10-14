@@ -69,6 +69,30 @@ def test_participant_cannot_invite_or_start_the_cluster(bundles):
     assert not (bundles['B']/'keys/coordinator').exists()
 
 
+def test_lan_nodes_can_start_during_local_gpu_selftest(bundles, monkeypatch):
+    from dgfl.deployment import selected_nodes
+    from dgfl.services import control
+
+    runtime = bundles['B']
+    app = create_control_app(runtime, auto_prepare_compute=False)
+    started = []
+    def start(runtime, *, _nodes, control_locked):
+        assert control_locked
+        assert set(_nodes) == set(selected_nodes(runtime))
+        started.extend(_nodes)
+        return {'started': _nodes, 'already_running': []}
+    monkeypatch.setattr(control, 'start_nodes', start)
+    with TestClient(app) as http:
+        app.state.compute_preparation['state'] = 'initializing'
+        response = http.post('/api/deployment/local-nodes/start', json={})
+        assert response.status_code == 200, response.text
+        assert set(started) == set(selected_nodes(runtime))
+        assert app.state.compute_preparation['state'] == 'initializing'
+        assert http.post('/api/deployment/local-nodes/stop', json={}).status_code == 409
+        assert http.post('/api/deployment/init', json=TOPOLOGY).status_code == 409
+        assert http.post('/api/runs', json=PLAIN).status_code == 409
+
+
 def test_lan_start_without_any_approval_is_rejected_before_creating_a_run(bundles):
     with TestClient(create_control_app(bundles['A'], auto_prepare_compute=False)) as http:
         response = http.post('/api/runs', json=PLAIN)

@@ -50,7 +50,8 @@ def training_backends():
 
     An installed module spec is not an import or DLL-load self-test. Training
     still reports a controlled failure if that optional dependency cannot load.
-    Both implementations currently train on CPU, independently of crypto CUDA.
+    CUDA training is probed explicitly on the local control page, independently
+    of crypto CUDA. Frequent health checks must not import or initialize Torch.
     """
     try:
         installed = importlib.util.find_spec('torch') is not None
@@ -183,6 +184,7 @@ def create_node_app(node_id, runtime):
             result = {'node_id': node_id, 'status': 'online', 'backend': 'BLS12-381/arkworks',
                       'capabilities': {'lego_norm_v1': available(), 'compute':compute_capabilities(),
                                        'participation_v1':True,
+                                       'per_host_devices_v1':True,
                                        'datasets':['mnist','cifar10'],
                                        'node_telemetry':True,
                                        'training_backends':training_backends(),

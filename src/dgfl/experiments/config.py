@@ -24,6 +24,10 @@ class ArchivedRunConfig(BaseModel):
     execution:Literal['auto','serial','parallel']='auto'
     cloud_strategy:Literal['auto','threshold','all']='auto'
     compute_device:Literal['cpu','gpu']='cpu'
+    # In LAN per_host mode these two choices describe A only. Other hosts
+    # approve their own devices locally; they are not copied from this config.
+    device_policy:Literal['coordinator','per_host']='coordinator'
+    training_device:Literal['cpu','gpu']='cpu'
     rpc_workers:int=Field(6,ge=1,le=24)
     proof_suite:Literal['legacy','compact_range_v1','compact_norm_v1','lego_norm_v1']='legacy'
     proof_crs_hash:str|None=Field(None,pattern=r'^[0-9a-fA-F]{64}$')

@@ -1197,9 +1197,12 @@ class RoleWorker:
             verification=aggregate_verification(self.identity,embedded_certificates,
                                                   self.ctx,self.approval,authority=self.auth)
             combine_timings={}
+            from dgfl.participation import Participation
+            devices=Participation(self.runtime).execution_devices(self.ctx['task_id'])
+            compute_device=(devices or self.policy).get('compute_device','cpu')
             total=self.auth.combine(self.ctx,parts,topology['aggregator_threshold'],len(self.approval['approved']),self.approval['manifest_hash'],
                             verification_materials=verification,packets=self._approved_packets,
-                            timings=combine_timings,compute_device=self.policy.get('compute_device','cpu'),
+                            timings=combine_timings,compute_device=compute_device,
                             verification_threads=self.policy.get('verification_threads',2))
             # Kept off the response: confirmations from all authorities are
             # compared for equality, so diagnostic timings must not enter them.
@@ -1221,11 +1224,16 @@ class RoleWorker:
         if attack=='dropout':
             raise ValueError('dropout is simulated by the coordinator withholding the train request')
         ctx=_context(args['context']); mode=args['mode']; reference=args['reference']
+        from dgfl.devices import execution_backend
+        from dgfl.participation import Participation
+        devices=Participation(self.runtime).execution_devices(ctx['task_id'])
+        backend,device=(execution_backend(args,devices) if devices is not None
+                        else (args.get('backend','numpy'),args.get('training_device','cpu')))
         _training_bounds(ctx,mode)
         descriptor=_model_descriptor(ctx)
         if descriptor is not None:
             from dgfl.training import model_adapter
-            model_adapter._execution(descriptor,args.get('backend','numpy'),args.get('training_device','cpu'))
+            model_adapter._execution(descriptor,backend,device)
         data_path=self.folder/'data'/(ctx['task_id']+'.npz'); registration=data_path.with_suffix('.json')
         if not registration.exists(): raise ValueError('training task has no registered policy')
         saved=json.loads(registration.read_text('utf8')); policy=_policy(saved.get('policy'))
@@ -1320,21 +1328,21 @@ class RoleWorker:
                                        'free_rider',args['seed'],features=features)
             else:
                 weights=model_adapter.attack_weights(descriptor,np.asarray(reference,dtype=descriptor['input_dtype'])/ctx['scale'],
-                    'free_rider',args['seed'],backend=args.get('backend','numpy'),device=args.get('training_device','cpu'))
+                    'free_rider',args['seed'],backend=backend,device=device)
         else:
             if descriptor is None:
                 weights=train_local(np.asarray(reference,dtype=float)/ctx['scale'],x,y,features=features,epochs=args['local_epochs'],
-                                    learning_rate=.3,batch_size=64,seed=args['seed'],backend=args.get('backend','numpy'),
+                                    learning_rate=.3,batch_size=64,seed=args['seed'],backend=backend,device=device,
                                     on_epoch=record_epoch)
                 if attack in ('sign_flip','random'):
                     weights=attack_weights(weights,attack,args['seed'],features=features)
             else:
                 weights=model_adapter.train_local(descriptor,np.asarray(reference,dtype=descriptor['input_dtype'])/ctx['scale'],x,y,
-                    epochs=args['local_epochs'],batch_size=64,seed=args['seed'],backend=args.get('backend','numpy'),
-                    device=args.get('training_device','cpu'),on_epoch=record_epoch)
+                    epochs=args['local_epochs'],batch_size=64,seed=args['seed'],backend=backend,
+                    device=device,on_epoch=record_epoch)
                 if attack in ('sign_flip','random'):
                     weights=model_adapter.attack_weights(descriptor,weights,attack,args['seed'],
-                        backend=args.get('backend','numpy'),device=args.get('training_device','cpu'))
+                        backend=backend,device=device)
         q=quantize(weights,ctx['scale'],ctx['bits'])
         training_s=max(0.,time.perf_counter()-start-metrics_eval_s-metrics_callback_s)
         if mode=='plain':
@@ -1348,7 +1356,8 @@ class RoleWorker:
                 packet=self.identity.seal(topology['client_authorities'][self.node_id],'client-submission',packet,self._envelope_context(ctx))
             result={'packet':packet,'training_s':training_s,'encrypt_s':encrypt_s,'proof_s':proof_s,**parameters_extra}
         result.update(training_metrics=training_metrics,metrics_eval_s=metrics_eval_s,
-                      metrics_callback_s=metrics_callback_s)
+                      metrics_callback_s=metrics_callback_s,
+                      training_execution={'backend':backend,'device':device,'trained':attack!='free_rider'})
         if self.telemetry is not None:
             try:
                 publish=getattr(self.telemetry,'record_training_summary',None)

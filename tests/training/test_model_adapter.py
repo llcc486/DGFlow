@@ -262,7 +262,7 @@ def test_each_dispatch_entry_rejects_tampered_descriptor_before_work(operation):
 
 
 @pytest.mark.parametrize("device", ["cuda", "cpu:1", True])
-def test_linear_device_selection_is_explicit_and_cpu_only(device):
+def test_numpy_linear_device_selection_is_explicit_and_cpu_only(device):
     with pytest.raises(ValueError, match="device"):
         ma.initial_model(ma.resolve_model("mnist"), device=device)
 

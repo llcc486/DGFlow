@@ -47,7 +47,7 @@ test('switching the actual deployment form updates RGB dimensions, CRS selection
   const context = createContext({
     ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, HostDevices: {}, DeploymentImportPanel: {},
     onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
@@ -107,7 +107,7 @@ test('mount keeps CRS refresh and machine registration together and unmount canc
   const context = createContext({
     ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility, AbortController,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, HostDevices: {}, DeploymentImportPanel: {},
     onMounted: fn => { mount = fn }, onUnmounted: fn => { unmount = fn },
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
     setInterval: (fn, delay) => { intervals.set(++next, { fn, delay }); return next },

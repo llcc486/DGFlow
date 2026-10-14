@@ -1,0 +1,319 @@
+{
+  "run_id": "01c4906624f44c758d4649c76f52229e",
+  "result_file": "runtime-lan-7271d45a7929f8b0ba7c881898c5ec51\\results\\01c4906624f44c758d4649c76f52229e\\result.json",
+  "status": "completed",
+  "initial_metrics": {
+    "accuracy": 0.066,
+    "loss": 2.301219863379547,
+    "samples": 1000
+  },
+  "independent_checkpoint_evaluation": [
+    {
+      "round": 1,
+      "accuracy": 0.401,
+      "loss": 2.177162574358,
+      "record_matches": true,
+      "model_hash_matches": true,
+      "proofs_valid": true,
+      "aggregate_proofs_verified": true,
+      "all_edges_same_model": true
+    },
+    {
+      "round": 2,
+      "accuracy": 0.442,
+      "loss": 2.0704390257370577,
+      "record_matches": true,
+      "model_hash_matches": true,
+      "proofs_valid": true,
+      "aggregate_proofs_verified": true,
+      "all_edges_same_model": true
+    },
+    {
+      "round": 3,
+      "accuracy": 0.481,
+      "loss": 1.9730375005824152,
+      "record_matches": true,
+      "model_hash_matches": true,
+      "proofs_valid": true,
+      "aggregate_proofs_verified": true,
+      "all_edges_same_model": true
+    },
+    {
+      "round": 4,
+      "accuracy": 0.514,
+      "loss": 1.886597367642266,
+      "record_matches": true,
+      "model_hash_matches": true,
+      "proofs_valid": true,
+      "aggregate_proofs_verified": true,
+      "all_edges_same_model": true
+    },
+    {
+      "round": 5,
+      "accuracy": 0.527,
+      "loss": 1.8119430892615815,
+      "record_matches": true,
+      "model_hash_matches": true,
+      "proofs_valid": true,
+      "aggregate_proofs_verified": true,
+      "all_edges_same_model": true
+    }
+  ],
+  "summary": {
+    "accuracy": 0.527,
+    "attacker_acceptance_rate": null,
+    "bytes_sent": 255422997,
+    "completed_rounds": 5,
+    "controller_cpu_s": 54.515625,
+    "elapsed_s": 116.9953150000074,
+    "honest_exclusion_rate": 0.0,
+    "loss": 1.8119430892615815,
+    "persistence": {
+      "last_s": 0.010184599959757179,
+      "saves": 85,
+      "total_s": 0.6052026996621862
+    }
+  },
+  "node_snapshot": [
+    {
+      "authority": null,
+      "host": "https://10.122.239.201:9201",
+      "id": "aggregator1",
+      "machine": "B",
+      "role": "aggregator"
+    },
+    {
+      "authority": null,
+      "host": "https://10.21.181.83:9202",
+      "id": "aggregator2",
+      "machine": "A",
+      "role": "aggregator"
+    },
+    {
+      "authority": null,
+      "host": "https://10.122.239.201:9203",
+      "id": "aggregator3",
+      "machine": "B",
+      "role": "aggregator"
+    },
+    {
+      "authority": null,
+      "host": "https://10.21.181.83:9204",
+      "id": "aggregator4",
+      "machine": "A",
+      "role": "aggregator"
+    },
+    {
+      "authority": null,
+      "host": "https://10.21.181.83:9101",
+      "id": "authority1",
+      "machine": "A",
+      "role": "authority"
+    },
+    {
+      "authority": null,
+      "host": "https://10.122.239.201:9102",
+      "id": "authority2",
+      "machine": "B",
+      "role": "authority"
+    },
+    {
+      "authority": null,
+      "host": "https://10.21.181.83:9103",
+      "id": "authority3",
+      "machine": "A",
+      "role": "authority"
+    },
+    {
+      "authority": "authority1",
+      "host": "https://10.122.239.201:9301",
+      "id": "client1",
+      "machine": "B",
+      "role": "client"
+    },
+    {
+      "authority": "authority2",
+      "host": "https://10.21.181.83:9302",
+      "id": "client2",
+      "machine": "A",
+      "role": "client"
+    },
+    {
+      "authority": "authority3",
+      "host": "https://10.122.239.201:9303",
+      "id": "client3",
+      "machine": "B",
+      "role": "client"
+    },
+    {
+      "authority": "authority1",
+      "host": "https://10.21.181.83:9304",
+      "id": "client4",
+      "machine": "A",
+      "role": "client"
+    },
+    {
+      "authority": "authority2",
+      "host": "https://10.122.239.201:9305",
+      "id": "client5",
+      "machine": "B",
+      "role": "client"
+    },
+    {
+      "authority": "authority3",
+      "host": "https://10.21.181.83:9306",
+      "id": "client6",
+      "machine": "A",
+      "role": "client"
+    }
+  ],
+  "crs_provenance": {
+    "anchor_configured": false,
+    "authentic": null,
+    "checked": false,
+    "circuit_identity": "521189663e5ad0679b709aa639e87d2ae6822204f659b94d086a33424770b8d3",
+    "credential": "provenance.json",
+    "issuer": null,
+    "reason": "未安装来源凭据；无法确认该参数集由谁生成（设置 DGFL_CRS_PROVENANCE_KEY 后可校验）",
+    "schema": "dgflow-crs-provenance-v1"
+  },
+  "crs_setup_kind": "single_party_development",
+  "monitor_summary": {
+    "bytes_sent": 279490,
+    "cleanup_complete": true,
+    "collection_failures": 0,
+    "events_missing": 0,
+    "events_received": 385,
+    "last_error": null,
+    "local_journal_pending": 0,
+    "local_machine_samples_timed": 23,
+    "local_machine_sampling_s": 1.5150000000139698,
+    "log_failures": 0,
+    "metrics_eval_s": 0.013566699984949082,
+    "node_samples_timed": 325,
+    "node_sampling_s": 3.818687900027726,
+    "training_rounds": {
+      "1": {
+        "clients_recorded": 6,
+        "metrics_callback_s": 0.009762900052010082,
+        "metrics_eval_s": 0.00415370000700932,
+        "training_s": 0.014543399927788414
+      },
+      "2": {
+        "clients_recorded": 6,
+        "metrics_callback_s": 0.008767099992837757,
+        "metrics_eval_s": 0.002138199924957007,
+        "training_s": 0.008608700154582039
+      },
+      "3": {
+        "clients_recorded": 6,
+        "metrics_callback_s": 0.01064519991632551,
+        "metrics_eval_s": 0.002576100014266558,
+        "training_s": 0.00915570002689492
+      },
+      "4": {
+        "clients_recorded": 6,
+        "metrics_callback_s": 0.010503400015295483,
+        "metrics_eval_s": 0.002746599988313392,
+        "training_s": 0.010335900020436384
+      },
+      "5": {
+        "clients_recorded": 6,
+        "metrics_callback_s": 0.00941629994485993,
+        "metrics_eval_s": 0.0019521000504028052,
+        "training_s": 0.007689600111916661
+      }
+    }
+  },
+  "gpu_nodes": {
+    "authority1": {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "backend": "cuda_nvrtc",
+      "available": true,
+      "verified": true
+    },
+    "authority2": {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "backend": "cuda_nvrtc",
+      "available": true,
+      "verified": true
+    },
+    "authority3": {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "backend": "cuda_nvrtc",
+      "available": true,
+      "verified": true
+    }
+  },
+  "config": {
+    "aggregator_count": 4,
+    "aggregator_threshold": 2,
+    "attack": "none",
+    "attack_target_class": 0,
+    "authority_count": 3,
+    "authority_threshold": 2,
+    "backend": "numpy",
+    "batch_size": 2,
+    "batch_strategy": "fixed",
+    "client_authorities": {
+      "client1": "authority1",
+      "client2": "authority2",
+      "client3": "authority3",
+      "client4": "authority1",
+      "client5": "authority2",
+      "client6": "authority3"
+    },
+    "client_count": 6,
+    "cloud_strategy": "auto",
+    "cluster_center_gap": 0.45,
+    "cluster_iterations": 32,
+    "cluster_low_center_max": 0.25,
+    "cluster_tolerance": 1e-12,
+    "compute_device": "gpu",
+    "dataset": "mnist",
+    "description": "test",
+    "execution": "parallel",
+    "grid": 8,
+    "local_epochs": 1,
+    "malicious_clients": 0,
+    "max_norm_ratio": 2.0,
+    "max_norm_squared": null,
+    "min_cosine": 0.0,
+    "min_norm_ratio": null,
+    "mode": "dgflow",
+    "name": "多机test",
+    "non_iid": true,
+    "offline_aggregators": 0,
+    "proof_block_size": 128,
+    "proof_crs_hash": "129d979244ff08e7c252d6fbf059bcddfc072103f0405c37725ef6b9107c563a",
+    "proof_suite": "lego_norm_v1",
+    "rounds": 5,
+    "rpc_workers": 6,
+    "screening_rule": "legacy_v1",
+    "seed": 42,
+    "test_limit": 1000,
+    "train_limit": 6000,
+    "verification": "deterministic",
+    "verification_threads": 2,
+    "verification_workers": 1
+  },
+  "validation": {
+    "frontend_tests_passed": 337,
+    "backend_targeted_tests_passed": 52,
+    "backend_regression_tests_passed": 189,
+    "backend_regression_tests_skipped": 1,
+    "real_three_runtime_tests_passed": 5,
+    "browser": {
+      "checks": [
+        "dismiss persists after reload and performs no consent mutation",
+        "approved participant automatically opens full monitor, selects replicated record, and cannot stop coordinator",
+        "polling does not repeatedly hijack navigation; card stays off other pages",
+        "completed shared record is available after page reload"
+      ],
+      "errors": [],
+      "mutations": [
+        "/api/participation/respond"
+      ]
+    }
+  }
+}

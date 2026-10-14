@@ -34,6 +34,16 @@ test('consent binds every submitted setting while tolerating omitted nulls and s
   assert.match(participation.consentError(reading, configuration, 'network lost'), /network lost/)
 })
 
+test('empty metadata agrees with server normalization without ignoring actual configuration changes', () => {
+  const session = { config: { name: 'Experiment', description: null, rounds: 5, min_norm_ratio: null } }
+  for (const description of ['', '   ', '\n\t', null]) {
+    assert.equal(participation.sessionMatches(session, { name: ' Experiment ', description, rounds: 5 }), true)
+  }
+  assert.equal(participation.sessionMatches(session, { description: 'new description' }), false)
+  assert.equal(participation.sessionMatches(session, { rounds: 6 }), false)
+  assert.equal(participation.sessionMatches(session, { min_norm_ratio: '' }), false)
+})
+
 test('rejection, expiry, cancellation, completed runs and missing declarations block training', () => {
   const reading = state({ role: 'coordinator', local_machine: 'A' })
   reading.session.machines[1].state = 'rejected'
@@ -67,7 +77,7 @@ test('approved participants reserve the computer and remain locked until termina
 function panel() {
   const source = readFileSync(new URL('../src/components/ParticipationPanel.vue', import.meta.url), 'utf8')
   const compiled = compileScript(parse(source).descriptor, { id: 'participation', inlineTemplate: true }).content
-  const bindings = { ...vue, ...participation, modeName, LabIcon: { render: () => vue.h('svg') } }
+  const bindings = { ...vue, ...participation, modeName, HostDevices: {}, LabIcon: { render: () => vue.h('svg') } }
   const executable = compiled.replace(/^import \{ ([^\r\n]*) \} from [^\r\n]*\r?\n/gm, (_, imports) => {
     for (const item of imports.split(',')) {
       const [original, alias = original] = item.trim().split(/\s+as\s+/)
@@ -90,6 +100,20 @@ function find(node, predicate) {
   }
   return null
 }
+
+test('hiding the participation card never rejects or cancels consent and it can be restored', () => {
+  const events = []
+  const props = vue.reactive({ participation: state(), busy: false, error: '', coordinator: false })
+  const renderPanel = Panel.setup(props, { expose() {}, emit: (...args) => events.push(args) })
+  const context = { $emit: (...args) => events.push(args) }
+  let vnode = renderPanel(context, [])
+  find(vnode, node => node.type === 'button' && node.props.class.includes('participation-hide')).props.onClick()
+  vnode = renderPanel(context, [])
+  assert.equal(find(vnode, node => node.props?.['data-testid'] === 'participation-panel'), null)
+  assert.deepEqual(events, [])
+  find(vnode, node => node.type === 'button').props.onClick()
+  assert.ok(find(renderPanel(context, []), node => node.props?.['data-testid'] === 'participation-panel'))
+})
 
 test('participants see the invitation, exact experiment settings and explicit approve/reject actions', async () => {
   const reading = state()
@@ -122,6 +146,25 @@ test('shared training progress is read-only, preserves missing metrics and repor
   assert.doesNotMatch(html, /同意参与训练|拒绝参与|取消本次邀请|停止训练/)
   reading.session.status = 'failed'; reading.session.run.error = 'client2 unavailable'
   assert.match(await render({ participation: reading }), /训练失败|client2 unavailable/)
+})
+
+test('a participant approves its own two device choices instead of copying the coordinator', () => {
+  const reading = state()
+  reading.session.config.device_policy = 'per_host'
+  reading.session.config.training_device = 'gpu'
+  reading.session.config.compute_device = 'gpu'
+  const events = []
+  const renderPanel = Panel.setup({ participation: reading, busy: false, error: '', coordinator: false },
+    { expose() {}, emit: (...args) => events.push(args) })
+  const context = { $emit: (...args) => events.push(args) }
+  let vnode = renderPanel(context, [])
+  const picker = find(vnode, node => node.props?.modelValue && node.props?.['onUpdate:modelValue'])
+  assert.deepEqual(JSON.parse(JSON.stringify(picker.props.modelValue)), { training_device: 'cpu', compute_device: 'cpu' })
+  picker.props['onUpdate:modelValue']({ training_device: 'cpu', compute_device: 'gpu' })
+  vnode = renderPanel(context, [])
+  find(vnode, node => node.type === 'button' && node.props.class === 'nb-btn primary small').props.onClick()
+  assert.deepEqual(JSON.parse(JSON.stringify(events)), [['respond', { decision: 'approved',
+    devices: { training_device: 'cpu', compute_device: 'gpu' } }]])
 })
 
 test('expired invitations and failed state reads never offer an actionable confirmation', async () => {

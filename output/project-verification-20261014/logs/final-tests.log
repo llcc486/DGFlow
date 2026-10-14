@@ -1,0 +1,182 @@
+.................ssssss................................................. [  1%]
+........................................................................ [  3%]
+........................................................................ [  5%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 12%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+........................................................................ [ 21%]
+........................................................................ [ 23%]
+..............................................................ssssssssss [ 25%]
+ssssss.................................................................. [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+.................................s...................................... [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 41%]
+........................................................................ [ 43%]
+........................................................................ [ 44%]
+........................................................................ [ 46%]
+...............................s........................................ [ 48%]
+........................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 59%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+................................................s....................... [ 64%]
+.............................................................F.......... [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+ss...................................................................... [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 79%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+...................................ssss................................. [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+........................................................................ [ 98%]
+.................................................                        [100%]
+================================== FAILURES ===================================
+_ test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof _
+
+tmp_path = WindowsPath('C:/Users/eeeee/AppData/Local/Temp/dgfv-49ca3d09/test_training_receives_owner_k0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000014902E4BC20>
+
+    def test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof(tmp_path,monkeypatch):
+        topology=validate_topology(2,2,2,2,2)
+        topology['client_authorities']=client_authorities(2,2)
+        nodes=['authority1','authority2','aggregator1','aggregator2','client1','client2']
+        create_cluster(tmp_path/'keys',dict.fromkeys(['coordinator',*nodes],'127.0.0.1'))
+        (tmp_path/'cluster.json').write_text(json.dumps({**topology,'deployment':'single_host',
+            'nodes':{node:{'url':'https://test.invalid'} for node in nodes}}),encoding='utf8')
+        workers={node:roles.RoleWorker(node,tmp_path,Identity(tmp_path/'keys',node)) for node in nodes}
+        reference=[1]*20
+        policy={**topology,'mode':'encrypted','members':['client1','client2'],'batch_size':2,
+                'bits':4,'scale':16,'dimension':20}
+        ctx={**topology,'task_id':'owner-train','round_id':1,'key_epoch':'owner-training-epoch',
+             'model_hash':b.digest(reference),'bits':4,'scale':16,'dimension':20}
+        x=np.ones((8,1)); y=np.arange(8)%10
+        monkeypatch.setattr(training_data,'load_mnist',lambda *args,**kwargs:(x,y,x,y))
+        monkeypatch.setattr(training_model,'train_local',lambda *args,**kwargs:np.array(reference,dtype=float)/16)
+        edges=[workers['authority1'],workers['authority2']]; client=workers['client1']
+        try:
+            commits=[a.execute('begin',{'context':ctx,'reference':reference,'clients':2,'mode':'encrypted','policy':policy}) for a in edges]
+            acks=[a.execute('transcript',{'commitments':commits}) for a in edges]
+            for dealer in edges:
+                for receiver in edges:
+                    receiver.execute('receive_share',{'message':dealer.execute('share',{'recipient':receiver.node_id})})
+            for a in edges: a.execute('finalize',{'acks':acks})
+            messages=[a.execute('client_key',{'client_id':'client1'}) for a in edges]
+            with pytest.raises(ValueError):
+                edges[0].identity.open(messages[1],'client-key',roles.envelope_context(ctx),'authority2')
+            with pytest.raises(ValueError,match='another authority'):
+                edges[1].execute('forward_client_keys',{'client_id':'client1','key_messages':messages})
+            bundle=edges[0].execute('forward_client_keys',{'client_id':'client1','key_messages':messages})
+            opened=client.identity.open(bundle,'owned-client-keys',roles.envelope_context(ctx),'authority1')['payload']
+            assert opened=={'context':ctx,'reference':reference,'key_messages':messages}
+            client.execute('prepare_data',{'task_id':ctx['task_id'],'train_limit':8,'seed':42,'non_iid':False,'policy':policy})
+            args={'context':ctx,'reference':reference,'mode':'encrypted','local_epochs':1,
+                  'seed':42,'backend':'numpy','policy':policy,'key_messages':bundle}
+            wrong=edges[1].identity.seal('client1','owned-client-keys',opened,roles.envelope_context(ctx))
+            with pytest.raises(ValueError): client.execute('train',{**args,'key_messages':wrong})
+            changed=edges[0].identity.seal('client1','owned-client-keys',{**opened,'reference':[2]*20},roles.envelope_context(ctx))
+            with pytest.raises(ValueError,match='pinned round'):
+                client.execute('train',{**args,'key_messages':changed})
+            result=client.execute('train',args)
+>           assert set(result)=={'packet','training_s','encrypt_s','proof_s','training_metrics',
+                                 'metrics_eval_s','metrics_callback_s'}
+E                                AssertionError: assert {'encrypt_s',...ecution', ...} == {'encrypt_s',...metrics', ...}
+E                                  
+E                                  Extra items in the left set:
+E                                  'training_execution'
+E                                  Use -v to get more diff
+
+tests\integration\test_owned_topology_roles.py:232: AssertionError
+============================== warnings summary ===============================
+C:\Users\eeeee\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\eeeee\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+src\dgfl\services\tensorboard.py:10
+  D:\Desktop\全国密码技术竞赛\Project\fuben\DGFlow\src\dgfl\services\tensorboard.py:10: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+    from starlette.middleware.wsgi import WSGIMiddleware
+
+tests/ci/test_training_gate.py::test_only_explicit_original_cache_absence_can_skip[-CPU backend is missing-1]
+tests/ci/test_training_gate.py::test_only_explicit_original_cache_absence_can_skip[@pytest.mark.original_data_cache-CPU backend is missing-1]
+tests/ci/test_training_gate.py::test_only_explicit_original_cache_absence_can_skip[-prepared original data absent; never download-1]
+tests/ci/test_training_gate.py::test_only_explicit_original_cache_absence_can_skip[@pytest.mark.original_data_cache-prepared original data absent; never download-0]
+tests/ci/test_training_gate.py::test_a_module_skipped_during_collection_fails_required_cpu_job
+tests/ci/test_training_gate.py::test_omitting_required_tests_fails_instead_of_silent_green[selection0]
+tests/ci/test_training_gate.py::test_omitting_required_tests_fails_instead_of_silent_green[selection1]
+tests/ci/test_training_gate.py::test_base_matrix_retains_optional_dependency_skips
+  C:\Users\eeeee\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytest_asyncio\plugin.py:247: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+  The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+  
+    warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+
+tests/deployment/test_cli.py::test_demo_releases_lifecycle_lock_for_controller_topology_changes
+  D:\Desktop\全国密码技术竞赛\Project\fuben\DGFlow\.venv\Lib\site-packages\tensorboard\_vendor\bleach\_vendor\html5lib\filters\sanitizer.py:29: DeprecationWarning: html5lib's sanitizer is deprecated; see https://github.com/html5lib/html5lib-python/issues/443 and please let us know if Bleach is unsuitable for your needs
+    warnings.warn(_deprecation_msg, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================ slowest 20 durations =============================
+28.21s call     tests/integration/test_lan_distributed_training.py::test_roles_on_separate_addresses_training_together[encrypted-cpu]
+25.35s call     tests/integration/test_lan_distributed_training.py::test_roles_on_separate_addresses_training_together[dgflow-cpu]
+23.58s call     tests/integration/test_lan_distributed_training.py::test_roles_on_separate_addresses_training_together[encrypted-gpu]
+12.74s call     tests/experiments/test_paper_diagnostic_vectors.py::test_actual_full_cnn_off_on_identical_and_independent_readback[cifar10-878538]
+12.65s call     tests/integration/test_cnn_plain_model_contract.py::test_two_real_client_roles_and_runner_plain_complete_with_pinned_raw_contract[cifar10-paper_cnn_cifar10-878538-shape1-8-128]
+8.67s call     tests/integration/test_control_node_lifecycle.py::test_real_roles_release_individually_restart_and_release_all
+8.53s call     tests/integration/test_cnn_plain_model_contract.py::test_two_real_client_roles_and_runner_plain_complete_with_pinned_raw_contract[mnist-paper_cnn_mnist-582026-shape2-12-2048]
+8.51s call     tests/integration/test_cnn_plain_model_contract.py::test_two_real_client_roles_and_runner_plain_complete_with_pinned_raw_contract[mnist-paper_cnn_mnist-582026-shape0-8-128]
+7.66s call     tests/integration/test_cifar10_pipeline.py::test_rgb_roles_train_prove_validate_and_recover_the_exact_quantized_sum
+6.18s call     tests/integration/test_lan_distributed_training.py::test_roles_on_separate_addresses_training_together[plain-cpu]
+5.25s call     tests/integration/test_control_lan_deployment.py::test_status_preserves_machine_membership
+4.24s call     tests/integration/test_web_deployment.py::test_real_browser_api_activation_starts_only_b_and_reuses_controller
+3.52s call     tests/integration/test_lan_distributed_training.py::test_training_is_blocked_until_all_machines_approve
+3.01s call     tests/training/test_data.py::test_prepare_has_bounded_retry_rounds_and_honors_an_explicit_source[None-2]
+3.00s call     tests/training/test_data.py::test_prepare_has_bounded_retry_rounds_and_honors_an_explicit_source[https://dataset.example/mnist-2]
+2.76s call     tests/integration/test_control_lan_deployment.py::test_planning_preserves_live_runtime_and_exports_common_crs
+2.70s call     tests/experiments/test_paper_diagnostic_vectors.py::test_actual_full_cnn_off_on_identical_and_independent_readback[mnist-582026]
+2.51s call     tests/integration/test_owned_topology_roles.py::test_owned_round_shares_signed_cores_and_enforces_dynamic_thresholds[10-11-3-cloud_ids1]
+2.25s call     tests/integration/test_tensorboard_warmup.py::test_refresh_picks_up_new_events_in_the_background
+2.22s call     tests/integration/test_tensorboard_monitoring.py::test_history_export_is_visible_in_embedded_tensorboard
+=========================== short test summary info ===========================
+SKIPPED [6] tests\crypto\test_acceleration.py:77: compact format only
+SKIPPED [1] tests\deployment\test_start_script.py:302: A native Unix Bash is required
+SKIPPED [4] tests\deployment\test_start_script.py:313: A native Unix Bash is required
+SKIPPED [2] tests\deployment\test_start_script.py:336: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:347: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:355: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:363: A native Unix Bash is required
+SKIPPED [1] tests\deployment\test_start_script.py:374: A native Unix Bash is required
+SKIPPED [2] tests\deployment\test_start_script.py:395: A native Unix Bash is required
+SKIPPED [3] tests\deployment\test_start_script.py:409: A native Unix Bash is required
+SKIPPED [1] tests\experiments\test_monitor_series.py:473: symlink permission unavailable
+SKIPPED [1] tests\experiments\test_tensorboard.py:167: symlink creation unavailable
+SKIPPED [1] tests\integration\test_cuda_training.py:11: CUDA-enabled PyTorch and a GPU required for real device execution
+SKIPPED [1] tests\packaging\test_package_submission.py:234: Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_symbolic_link_escape_reje0\\outside\\secret.txt' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_symbolic_link_escape_reje0\\project\\src\\dgfl\\link'
+SKIPPED [1] tests\packaging\test_package_submission.py:234: Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_symbolic_link_escape_reje1\\outside' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_symbolic_link_escape_reje1\\project\\src\\dgfl\\link'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej0\\cifar10\\raw\\cifar-10-batches-bin\\batches.meta.txt-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej0\\cifar10\\raw\\cifar-10-batches-bin\\batches.meta.txt'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej1\\cifar10\\raw\\cifar-10-batches-bin\\data_batch_5.bin-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej1\\cifar10\\raw\\cifar-10-batches-bin\\data_batch_5.bin'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej2\\cifar10\\raw\\cifar-10-batches-bin\\test_batch.bin-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej2\\cifar10\\raw\\cifar-10-batches-bin\\test_batch.bin'
+SKIPPED [1] tests\training\test_original_images.py:166: Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej3\\cifar10\\raw\\cifar-10-batches-bin-actual' -> 'C:\\Users\\eeeee\\AppData\\Local\\Temp\\dgfv-49ca3d09\\test_cifar_actual_symlinks_rej3\\cifar10\\raw\\cifar-10-batches-bin'
+FAILED tests/integration/test_owned_topology_roles.py::test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof
+1 failed, 3977 passed, 31 skipped, 11 warnings in 460.11s (0:07:40)

@@ -37,7 +37,7 @@ def test_a_module_skipped_during_collection_fails_required_cpu_job(gate):
                     test_available="def test_available(): pass")
     result = gate.runpytest("--require-cpu-training", "-q")
     assert result.ret == pytest.ExitCode.TESTS_FAILED
-    result.stdout.fnmatch_lines(["*Required module skipped during collection: test_cpu.py*"])
+    result.stdout.fnmatch_lines(["*Required module skipped during collection: *test_cpu.py*"])
 
 
 @pytest.mark.parametrize("selection", [["test_available.py"], ["-k", "available"]])

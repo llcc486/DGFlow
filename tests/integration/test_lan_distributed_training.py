@@ -122,9 +122,9 @@ def invitation(controls, payload):
     return session
 
 
-def approval(controls, machine, session, decision='approved'):
+def approval(controls, machine, session, decision='approved', devices=None):
     response = controls[machine].post('/api/participation/respond', json={
-        'session_id': session['session_id'], 'decision': decision})
+        'session_id': session['session_id'], 'decision': decision, **({'devices':devices} if devices else {})})
     assert response.status_code == 200, response.text
     # Local approval reaches A on its bounded polling cycle, rather than through
     # a browser-to-browser connection or a copied coordinator private key.
@@ -160,21 +160,28 @@ def test_training_is_blocked_until_all_machines_approve(lan_bundles):
     assert response.status_code == 200, response.text
 
 
-@pytest.mark.parametrize('mode', ['plain', 'encrypted', 'dgflow'])
-def test_roles_on_separate_addresses_training_together(lan_bundles, mode):
+@pytest.mark.parametrize(('mode','host_crypto'), [('plain','cpu'), ('encrypted','cpu'), ('dgflow','cpu'), ('encrypted','gpu')])
+def test_roles_on_separate_addresses_training_together(lan_bundles, mode, host_crypto):
+    if host_crypto == 'gpu':
+        from dgfl.crypto.gpu import require_gpu
+        try:
+            require_gpu()
+        except Exception as exc:
+            pytest.skip(f'CUDA crypto backend unavailable: {exc}')
     controls, runtimes, manifest = lan_bundles
     control = controls['A']
     payload = {**TOPO, 'mode': mode, 'rounds': 1 if mode == 'plain' else 2,
                'name': f'Three-machine {mode}', 'description': 'Each machine explicitly approved this experiment.',
                'local_epochs': 2, 'train_limit': 120, 'test_limit': 100,
                'grid': 8, 'dataset': 'mnist', 'attack': 'none', 'malicious_clients': 0,
-               'compute_device': 'cpu', 'backend': 'numpy', 'rpc_workers': 2,
+               'compute_device': 'cpu', 'training_device':'cpu', 'device_policy':'per_host',
+               'backend': 'numpy', 'rpc_workers': 2,
                'proof_suite': 'lego_norm_v1', 'batch_strategy': 'fixed'}
     if mode != 'plain':
         payload['proof_crs_hash'] = manifest['crs_hash']
     session = invitation(controls, payload)
-    approval(controls, 'B', session)
-    approval(controls, 'C', session)
+    approval(controls, 'B', session, devices={'training_device':'cpu','compute_device':host_crypto})
+    approval(controls, 'C', session, devices={'training_device':'cpu','compute_device':'cpu'})
     assert control.get('/api/participation').json()['session']['ready'] is True
     # Consent is bound to this exact experiment, including its training length.
     changed = {**payload, 'rounds': payload['rounds'] + 1}
@@ -191,19 +198,45 @@ def test_roles_on_separate_addresses_training_together(lan_bundles, mode):
             time.sleep(1)
         assert state['status'] == 'completed', state.get('error', state['status'])
         assert len(state['rounds']) == payload['rounds']
+        assert state['evidence']['host_devices'] == {
+            'A':{'training_device':'cpu','compute_device':'cpu'},
+            'B':{'training_device':'cpu','compute_device':host_crypto},
+            'C':{'training_device':'cpu','compute_device':'cpu'}}
         for row in state['rounds']:
             assert {v['client_id'] for v in row['validations']} == {'client1', 'client2'}
             assert all(v['decision'] == 'accepted' for v in row['validations'])
             assert row['crypto_context']['owner_map'] == {'client1': 'authority1', 'client2': 'authority2'}
             assert row['accuracy'] is not None
+            assert row['client_execution'] == {cid:{'backend':'numpy','device':'cpu','trained':True}
+                                               for cid in ('client1','client2')}
             if mode != 'plain':
                 evidence = row['protocol_evidence']
                 assert evidence['authorization']['checked'] is True
                 assert evidence['aggregation']['proofs_verified'] is True
                 assert len(evidence['aggregation']['partials']) == 2
                 assert evidence['confirmation']['all_match'] is True
+                if host_crypto == 'gpu':
+                    assert set(state['evidence']['compute']['authorities']) == {'authority2'}
+                    assert state['evidence']['compute']['authorities']['authority2']['verified'] is True
+                    assert row['combine_metrics']['authority2']['combine_timings']['gpu_profile']['totals']['batches'] > 0
+                    assert 'gpu_profile' not in row['combine_metrics']['authority1']['combine_timings']
         stored = json.loads((runtimes['A']/'results'/run_id/'result.json').read_text('utf8'))
         assert stored['status'] == 'completed'
+        for machine in ('B', 'C'):
+            until = time.monotonic() + 30
+            while time.monotonic() < until:
+                response = controls[machine].get(f'/api/runs/{run_id}')
+                if response.status_code == 200 and response.json().get('status') == 'completed':
+                    break
+                time.sleep(.2)
+            assert response.status_code == 200, response.text
+            replica = response.json()
+            assert replica['status'] == 'completed', replica
+            assert replica['rounds'] == stored['rounds']
+            assert replica['shared_run']['read_only'] is True
+            assert (runtimes[machine]/'shared-runs'/f'{run_id}.json').exists()
+            assert controls[machine].get(f'/api/runs/{run_id}/monitor').json()['nodes']
+            assert controls[machine].post(f'/api/runs/{run_id}/stop').status_code == 409
         for machine in ('A', 'B', 'C'):
             peer = controls[machine].get('/api/participation').json()['session']
             assert peer['session_id'] == session['session_id']

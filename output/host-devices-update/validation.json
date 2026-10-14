@@ -1,0 +1,440 @@
+{
+  "backend_coverage_passed": 3978,
+  "cuda_training_skipped": 1,
+  "frontend_passed": 338,
+  "isolated_runtime_passed": 6,
+  "scope": "isolated runtimes on one physical host; not a two-PC LAN acceptance test",
+  "mixed_cpu_gpu_crypto_rounds": [
+    {
+      "round": 1,
+      "host_B_gpu_batches": 10,
+      "all_confirmations_match": true,
+      "actual_training": {
+        "client1": {
+          "backend": "numpy",
+          "device": "cpu",
+          "trained": true
+        },
+        "client2": {
+          "backend": "numpy",
+          "device": "cpu",
+          "trained": true
+        }
+      }
+    },
+    {
+      "round": 2,
+      "host_B_gpu_batches": 10,
+      "all_confirmations_match": true,
+      "actual_training": {
+        "client1": {
+          "backend": "numpy",
+          "device": "cpu",
+          "trained": true
+        },
+        "client2": {
+          "backend": "numpy",
+          "device": "cpu",
+          "trained": true
+        }
+      }
+    }
+  ],
+  "browser": {
+    "checks": [
+      "dismiss persists after reload and performs no consent mutation",
+      "B defaults to CPU independently of A; unavailable training GPU is disabled; available training GPU can be chosen independently of crypto CPU; submitted consent preserves both choices",
+      "approved participant automatically opens full monitor, selects replicated record, and cannot stop coordinator",
+      "polling does not repeatedly hijack navigation; card stays off other pages",
+      "completed shared record is available after page reload"
+    ],
+    "errors": [],
+    "mutations": [
+      "/api/participation/respond"
+    ]
+  },
+  "project_verification": {
+    "created_local": "2026-10-14T20:36:54.325066+08:00",
+    "commit": "99de8a8fa73956315d2159baded22bed13bf3b46",
+    "scope": "Windows 11 / Python 3.12, local isolated runtimes; actual A/B health check only",
+    "native_full_run": {
+      "report": "final-results.xml",
+      "tests": 4009,
+      "passed": 3977,
+      "failed": 1,
+      "skipped": 31,
+      "failed_tests": [
+        "tests.integration.test_owned_topology_roles::test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof"
+      ],
+      "skip_reasons": {
+        "compact format only": 6,
+        "A native Unix Bash is required": 16,
+        "symlink permission unavailable": 1,
+        "symlink creation unavailable": 1,
+        "CUDA-enabled PyTorch and a GPU required for real device execution": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej0\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\batches.meta.txt-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej0\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\batches.meta.txt'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej1\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\data_batch_5.bin-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej1\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\data_batch_5.bin'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej2\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\test_batch.bin-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej2\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\test_batch.bin'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej3\\\\cifar10\\\\raw\\\\cifar-10-batches-bin-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfv-49ca3d09\\\\test_cifar_actual_symlinks_rej3\\\\cifar10\\\\raw\\\\cifar-10-batches-bin'": 1
+      }
+    },
+    "base_full_run": {
+      "report": "clean-base-results.xml",
+      "tests": 3935,
+      "passed": 3586,
+      "failed": 1,
+      "skipped": 348,
+      "failed_tests": [
+        "tests.integration.test_owned_topology_roles::test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof"
+      ],
+      "skip_reasons": {
+        "collection skipped": 3,
+        "compact format only": 6,
+        "optional native extension": 1,
+        "could not import 'dgfl_native': No module named 'dgfl_native'": 128,
+        "CUDA driver/NVRTC is unavailable: GPU 模式需要安装项目 gpu 可选依赖（NVIDIA NVRTC）；请在部署阶段安装 gpu 依赖，CPU 计算可用": 96,
+        "persistent Lego native extension required": 17,
+        "persistent Lego native extension is unavailable": 3,
+        "A native Unix Bash is required": 16,
+        "symlink permission unavailable": 1,
+        "could not import 'torch': No module named 'torch'": 63,
+        "symlink creation unavailable": 1,
+        "native Lego registry required": 1,
+        "native Lego extension required": 6,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_symbolic_link_escape_reje0\\\\outside\\\\secret.txt' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_symbolic_link_escape_reje0\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Host does not permit test symlinks: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_symbolic_link_escape_reje1\\\\outside' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_symbolic_link_escape_reje1\\\\project\\\\src\\\\dgfl\\\\link'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej0\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\batches.meta.txt-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej0\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\batches.meta.txt'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej1\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\data_batch_5.bin-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej1\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\data_batch_5.bin'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej2\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\test_batch.bin-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej2\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\test_batch.bin'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej3\\\\cifar10\\\\raw\\\\cifar-10-batches-bin-actual' -> 'C:\\\\Users\\\\eeeee\\\\AppData\\\\Local\\\\Temp\\\\dgfb-1c0e5d83\\\\test_cifar_actual_symlinks_rej3\\\\cifar10\\\\raw\\\\cifar-10-batches-bin'": 1
+      }
+    },
+    "native_failed_file_retest": {
+      "report": "native-contract-retest.xml",
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "skip_reasons": {}
+    },
+    "base_failed_file_retest": {
+      "report": "base-contract-retest.xml",
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "skip_reasons": {}
+    },
+    "resolved_failure": {
+      "test": "tests.integration.test_owned_topology_roles::test_training_receives_owner_key_model_bundle_and_uploads_only_one_sealed_proof",
+      "cause": "Exact response-key assertion omitted newly added training_execution evidence",
+      "fix": "Expect the added evidence and assert the exact numpy/cpu/trained values",
+      "production_changed_after_full_runs": false
+    },
+    "coverage_after_retest": {
+      "native_passed": 3978,
+      "native_skipped": 31,
+      "base_passed": 3587,
+      "base_skipped": 348,
+      "unresolved_test_failures": 0,
+      "note": "Combined full-run and targeted-retest coverage; raw full runs retain one failure each."
+    },
+    "fresh_native_clean_environment": {
+      "report": "fresh-native-results.xml",
+      "tests": 253,
+      "passed": 253,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "skip_reasons": {}
+    },
+    "strict_cpu_gate": {
+      "report": "cpu-training-results.xml",
+      "tests": 572,
+      "passed": 568,
+      "failed": 0,
+      "skipped": 4,
+      "failed_tests": [],
+      "skip_reasons": {
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej0\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\batches.meta.txt-actual' -> 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej0\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\batches.meta.txt'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej1\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\data_batch_5.bin-actual' -> 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej1\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\data_batch_5.bin'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej2\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\test_batch.bin-actual' -> 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej2\\\\cifar10\\\\raw\\\\cifar-10-batches-bin\\\\test_batch.bin'": 1,
+        "Actual symlink privilege unavailable: [WinError 1314] 客户端没有所需的特权。: 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej3\\\\cifar10\\\\raw\\\\cifar-10-batches-bin-actual' -> 'D:\\\\Desktop\\\\全国密码技术竞赛\\\\Project\\\\fuben\\\\DGFlow\\\\tmp\\\\project-verification-20261014\\\\cpu-training-runtime\\\\test_cifar_actual_symlinks_rej3\\\\cifar10\\\\raw\\\\cifar-10-batches-bin'": 1
+      },
+      "exit_code": 1,
+      "reason": "Four real symlink tests lack Windows privileges; strict CI gate was not relaxed"
+    },
+    "frontend": {
+      "passed": 338,
+      "skipped": 0,
+      "clean_npm_ci": true,
+      "production_build": true
+    },
+    "browser_fixtures": {
+      "checks": [
+        "dismiss persists after reload and performs no consent mutation",
+        "B defaults to CPU independently of A; unavailable training GPU is disabled; available training GPU can be chosen independently of crypto CPU; submitted consent preserves both choices",
+        "approved participant automatically opens full monitor, selects replicated record, and cannot stop coordinator",
+        "polling does not repeatedly hijack navigation; card stays off other pages",
+        "completed shared record is available after page reload"
+      ],
+      "errors": [],
+      "mutations": [
+        "/api/participation/respond"
+      ]
+    },
+    "live_A_browser": {
+      "javascript_errors": 0,
+      "crypto_gpu_available": true,
+      "training_gpu_available": false
+    },
+    "live_cluster": {
+      "nodes": [
+        {
+          "node": "aggregator1",
+          "machine": "B",
+          "healthy": true,
+          "per_host_devices_v1": false
+        },
+        {
+          "node": "aggregator2",
+          "machine": "A",
+          "healthy": true,
+          "per_host_devices_v1": true
+        },
+        {
+          "node": "aggregator3",
+          "machine": "B",
+          "healthy": true,
+          "per_host_devices_v1": false
+        },
+        {
+          "node": "aggregator4",
+          "machine": "A",
+          "healthy": true,
+          "per_host_devices_v1": true
+        },
+        {
+          "node": "authority1",
+          "machine": "A",
+          "healthy": true,
+          "per_host_devices_v1": true
+        },
+        {
+          "node": "authority2",
+          "machine": "B",
+          "healthy": true,
+          "per_host_devices_v1": false
+        },
+        {
+          "node": "authority3",
+          "machine": "A",
+          "healthy": true,
+          "per_host_devices_v1": true
+        },
+        {
+          "node": "client1",
+          "machine": "B",
+          "healthy": true,
+          "per_host_devices_v1": false
+        },
+        {
+          "node": "client2",
+          "machine": "A",
+          "healthy": true,
+          "per_host_devices_v1": true
+        },
+        {
+          "node": "client3",
+          "machine": "B",
+          "healthy": true,
+          "per_host_devices_v1": false
+        },
+        {
+          "node": "client4",
+          "machine": "A",
+          "healthy": true,
+          "per_host_devices_v1": true
+        },
+        {
+          "node": "client5",
+          "machine": "B",
+          "healthy": true,
+          "per_host_devices_v1": false
+        },
+        {
+          "node": "client6",
+          "machine": "A",
+          "healthy": true,
+          "per_host_devices_v1": true
+        }
+      ],
+      "active_run_id": null,
+      "record_sync_error": "实验记录同步等待重试：B: ValueError",
+      "session_status": "completed"
+    },
+    "clean_environment_pip_check": "passed",
+    "existing_environment": "Includes global site-packages; project multipart dependency corrected locally. Unrelated global package conflicts remain.",
+    "native_build": {
+      "exit_code": 0,
+      "source_files": {
+        "Cargo.lock": "67df2010ebbf83d6a300f0b174128f493ab35f86b699b294c0ca2583e25afaa4",
+        "Cargo.toml": "dbb0bdde924fad97799b21ae7b39906428ed6aace0119aeb1d382e103f087c60",
+        "src\\aggregate.rs": "b62cbdefeec2f252734320cbd5cfc63887b265847e3759478d06c768f55319ad",
+        "src\\batch.rs": "42c7430e48421c99422915bfba2b140d7a5bc2de1e430db9c1f9042bf4337464",
+        "src\\lego.rs": "8bb7bf02ef4700086207d5e4e70ca1ba7c80e8f56260d19bd7843c9eb80004c3",
+        "src\\lib.rs": "f9f5879163abac7904f0966af5d92547840a9f43a9dbd9fe0de155ade984f7e3",
+        "src\\linked.rs": "cf87ca753be29e21a40b74bbba62290a4a2b397404da57c32d1ec474a217542c",
+        "src\\sigma.rs": "e72b91d211f42df256e33262da8aa146643cc30a5ab5e3e72f1969ab817f50b7"
+      },
+      "wheels": {
+        "dgfl_native-0.2.0-cp312-cp312-win_amd64.whl": "f7a4a556d0722caeff7e03fd0d1009cbe35201f29bc688731f39195a4fcb2021"
+      }
+    },
+    "source_package": {
+      "path": "source.zip",
+      "sha256": "5407d29f137d5c1824366ed48cd4d281397f1bf0d31865fdce91624015982d7f",
+      "size": 5978654
+    },
+    "production_sha256": {
+      "src/dgfl/__init__.py": "89a4f61300fe9773e510c2d9d8a19deedcb7ca42ca3a0664e6894b54f49b2f47",
+      "src/dgfl/cli.py": "7f079879f33d52fc703cde367c06ee537f9822a0763cd41496dec2b608744252",
+      "src/dgfl/crypto/__init__.py": "f59f263384f8d73d5b3c55a3f1a298297ce6fc272749194684d5787f92cc412c",
+      "src/dgfl/crypto/backend.py": "c68aa4b1467e7a5feccc9065f8b4bbe9c218e15340debdc9867759a16fc3f8af",
+      "src/dgfl/crypto/compact.py": "fce68bdbc56fbc06ec96d8e913a6df028801ebdfad448c21040e67242809a73d",
+      "src/dgfl/crypto/cuda_scheduler.py": "d3cc0d02763dfa15349081519bf809964b69b8121bc20ec937dfb1ee2e338a92",
+      "src/dgfl/crypto/discrete_log.py": "746ceadc1408c9d3d2d35512ba96c508d1445277f56c18bf4cafd796bc3102aa",
+      "src/dgfl/crypto/gpu.py": "329366467a17e1d05b2999b41ab31fbd8573b77bd325d109573a7c827dd01af9",
+      "src/dgfl/crypto/gpu_profile.py": "0252c11731e22d72ca10fc0c9d359dde55d2aedd1eebd1f9715781ab1178941f",
+      "src/dgfl/crypto/ipa.py": "23b4a73e8539abb7be210cd44659acbf00820a71dfcea329f45062fa9911a79e",
+      "src/dgfl/crypto/lego.py": "4634d2daff08a35b92e266aa49c50417972d9a313ac3c4a3c085b5b12f532768",
+      "src/dgfl/crypto/lego_registry.py": "56350880100d1448658a3d9a5470da46f3ca990d359672f97ac776614ba8da09",
+      "src/dgfl/crypto/linkage.py": "2d6980806fdc74ef98e1fa89a27d6b827686ae21a0c648e360ec4384965f2654",
+      "src/dgfl/crypto/protocol.py": "6917abded47a9954aa2c0e2d0d3046afe0ad1f6d0fddb9fef5a7484915574837",
+      "src/dgfl/crypto/provenance.py": "a8a94012862aa17fb2a2a4101f1f180cc0b95aabb984ed1089bdccc368e33bca",
+      "src/dgfl/deployment.py": "f9c70bf9bd53ae53a3437199dc194c45fb2c470d5460716d0cd2499b49f2b992",
+      "src/dgfl/devices.py": "c046b0d132e7cc7e7f06308c294e3cc2524d758f08817ea906fd92b2c6e75ae0",
+      "src/dgfl/experiments/__init__.py": "21c3bd2568eb6d313fd34ff1b29a93e5c3ab63499fbab7012e5babc2b1b35212",
+      "src/dgfl/experiments/attack_metrics.py": "9177786a4f8094e235ff2b1843828d2a0a03b31a34461f7504b3c78d1377eb30",
+      "src/dgfl/experiments/checkpoint.py": "19c1901fbce1eb93890770ce9dda6c531286fe1f737e2d51b7c439f7b44b1ec6",
+      "src/dgfl/experiments/config.py": "dd166b84def4718b70383d124bc92cadcae86c596b95ee9da1498f86d75f2bd5",
+      "src/dgfl/experiments/evidence.py": "dccc9f429f931ee67d234aad9e092ff03e2cc667f4cdb6ec9bf437a040d9925c",
+      "src/dgfl/experiments/hardware.py": "eda73e48e902d9f848a409ed5d5140fa4b8922e8b06c2766ed1afcb5c3d12883",
+      "src/dgfl/experiments/metadata.py": "edb0002b337a77555af88b905dccc28a20f0db3dc3744e453809bd50a4d916e8",
+      "src/dgfl/experiments/monitor_series.py": "abc455a837fc4bc025461413bbbaf631ec362929e72a400c15bca18f83d7f846",
+      "src/dgfl/experiments/monitoring.py": "2a426d8982c0fd387979f13266853d9b1370ba5e0e18a40464378e8455ca5c59",
+      "src/dgfl/experiments/records.py": "f9dfaaed33b194c3c1c1abdb10a3551773a63cb52baa6fc0440d3779f0610e88",
+      "src/dgfl/experiments/resources.py": "64b6c4d46c75dcd9d85c6471c927c5daa05586a336e7b615974c17cf2d9b895b",
+      "src/dgfl/experiments/runner.py": "20746aafb705865e1bea6b113732065d19220a552955f730bd179a0a56738aa0",
+      "src/dgfl/experiments/shared_records.py": "b7c0dbd2cf345d8b7a085e000d10f878cdeaae94d8075e3e6052e481ebe11264",
+      "src/dgfl/experiments/telemetry.py": "3006c17e4d8eb5af2961e305f8d4f691f504e40598fff08e987126b9c4690f3b",
+      "src/dgfl/experiments/tensorboard.py": "c6a1fd1dcc02555ccbd4b922403917575c716fd479291ddff9aacdfaafab273d",
+      "src/dgfl/material_authenticity.py": "fe03a530040c31d2f495e16b933f3fd59a2b0435908d41618463cb00e88ab37b",
+      "src/dgfl/participation.py": "53ffa507cf9a43f4c84c46a646ac4e0ea950a2a1a454fc63cd3270a4a7a43888",
+      "src/dgfl/registration.py": "3c297187f30e5e5729b183b2ce99b3b1bd6322da1b0cfd1ad8544131e086a37e",
+      "src/dgfl/services/__init__.py": "776b05daa5aa1a7acc4c9101e93a2d3116ed601da2859c5bdb76676c8634f510",
+      "src/dgfl/services/assets/zh-CN.css": "da015a5beaed3631c9c2a6b42f65df3b5fc925d3f01ff55f4061188f5187a3f2",
+      "src/dgfl/services/assets/zh-CN.js": "90ab22c0b0b8fdde17be83c93fa7ee3a8be00e0ee3243adb665136d6bf5f3d80",
+      "src/dgfl/services/connection_probe.py": "150adddfd2e5128a05eadd7f357126e5904a8c229456f7f2771b66500c885271",
+      "src/dgfl/services/control.py": "ae735cab96d992dbb2b37c7420d951422601ccd63aab7d3855718e2016dc81b9",
+      "src/dgfl/services/deployment_import.py": "48d153ec73575b3526d4dd654a27c4a7f99e4ec8c1b82e2f36972156ef70de37",
+      "src/dgfl/services/node.py": "672820d063485a2e049fc66d5cf4eaa0ce3873cb5e6d16b89438aecd208a47be",
+      "src/dgfl/services/roles.py": "115bd9372de96ef86166d2f550feb715f753ae808bae5a2f5a4c1ebb2e304611",
+      "src/dgfl/services/telemetry.py": "f280d4abc3969005ab0b040f6574c1a16cf30ee2a3e8957783385b89530dc93c",
+      "src/dgfl/services/tensorboard.py": "cfa7cc31f6c38ff55e8fc83f02b75f891c2bb3a703f79423eda1f69244d6653a",
+      "src/dgfl/services/tensorboard_metrics.py": "602c5691d3e63da6694a6050586b3103408e256782dfba9a200c4cf6ab92498a",
+      "src/dgfl/system_info.py": "b44ee9ded00aedb29428b219a9016fae8982a9de45925aed7889c04a68bb981e",
+      "src/dgfl/tamper_playground.py": "2932fcd88158e1537083564f688f2b9e03e3b46f3be5ec9c697a1edb492b1b83",
+      "src/dgfl/topology.py": "f1f5ff3935ff54178b0a9c827073b2122721b479c3f234c03aa09edf0d906d97",
+      "src/dgfl/training/__init__.py": "e0940d304da660740af9c5ac15b4bf52c336cc5e0b342cecae325214fe4bfcf3",
+      "src/dgfl/training/attacks.py": "99bd5d4afcab154a77610561e4d47b573b443cac10b3bfb410c8ceb057a12e01",
+      "src/dgfl/training/cifar10.py": "1db5b9fbbdf350088612fa85015e3bd7e06050aeffed90fae9b55f9c4941ea7b",
+      "src/dgfl/training/data.py": "6f736c5e46e1be11305d5425d47f79efa6a17c0f7a2af095d8595363c8a8eb1b",
+      "src/dgfl/training/datasets.py": "4cf0fb14f6cb4c6f82d5cc96d0c39f4fdc207a14ec5d1a2dcc615282a3bfcf19",
+      "src/dgfl/training/model.py": "9ac37284126d660fe646133dcebf16b82ceeefc58e4abbadb6312fb6334ba074",
+      "src/dgfl/training/model_adapter.py": "0889c53bc87d97eae1596e9a7ca60b83ce57fe44e0310fe861318c637e30fac3",
+      "src/dgfl/training/model_contracts.py": "7e2749531fe729ed3ac0732321c32065a776d0242170a29c119b282a398efd25",
+      "src/dgfl/training/original_images.py": "3059606025eb2b8501f34162977cc04f787033bf1cfac579a0c50cf2119ae708",
+      "src/dgfl/training/paper_models.py": "a33798e0cdd39628c89175e63ee97db418a5bc6fd93b1172fd8012922f4d3ab9",
+      "src/dgfl/transport/__init__.py": "ba7699d32e3cef920d73874f8cc544e4e9cdb258957f6d7df984101d7ffd966c",
+      "src/dgfl/transport/binary.py": "8aba3ea35d92d98291dd2330b744971a45737fda2b62866f89d22ce9fe300df4",
+      "src/dgfl/transport/chunking.py": "dff3542bd14dbeb70597e2ab4f70dfbdb1d75139cfa367f5ad3ec404266b05c2",
+      "src/dgfl/transport/client.py": "ec35d9eb2a1dd6ac83b75da82bab104dbc3405093001630d3865e92c2fe3c472",
+      "src/dgfl/transport/security.py": "5c9a2423078d3f8642dc4e31b9e2354be540fdc570bef3fc8ea266dbf4fc7f06",
+      "src/dgfl/validation/__init__.py": "49a5acd017102635116f7594843dfb044a81cf6134a303fda92c7b2b2383829e",
+      "src/dgfl/validation/policy.py": "25f5bf4881b5721263c4fd9429b218b7de5a0ae69e3f9daa73a053af3085ffc7",
+      "src/dgfl/verification_materials.py": "ce83c9c04ca7aed3ff39ede5263fbca20dbbcae18f0acbc2642338531c9ba305",
+      "src/dgfl/versioning.py": "cb8d88577e9128ff1527bc7246d8fefbc7ac75bdfe144b2b390e5e6752b9b3ac",
+      "web/src/App.vue": "cc276083b57dc1219e4ec9e233cc98180d69d8654ec367b8269b2fc69bf551aa",
+      "web/src/components/AccuracyChart.vue": "dcba8f3d6eec79393ac1c459b24c271ddfd7cb554cde960abee19eb1a0d7f488",
+      "web/src/components/DeploymentImportPanel.vue": "e4cc8a3b8043c620222f675637c287a5db4a2d75820fda5a1fb8dd2e2aa5d22b",
+      "web/src/components/EmptyState.vue": "f29b822d86277009cda1e87ff734c191a4c3bb03043d6b07b1e9580ba7c4790b",
+      "web/src/components/HostDevices.vue": "27c0a8e298672f36946964df637032a4b3a5e8ea0f1e57d57e3d3295124f4331",
+      "web/src/components/LabIcon.vue": "fb5c9dce907bd70d2e838f14d8f7e4d6d4879063ca80b974d5a65055f6e6fb1c",
+      "web/src/components/LogoMark.vue": "4228f1c379b635ab5cacbe045dba80443f022ab73e6f9665ea8c408d8d442324",
+      "web/src/components/MeasuredChart.vue": "8941a9593edb81abc93f9a8c40470a7ff47e242f1aef0f4a3f52bcfa8c539716",
+      "web/src/components/MetricCard.vue": "1d43e67c3fdf5dc5443d3297e6774a70cde396f2a47a57fbe57cd7307774d656",
+      "web/src/components/MonitorEntityDrawer.vue": "8f1fdb163271bfca943e1e8f6a10d93239d7fe66eff44cbcd37c491657c23433",
+      "web/src/components/MonitorExecutionPanel.vue": "f32df3d89f10a41232da0d7dc7084f8035189065f0581b3c498db6882ce61a23",
+      "web/src/components/MonitorResourcePanel.vue": "3240b803f15e0fb065af003a450f8bba34987681265e61bc51419c0a0b8c0e6b",
+      "web/src/components/MonitorTrainingPanel.vue": "9ff4d21a5edf8414d394312e55312cf9e2e8ccef8c42f9a59021fdb3355fa072",
+      "web/src/components/NebulaFooter.vue": "6d93a1521c459d9ff3790ca906a81433a7d1027bbea83d06abf001e484bef10f",
+      "web/src/components/NebulaHeader.vue": "b29a1c7641ed86b91d9bca04e50d8f192b0dfe8919f922bf9748a646b935fd7c",
+      "web/src/components/NodeMonitorPanel.vue": "1b72895b28356ca343ac285ba53ab2d2c509b184fd6108ed7d2a1ab98360fc6b",
+      "web/src/components/PageBackdrop.vue": "ef7164852001a75609efa28f083622fadb750685527896880c60503b7776f669",
+      "web/src/components/PageHead.vue": "548df58764bd9f9b2d58498ab4a2e0ed3c4ebee9e6fea6a650f2a9697bee3799",
+      "web/src/components/ParticipationPanel.vue": "dbb75db426cc3a63efbe6590070af6d5051cd0e0692b7294747718daa1fe922d",
+      "web/src/components/RecoveryPanel.vue": "40dc19d13ebadc2bca652bd4696ac6372fca189db7b350973b2edc670ed60aa6",
+      "web/src/components/RegistrationPanel.vue": "f1b232d0ff0650b3dc0440880e970d6dda34944b149ae414c65649785dfa4dba",
+      "web/src/components/ResourceCharts.vue": "37a13996aacca9f466feb72f4f3149d55fea7e455dde3982d03c221b7001cd65",
+      "web/src/components/RunToolbar.vue": "7aa54953964e314827e08051b2d14a76783d1055c09e8d98b6914f98fa3b49ec",
+      "web/src/components/StatusBadge.vue": "cc8bfcd811dc76b0b29ff7267dddf8559bf8820ee377de5483e2b40a64d30381",
+      "web/src/components/StepCard.vue": "ce4c3547ed5b5bba1246469fe0cd11fb1b8f1922038f59ae3b76377871571c17",
+      "web/src/components/TensorBoardPanel.vue": "2d0e0aef1958c319475793e827294fe18a865028254507e80221b62ac0104c91",
+      "web/src/components/TopologyGraph.vue": "eefca5c226e6aeddde8d606be00d81781d5e7af097fc4831eb8547b77a402190",
+      "web/src/components/TrainingCharts.vue": "1e3dd5fd563ccf95114b36538142f78c2f9013eff5ac419734ef28383585bc34",
+      "web/src/lib/api.js": "6d82b479af83983a7609161906cfe531dfba49ceee73e8d3be36a06832ef8f1d",
+      "web/src/lib/batchGrouping.js": "4e6b8ee9963c741a8d5df6e060de9c36e2efd3486c3b0a439ed79ab6103c1bfc",
+      "web/src/lib/cloudStrategies.js": "2e917fe1ca80bc676896900c2b3e976cae9bafa01f2ca823f8d4b334b644aacb",
+      "web/src/lib/comparison.js": "25e424af98bd221c01844c40f02e49ecca48b526fe4072770f383dc82284cad9",
+      "web/src/lib/computeDevices.js": "c54b0404e970305d3b2f4124a845e72d3e0597738d7b6b46a93645fb142e30be",
+      "web/src/lib/cryptoPipeline.js": "472a6e2ff70049ca58e18ef078e3a15ed7c5783a994d1974f1ec630a156069eb",
+      "web/src/lib/datasets.js": "c29166eb7e093c4fa10b9011dcf75f1683e6dc0ee1f74a5751590ace8d925ec1",
+      "web/src/lib/deployment.js": "d5841bb539a3fc868b00a2a44e5d66bae30b18fd3282b182c72c30fe436e3285",
+      "web/src/lib/experiments.js": "ca605f939cee2a8ac9027746ef6cf82a94fa2d41f0967935ca69f726107b9966",
+      "web/src/lib/format.js": "59f00c5da59c05da5fcae8258abb59943c7edcc473dcab8fc1eceed302b3184f",
+      "web/src/lib/gpuEvidence.js": "0f571217e1bd21ea37a96d326445ec83d57704c35aa063b9f69b25b25523e6a1",
+      "web/src/lib/monitorCharts.js": "0bca5ebc014f49b36eb42baaa1cd7af95a76fc5755db96af700a9102587fef05",
+      "web/src/lib/monitorOverview.js": "8e4d7f77abec890e8f98a5b14104dfd19a0557e3d5a74e85d6d18508478e766e",
+      "web/src/lib/monitorSeries.js": "cef3163dac71684490a351cceefb26e70b0b459c34acf4eaa5acd3009c5319cf",
+      "web/src/lib/nodeMonitor.js": "ecfdfb366c3c1d1c184428c314d5d0d7cc92bd790bb7cf6ad934b96911a1ae11",
+      "web/src/lib/participation.js": "faf60de2bf9892c07aedf97ff9b70d001f12a286f8a967bef2029d95faf3d3a8",
+      "web/src/lib/runRecords.js": "d1987ded37f095452233b6903eb2d83fa44692ba268562f8207d0fc68845e450",
+      "web/src/lib/store.js": "bcb5b77e734ba4002db0672a2cbdd4e9246da3e05c3c1c32ecd1ea7f898beca2",
+      "web/src/lib/tensorboard.js": "1b1abdc4d409516b8799b81a2f801da2a3c6027a7607e1b8ea0dd41dd5a5cf4e",
+      "web/src/lib/topology.js": "9be295a2de2ab3ae1bc70e2b6683fb8d91cfdc60a73f2249907c60dfdeef62b4",
+      "web/src/lib/trainingBackends.js": "e195acde83c4bb127d752b57c4b70b5cb66fe203a6e50ea408320768997ffcea",
+      "web/src/lib/trainingEligibility.js": "d427f5a8c7afb843225c06c1a2b50e6ad9ccea3ce07d6c53e4194ebf748e021b",
+      "web/src/lib/verificationEvidence.js": "a59da5a9349c4ab576bcb5407ac34bc35a5c6e6406716d5fc7b6f4b9915a73a0",
+      "web/src/lib/webglTopology.js": "9596a854a5de27e27ddffce2b69aa7b30fb2f3e85a8a52eab9cae45a49906b39",
+      "web/src/main.js": "a95e1fa692b69edc3c9bb1d4a684f6fbe30617d56bc1f4ad221394cafa92ac23",
+      "web/src/monitor.css": "dc21f20432048af010f620bfc3615c39e4f0abefe85fa5f00c0d600d9fc9596b",
+      "web/src/style.css": "2db0d33d060db2df23846985c17120f9153afd8e21e0389f4167f45f69323534",
+      "web/src/views/Comparison.vue": "326c04ae2eb7b6815f148b4f5e255b0abe1477305edba58928fe76fccc280113",
+      "web/src/views/Dashboard.vue": "93ca03975f2e253ac01f535d5b50bd15fc19e1125b19687149a08b6a3a63c7a5",
+      "web/src/views/Deploy.vue": "27cc626f3fb6cfdac3a747ee0a03347a5d3186a4254b8134d3b768c9b26ec34a",
+      "web/src/views/Home.vue": "f1aba813fffeff6201dce384da6deab5c36530890206c3e0ea060143eab0de2f",
+      "web/src/views/Monitor.vue": "7969cffe08f5c0f005e5c75189f58b8180158ebe9936bf084a121d81865cdd9b",
+      "web/src/views/Validation.vue": "9af3986c5648c0649799e8c27713755da4626c96d8c0b27ce66efcfdf9334545"
+    },
+    "limitations": [
+      "B still lacks per_host_devices_v1; record synchronization still returns B: ValueError",
+      "Real CUDA model training is untested because installed PyTorch is CPU-only",
+      "Linux Bash / Python 3.11 CI matrix and privileged symlink tests were not executed here"
+    ]
+  }
+}

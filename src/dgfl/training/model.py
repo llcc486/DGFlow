@@ -64,6 +64,7 @@ def train_local(
     batch_size: int = 64,
     seed: int = 42,
     backend: str = "numpy",
+    device: str = "cpu",
     on_epoch: Callable[[dict], None] | None = None,
 ) -> np.ndarray:
     """Minimize average softmax cross-entropy with deterministic shuffled SGD.
@@ -84,9 +85,11 @@ diagnostic failures do not change or repeat optimizer steps.
         raise ValueError("learning_rate must be finite and positive")
     if backend not in ("numpy", "torch"):
         raise ValueError("backend must be 'numpy' or 'torch'")
+    if device not in ('cpu', 'cuda') or (device != 'cpu' and backend != 'torch'):
+        raise ValueError("CUDA training requires the Torch backend and an explicit cuda device")
     rng = np.random.default_rng(seed)
     if backend == "torch":
-        return _train_torch(w, x, y, features, epochs, learning_rate, batch_size, rng, on_epoch)
+        return _train_torch(w, x, y, features, epochs, learning_rate, batch_size, rng, on_epoch, device=device)
     split = features * CLASSES
     matrix, bias = w[:split].reshape(features, CLASSES), w[split:]
     batch_rows = np.arange(min(batch_size, len(y)))
@@ -130,20 +133,22 @@ def _epoch_metrics(on_epoch, weights, x, y, features, epoch, elapsed):
         _LOG.warning("Local epoch monitoring callback unavailable (%s)", type(exc).__name__)
 
 
-def _train_torch(w, x, y, features, epochs, learning_rate, batch_size, rng, on_epoch=None):
+def _train_torch(w, x, y, features, epochs, learning_rate, batch_size, rng, on_epoch=None, *, device='cpu'):
     try:
         import torch
         import torch.nn.functional as functional
     except ImportError as exc:
         raise ImportError("backend='torch' requires the optional torch dependency") from exc
+    if device == 'cuda' and not torch.cuda.is_available():
+        raise ValueError('CUDA training was requested but PyTorch CUDA is unavailable')
     split = features * CLASSES
-    tensor = torch.tensor(w, dtype=torch.float64, requires_grad=True, device="cpu")
-    features_t = torch.tensor(x, dtype=torch.float64, device="cpu")
-    labels = torch.tensor(y, dtype=torch.int64, device="cpu")
+    tensor = torch.tensor(w, dtype=torch.float64, requires_grad=True, device=device)
+    features_t = torch.tensor(x, dtype=torch.float64, device=device)
+    labels = torch.tensor(y, dtype=torch.int64, device=device)
     for epoch in range(epochs):
         started = time.perf_counter() if on_epoch is not None else None
         # One conversion per epoch retains the NumPy shuffle and exact batches.
-        order = torch.from_numpy(rng.permutation(len(y)))
+        order = torch.from_numpy(rng.permutation(len(y))).to(device)
         for start in range(0, len(y), batch_size):
             indices = order[start:start + batch_size]
             logits = features_t[indices] @ tensor[:split].reshape(features, CLASSES) + tensor[split:]
@@ -152,11 +157,13 @@ def _train_torch(w, x, y, features, epochs, learning_rate, batch_size, rng, on_e
             with torch.no_grad():
                 tensor -= learning_rate * tensor.grad
             tensor.grad = None
+        if device == 'cuda':
+            torch.cuda.synchronize()
         if on_epoch is not None:
             elapsed = time.perf_counter() - started
-            _epoch_metrics(on_epoch, lambda: tensor.detach().numpy().copy(),
+            _epoch_metrics(on_epoch, lambda: tensor.detach().cpu().numpy().copy(),
                            x, y, features, epoch + 1, elapsed)
-    result = tensor.detach().numpy().copy()
+    result = tensor.detach().cpu().numpy().copy()
     if not np.isfinite(result).all():
         raise ValueError("training produced nonfinite parameters; reduce learning_rate or feature scale")
     return result

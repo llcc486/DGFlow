@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import LabIcon from '../components/LabIcon.vue'
 import RegistrationPanel from '../components/RegistrationPanel.vue'
 import ParticipationPanel from '../components/ParticipationPanel.vue'
+import HostDevices from '../components/HostDevices.vue'
 import DeploymentImportPanel from '../components/DeploymentImportPanel.vue'
 import StepCard from '../components/StepCard.vue'
 import TopologyGraph from '../components/TopologyGraph.vue'
@@ -41,6 +42,7 @@ const form = reactive({
   backend: 'numpy',
   dataset: store.selectedDataset.value,
   compute_device: 'cpu',
+  training_device: 'cpu',
   grid: 8,
   model_name: null, bits: null, scale: null,
   execution: 'parallel', rpc_workers: 6,
@@ -101,8 +103,7 @@ function reconcileModel(models = availableModels.value) {
   }
 }
 watch(availableModels, reconcileModel, { flush: 'sync', immediate: true })
-const gpuPreparing = ref(false)
-const gpuPreparationError = ref('')
+const gpuPreparing = computed(() => store.status.value?.capabilities?.compute?.preparation?.state === 'initializing')
 const topologyTouched = ref(false)
 const topologyView = ref('live')
 /**
@@ -303,7 +304,6 @@ async function applyDeployment(startNodes = true) {
 }
 let parametersController = null
 let parametersTimer = null
-let gpuController = null
 const matchingParameters = computed(() => isCnn.value ? [] : proofParameters.value.filter(parameter =>
   parameter?.dimension === geometry.value.dimension && parameter.bits === 8
   && (parameter.suite == null || parameter.suite === 'lego_norm_v1')
@@ -356,7 +356,7 @@ onMounted(() => {
   })
 })
 onUnmounted(() => {
-  clearInterval(parametersTimer); parametersController?.abort(); gpuController?.abort()
+  clearInterval(parametersTimer); parametersController?.abort()
   for (const controller of connectionControllers.values()) controller.abort()
   connectionControllers.clear()
 })
@@ -379,8 +379,13 @@ function applyImportedConfiguration(text) {
     throw new Error('请选择包含实验参数的 JSON 对象，可使用本页导出的配置文件。')
   }
   const allowed = new Set(Object.keys(form))
+  allowed.add('device_policy')
   const unknown = Object.keys(imported).filter(key => !allowed.has(key))
   if (unknown.length) throw new Error(`不支持的配置字段：${unknown.join('、')}。请使用本页导出的实验配置。`)
+  if (imported.device_policy != null && !['coordinator', 'per_host'].includes(imported.device_policy)) throw new Error('设备策略无效。')
+  // The current deployment determines ownership; an imported file cannot
+  // switch a LAN back to coordinator-controlled devices.
+  delete imported.device_policy
   if (imported.proof_crs_hash != null && (typeof imported.proof_crs_hash !== 'string' || !/^[0-9a-f]{64}$/i.test(imported.proof_crs_hash))) {
     throw new Error('proof_crs_hash 必须为 64 位十六进制摘要或 null。')
   }
@@ -454,35 +459,9 @@ const attackClasses = computed(() => form.dataset === 'cifar10'
   : Array.from({ length: 10 }, (_, index) => `数字 ${index}`))
 const computeStatus = computed(() => computeDeviceStatus(store.status.value?.capabilities?.compute, store.connected.value))
 const deviceError = computed(() => computeDeviceError(form.compute_device, form.mode, computeStatus.value))
+const hostDeviceError = ref('')
 const backendStatus = computed(() => trainingBackendStatus(store.status.value?.capabilities?.training_backends, store.connected.value))
 const backendError = computed(() => trainingBackendError(form.backend, backendStatus.value))
-
-async function prepareGpu() {
-  if (!computeStatus.value.canPrepareGpu || gpuPreparing.value || store.deploying.value || store.hasActiveRun.value || store.submitting.value) return
-  gpuPreparing.value = true
-  gpuPreparationError.value = ''
-  gpuController = new AbortController()
-  const timeout = window.setTimeout(() => gpuController?.abort(), 12000)
-  try {
-    const preparation = await api.prepareCompute(gpuController.signal)
-    // Only the polled, verified capability may enable GPU selection.
-    const status = store.status.value
-    if (status) store.status.value = {
-      ...status,
-      capabilities: {
-        ...status.capabilities,
-        compute: { ...status.capabilities?.compute, preparation },
-      },
-    }
-  } catch (error) {
-    gpuPreparationError.value = error.name === 'AbortError'
-      ? 'GPU 准备请求超时，请等待状态更新后再试。'
-      : `GPU 准备失败：${errorText(error)}`
-  } finally {
-    clearTimeout(timeout)
-    gpuPreparing.value = false
-  }
-}
 
 function configurationErrors(form, requiredName = true) {
   const errors = []
@@ -496,6 +475,7 @@ function configurationErrors(form, requiredName = true) {
     ['execution', ['serial', 'parallel'], '执行方式'],
     ['backend', ['numpy', 'torch'], '训练后端'],
     ['compute_device', ['cpu', 'gpu'], '密码计算设备'],
+    ['training_device', ['cpu', 'gpu'], '模型训练设备'],
     ['cloud_strategy', ['auto', 'threshold', 'all'], '云聚合方式'],
     ['verification', ['deterministic', 'randomized'], '验证方式'],
   ]) {
@@ -551,6 +531,7 @@ const formErrors = computed(() => {
   else if (!selectedModel.value) errors.push('请选择可用的模型类型。')
   if (backendError.value) errors.push(backendError.value)
   if (deviceError.value) errors.push(deviceError.value)
+  if (hostDeviceError.value) errors.push(hostDeviceError.value)
   if (form.mode !== 'plain' && !isCnn.value) {
     if (!proofParametersLoading.value && !proofParametersError.value) {
       if (!proofParametersAvailable.value) errors.push('后端缺少 Lego 原生扩展，请安装后重启服务。')
@@ -602,8 +583,9 @@ function runConfiguration() {
   const { proof_crs_hash, model_name, bits, scale, ...configuration } = form
   return withCloudStrategy({
     ...configuration,
+    ...(deploymentMode.value === 'multi_machine' ? { device_policy: 'per_host' } : {}),
     name: form.name.trim(),
-    description: form.description.trim(),
+    description: form.description.trim() || null,
     ...(model_name == null ? {} : { model_name }),
     ...(isCnn.value ? { bits, scale } : {}),
     proof_suite: 'lego_norm_v1',
@@ -629,7 +611,7 @@ function reset() {
     name: '', description: '',
     mode: 'dgflow', rounds: 5, seed: 42, attack: 'none', attack_target_class: 0, attack_client_ids: null, malicious_clients: 0,
     non_iid: true, offline_aggregators: 0, train_limit: 6000, test_limit: 1000,
-    local_epochs: 1, backend: 'numpy', dataset: 'mnist', compute_device: 'cpu', grid: 8, model_name: null, bits: null, scale: null,
+    local_epochs: 1, backend: 'numpy', dataset: 'mnist', compute_device: 'cpu', training_device: 'cpu', grid: 8, model_name: null, bits: null, scale: null,
     execution: 'parallel', rpc_workers: 6,
     cloud_strategy: 'auto',
     proof_suite: 'lego_norm_v1', verification: 'deterministic', verification_workers: 1, verification_threads: 2,
@@ -842,59 +824,11 @@ function exportConfig() {
           </button>
         </StepCard>
 
-        <StepCard no="6" title="密码计算设备" icon="bolt" :badge="form.compute_device.toUpperCase()">
-          <div class="nb-mode-grid nb-compute-devices" role="group" aria-label="密码计算设备">
-            <button
-              type="button" :class="['nb-mode-card', { selected: form.compute_device === 'cpu' }]"
-              :aria-pressed="form.compute_device === 'cpu'"
-              @click="form.compute_device = 'cpu'"
-            >
-              <div class="nb-mode-card-top">
-                <LabIcon name="layers" :size="19" />
-                <span :class="['nb-radio', { on: form.compute_device === 'cpu' }]"></span>
-              </div>
-              <h3>CPU <span class="nb-compute-state">默认</span></h3>
-              <p>{{ computeStatus.cpuName }}</p>
-              <p>使用 CPU 进行精确密码运算。</p>
-            </button>
-            <button
-              type="button" :class="['nb-mode-card', { selected: form.compute_device === 'gpu' }]"
-              :aria-pressed="form.compute_device === 'gpu'" :disabled="!computeStatus.gpuAvailable"
-              :aria-describedby="!computeStatus.gpuAvailable ? 'gpu-unavailable-reason' : 'gpu-operations'"
-              @click="form.compute_device = 'gpu'"
-            >
-              <div class="nb-mode-card-top">
-                <LabIcon name="bolt" :size="19" />
-                <span :class="['nb-radio', { on: form.compute_device === 'gpu' }]"></span>
-              </div>
-              <h3>GPU <span class="nb-compute-state">{{ computeStatus.gpuAvailable ? '可用' : '不可用' }}</span></h3>
-              <p>{{ computeStatus.gpuName }}</p>
-              <p>并行执行后端支持的精确密码批量运算。</p>
-            </button>
-          </div>
-          <div v-if="!computeStatus.gpuAvailable" id="gpu-unavailable-reason" class="nb-notice warning" style="margin:0">
-            <LabIcon name="info" :size="16" />
-            <div>{{ computeStatus.gpuReason }}</div>
-          </div>
-          <p v-else id="gpu-operations" class="nb-note" style="margin:0">
-            当前 GPU 加速范围：{{ computeStatus.operations.length ? computeStatus.operations.join('、') : '以后端运行记录为准' }}。
-          </p>
-          <button
-            v-if="computeStatus.gpuHardwareAvailable && !computeStatus.gpuAvailable"
-            type="button" class="nb-btn outline block"
-            :disabled="!computeStatus.canPrepareGpu || gpuPreparing || store.deploying.value || store.hasActiveRun.value || store.submitting.value"
-            @click="prepareGpu"
-          >
-            <span v-if="gpuPreparing || computeStatus.preparationState === 'initializing'" class="nb-spinner"></span>
-            <LabIcon v-else name="bolt" :size="16" />
-            {{ gpuPreparing || computeStatus.preparationState === 'initializing' ? '正在检测并启用 GPU…' : computeStatus.preparationState === 'failed' ? '重新检测并启用 GPU' : '检测并启用 GPU' }}
-          </button>
-          <div v-if="gpuPreparationError" class="nb-notice danger" style="margin:0">
-            <LabIcon name="alert" :size="16" />
-            <div>{{ gpuPreparationError }}</div>
-          </div>
-          <p v-if="computeStatus.gpuHardwareAvailable && !computeStatus.gpuAvailable" class="nb-note" style="margin:0">服务启动与部署更新后会自动核验主控及实际边缘服务器的 GPU；首次核验需要编译密码内核，完成后 GPU 选项自动开放。</p>
-          <p class="nb-note" style="margin:0">此选项控制密码计算。模型训练仍使用所选训练后端；选择 GPU 密码计算不要求安装 PyTorch。GPU 模式需要加密实验策略，启动时会再次检查设备能力。</p>
+        <StepCard v-if="store.participation.value?.role !== 'participant'" no="6" title="本机计算设备" icon="bolt" badge="独立选择">
+          <HostDevices :model-value="{ training_device: form.training_device, compute_device: form.compute_device }"
+            :mode="form.mode" :disabled="store.hasActiveRun.value || store.submitting.value || store.participationBusy.value"
+            @update:model-value="Object.assign(form, $event)" @error="hostDeviceError = $event" />
+          <p class="nb-note">多机部署中，此处只设置 A。B、C 在本机邀请中分别选择设备并同意；确认后锁定本次选择，修改需重新邀请。</p>
         </StepCard>
 
         <StepCard no="7" title="高级设置" icon="bolt" badge="默认展开">
@@ -955,12 +889,12 @@ function exportConfig() {
             </label>
           </div>
           <label class="nb-field">
-            <label for="training-backend">训练后端 <small>BACKEND</small></label>
+            <label for="training-backend">CPU 训练后端 <small>BACKEND</small></label>
             <select id="training-backend" v-model="form.backend" :aria-invalid="Boolean(backendError)" aria-describedby="training-backend-note training-backend-reason">
               <option value="numpy" :disabled="!backendStatus.numpy.available">numpy（默认，CPU）{{ backendStatus.numpy.available ? '' : ' · 未就绪' }}</option>
               <option value="torch" :disabled="!backendStatus.torch.available">torch（可选，CPU {{ isCnn ? 'float32，CNN' : 'float64，线性' }}）{{ backendStatus.torch.available ? ' · 可用' : ' · 不可用' }}</option>
             </select>
-            <small id="training-backend-note">{{ isCnn ? 'CNN 需要选择 Torch float32，所有训练客户端需具备 PyTorch。' : 'Softmax 回归默认 NumPy，可选 Torch float64。' }}此处使用 CPU 训练；上方 GPU 选项控制密码计算，二者独立。</small>
+            <small id="training-backend-note">{{ isCnn ? 'CNN 需要选择 Torch float32，所有训练客户端需具备 PyTorch。' : 'Softmax 回归默认 NumPy，可选 Torch float64。' }}选择 GPU 训练的主机使用 PyTorch CUDA；设备由各主机分别选择。</small>
             <small id="training-backend-reason" :class="{ 'text-warn': !backendStatus.torch.available }" role="status">{{ backendStatus.torch.available ? '所有训练客户端已声明 torch 可用。' : `torch 不可用：${backendStatus.torch.reason}` }}<template v-if="!backendStatus.torch.available && backendStatus.torch.unsupportedNodes.length"> 未就绪节点：{{ backendStatus.torch.unsupportedNodes.join('、') }}。</template></small>
             <small v-if="backendError" class="text-err">{{ backendError }}；已保留所选后端，请明确选择可用后端后再运行。</small>
           </label>
@@ -975,6 +909,7 @@ function exportConfig() {
             <div><dt>执行策略</dt><dd>{{ modeName(form.mode) }}</dd></div>
             <div><dt>执行方式</dt><dd>{{ form.execution === 'serial' ? '串行' : '并行' }}</dd></div>
             <div><dt>密码计算设备</dt><dd>{{ form.compute_device.toUpperCase() }}</dd></div>
+            <div><dt>本机模型训练设备</dt><dd>{{ form.training_device.toUpperCase() }}</dd></div>
             <div><dt>接纳分组</dt><dd>{{ form.batch_strategy === 'regroup' ? '合格成员重新组队' : `固定 ${form.batch_size} 人批次（σ=${form.batch_size}）` }}</dd></div>
             <div><dt>全局 / 本地轮数</dt><dd>{{ form.rounds }} / {{ form.local_epochs }}</dd></div>
             <div><dt>随机种子</dt><dd class="mono">{{ form.seed }}</dd></div>

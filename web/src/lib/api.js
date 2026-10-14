@@ -58,8 +58,9 @@ export const api = {
     method: 'POST', body: JSON.stringify(connectionTestPayload(configuration)), signal }),
   getParticipation: signal => request('/participation', { signal }),
   inviteParticipation: (config, signal) => request('/participation/invite', { method: 'POST', body: JSON.stringify(config), signal }),
-  respondParticipation: (sessionId, decision, signal) => request('/participation/respond', {
-    method: 'POST', body: JSON.stringify({ session_id: sessionId, decision }), signal }),
+  respondParticipation: (sessionId, decision, signal, devices) => request('/participation/respond', {
+    method: 'POST', body: JSON.stringify({ session_id: sessionId, decision, ...(devices ? { devices } : {}) }), signal }),
+  trainingDevices: (signal, refresh = false) => request(`/training/devices${refresh ? '?refresh=true' : ''}`, { signal }),
   cancelParticipation: signal => request('/participation/cancel', { method: 'POST', body: '{}', signal }),
   status: signal => request('/status', { signal }),
   tensorBoardStatus: signal => request('/tensorboard/status', { signal }),
