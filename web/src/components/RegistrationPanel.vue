@@ -12,6 +12,7 @@ import LabIcon from './LabIcon.vue'
 const props = defineProps({
   registration: { type: Object, default: null },
   busy: { type: Boolean, default: false },
+  webControls: { type: Boolean, default: false },
 })
 defineEmits(['refresh', 'download'])
 
@@ -52,14 +53,14 @@ const rows = () => Object.entries(props.registration?.nodes || {})
     <div v-if="rows().length" class="nb-registration-scroll">
     <table class="nb-registration-table">
       <thead>
-        <tr><th>节点</th><th>机器</th><th>状态</th><th>下一步命令</th></tr>
+        <tr><th>节点</th><th>机器</th><th>状态</th><th v-if="!webControls">下一步命令</th></tr>
       </thead>
       <tbody>
         <tr v-for="row in rows()" :key="row.name" :data-state="row.state">
           <td>{{ row.name }}</td>
           <td>{{ row.machine }}</td>
           <td><span class="nb-registration-state" :data-tone="row.tone">{{ row.label }}</span></td>
-          <td><code v-if="row.command">{{ row.command }}</code></td>
+          <td v-if="!webControls"><code v-if="row.command">{{ row.command }}</code></td>
         </tr>
       </tbody>
     </table>

@@ -17,6 +17,7 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from dgfl.crypto.backend import digest
+from dgfl.participation import RPC_ACTIONS, Participation
 from dgfl.transport.binary import binary_digest, unpack_from, unpackb
 from dgfl.transport.chunking import (
     CHUNK_ACTION,
@@ -114,6 +115,7 @@ def create_node_app(node_id, runtime):
     assembler = ChunkAssembler(directory=folder / 'rpc-uploads', file_mode=True)
     responses = ResponseStore(folder / 'rpc-downloads')
     telemetry = NodeTelemetry(node_id, runtime)
+    participation = Participation(runtime)
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -180,6 +182,7 @@ def create_node_app(node_id, runtime):
             from dgfl.crypto.lego_registry import available
             result = {'node_id': node_id, 'status': 'online', 'backend': 'BLS12-381/arkworks',
                       'capabilities': {'lego_norm_v1': available(), 'compute':compute_capabilities(),
+                                       'participation_v1':True,
                                        'datasets':['mnist','cifar10'],
                                        'node_telemetry':True,
                                        'training_backends':training_backends(),
@@ -193,6 +196,14 @@ def create_node_app(node_id, runtime):
                                        'batched_client_keys':node_id.startswith('authority')},
                       'native':loaded_native_evidence(), **version_declaration()}
             return identity.seal('coordinator', 'rpc-response', result, context)
+        if data['action'] in RPC_ACTIONS:
+            # Independent of the long-running role lock: the local browser must
+            # remain able to observe invitations and progress during training.
+            try:
+                result = participation.rpc(data['action'], data['payload'])
+                return identity.seal('coordinator', 'rpc-response', result, context)
+            except (ValueError, KeyError, TypeError) as exc:
+                raise HTTPException(409, str(exc)) from exc
         if data['action'] in ('telemetry_start', 'telemetry_read', 'telemetry_stop'):
             # Authentication above is shared with role operations; telemetry
             # uses its own cache lock and never waits for stateful execution or
@@ -208,6 +219,11 @@ def create_node_app(node_id, runtime):
         fingerprint = binary_digest(data)
         path = runtime / 'nodes' / node_id / 'rpc-cache' / (digest(context) + CACHE_SUFFIX)
         with lock:
+            if not data['action'].startswith('_'):
+                try:
+                    participation.authorize(data['action'], data['payload'], getattr(worker, 'ctx', None))
+                except ValueError as exc:
+                    raise HTTPException(409, str(exc)) from exc
             if data['action'] in (DOWNLOAD_ACTION, DOWNLOAD_COMPLETE_ACTION):
                 try:
                     operation = responses.fetch if data['action'] == DOWNLOAD_ACTION else responses.complete
@@ -277,6 +293,10 @@ def create_node_app(node_id, runtime):
                     action, payload = _reassemble(outcome)
                 elif action.startswith('_'):
                     raise ValueError('unknown reserved RPC action')
+                # Chunking cannot bypass the same consent/run binding enforced
+                # for direct requests. Authority follow-up calls inherit the
+                # context the worker accepted at its authenticated begin call.
+                participation.authorize(action, payload, getattr(worker, 'ctx', None))
                 if worker is None:
                     from .roles import RoleWorker
                     worker = RoleWorker(node_id, runtime, identity, telemetry)

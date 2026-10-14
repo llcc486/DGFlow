@@ -56,6 +56,9 @@ import { runName, runDescription } from '../lib/experiments.js'
     :recovery="store.recovery.value"
     :busy="store.recovering.value"
     :disabled="!store.connected.value || store.hasActiveRun.value"
+    :participation="store.participation?.value" :participation-error="store.participationError?.value || ''"
+    :inviting="store.participationBusy?.value || false"
+    @invite="store.inviteRecoveryRun()" @cancel="store.cancelParticipation()"
     @resume="store.resumeRun()"
   />
 </template>

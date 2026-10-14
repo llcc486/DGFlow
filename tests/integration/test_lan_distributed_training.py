@@ -70,7 +70,10 @@ def lan_bundles(tmp_path_factory):
     try:
         for runtime in runtimes.values():
             start_nodes(runtime)  # machine.json chooses ONLY this machine's nodes.
-        with TestClient(create_control_app(runtimes['A'], auto_prepare_compute=False)) as control:
+        with ExitStack() as stack:
+            controls = {machine: stack.enter_context(TestClient(create_control_app(
+                runtime, auto_prepare_compute=False))) for machine, runtime in runtimes.items()}
+            control = controls['A']
             deadline = time.monotonic()+60
             while time.monotonic() < deadline:
                 status = control.get('/api/status').json()
@@ -79,7 +82,7 @@ def lan_bundles(tmp_path_factory):
                 time.sleep(1)
             assert all(n['status'] == 'online' for n in status['nodes']), status['nodes']
             assert {n['id']: n['machine'] for n in status['nodes']} == {name: item['machine'] for name, item in NODES.items()}
-            yield control, runtimes, manifest
+            yield controls, runtimes, manifest
     finally:
         failures = []
         for runtime in runtimes.values():
@@ -101,16 +104,81 @@ def test_entered_ips_produce_a_three_terminal_cluster(lan_bundles):
             assert item['url'] == f"https://{NODES[name]['host']}:{item['port']}"
 
 
+def invitation(controls, payload):
+    """Deliver the experiment over the same authenticated LAN node transport."""
+    response = controls['A'].post('/api/participation/invite', json=payload)
+    assert response.status_code in (200, 202), response.text
+    session = response.json()['session']
+    assert session['ready'] is False
+    assert {item['machine']: item['state'] for item in session['machines']} == {
+        'A': 'approved', 'B': 'pending', 'C': 'pending'}
+    for machine in ('B', 'C'):
+        state = controls[machine].get('/api/participation').json()
+        assert state['enabled'] is True
+        assert state['role'] == 'participant'
+        assert state['local_machine'] == machine
+        assert state['session']['session_id'] == session['session_id']
+        assert state['session']['config'] == session['config']
+    return session
+
+
+def approval(controls, machine, session, decision='approved'):
+    response = controls[machine].post('/api/participation/respond', json={
+        'session_id': session['session_id'], 'decision': decision})
+    assert response.status_code == 200, response.text
+    # Local approval reaches A on its bounded polling cycle, rather than through
+    # a browser-to-browser connection or a copied coordinator private key.
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        latest = controls['A'].get('/api/participation').json()['session']
+        if next(item for item in latest['machines'] if item['machine'] == machine)['state'] == decision:
+            break
+        time.sleep(.1)
+    else:
+        pytest.fail(f'{machine} decision did not reach coordinator: {latest}')
+    return response.json()
+
+
+def test_training_is_blocked_until_all_machines_approve(lan_bundles):
+    controls, _, _ = lan_bundles
+    payload = {**TOPO, 'mode': 'plain', 'rounds': 1, 'train_limit': 120,
+               'test_limit': 100, 'backend': 'numpy', 'compute_device': 'cpu'}
+    control = controls['A']
+    before = control.get('/api/runs').json()
+    assert control.post('/api/runs', json=payload).status_code == 409
+    session = invitation(controls, payload)
+    approval(controls, 'B', session)
+    assert control.get('/api/participation').json()['session']['ready'] is False
+    assert control.post('/api/runs', json=payload).status_code == 409
+    approval(controls, 'C', session, 'rejected')
+    state = control.get('/api/participation').json()['session']
+    assert state['ready'] is False
+    assert next(item for item in state['machines'] if item['machine'] == 'C')['state'] == 'rejected'
+    assert control.post('/api/runs', json=payload).status_code == 409
+    assert control.get('/api/runs').json() == before
+    response = control.post('/api/participation/cancel', json={})
+    assert response.status_code == 200, response.text
+
+
 @pytest.mark.parametrize('mode', ['plain', 'encrypted', 'dgflow'])
 def test_roles_on_separate_addresses_training_together(lan_bundles, mode):
-    control, runtimes, manifest = lan_bundles
+    controls, runtimes, manifest = lan_bundles
+    control = controls['A']
     payload = {**TOPO, 'mode': mode, 'rounds': 1 if mode == 'plain' else 2,
+               'name': f'Three-machine {mode}', 'description': 'Each machine explicitly approved this experiment.',
                'local_epochs': 2, 'train_limit': 120, 'test_limit': 100,
                'grid': 8, 'dataset': 'mnist', 'attack': 'none', 'malicious_clients': 0,
                'compute_device': 'cpu', 'backend': 'numpy', 'rpc_workers': 2,
                'proof_suite': 'lego_norm_v1', 'batch_strategy': 'fixed'}
     if mode != 'plain':
         payload['proof_crs_hash'] = manifest['crs_hash']
+    session = invitation(controls, payload)
+    approval(controls, 'B', session)
+    approval(controls, 'C', session)
+    assert control.get('/api/participation').json()['session']['ready'] is True
+    # Consent is bound to this exact experiment, including its training length.
+    changed = {**payload, 'rounds': payload['rounds'] + 1}
+    assert control.post('/api/runs', json=changed).status_code == 409
     response = control.post('/api/runs', json=payload)
     assert response.status_code in (200, 202), response.text
     run_id = response.json()['run_id']
@@ -136,6 +204,16 @@ def test_roles_on_separate_addresses_training_together(lan_bundles, mode):
                 assert evidence['confirmation']['all_match'] is True
         stored = json.loads((runtimes['A']/'results'/run_id/'result.json').read_text('utf8'))
         assert stored['status'] == 'completed'
+        for machine in ('A', 'B', 'C'):
+            peer = controls[machine].get('/api/participation').json()['session']
+            assert peer['session_id'] == session['session_id']
+            assert peer['run']['run_id'] == run_id
+            assert peer['run']['name'] == payload['name']
+            assert peer['run']['description'] == payload['description']
+            assert peer['run']['status'] == 'completed'
+            assert peer['run']['current_round'] == payload['rounds']
+            assert peer['run']['rounds_total'] == payload['rounds']
+            assert peer['run']['accuracy'] == state['rounds'][-1]['accuracy']
         print(f"\n{mode} run={run_id} rounds={len(state['rounds'])} accuracy={state['rounds'][-1]['accuracy']} runtime={runtimes['A']}")
     finally:
         current = control.get(f'/api/runs/{run_id}').json()

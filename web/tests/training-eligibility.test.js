@@ -14,6 +14,7 @@ import * as clouds from '../src/lib/cloudStrategies.js'
 import { trainingEligibility } from '../src/lib/trainingEligibility.js'
 import * as batching from '../src/lib/batchGrouping.js'
 import * as experiments from '../src/lib/experiments.js'
+import * as participation from '../src/lib/participation.js'
 import { api, errorText } from '../src/lib/api.js'
 import { consoleStore as store } from '../src/lib/store.js'
 
@@ -129,9 +130,9 @@ function formHarness(status) {
   store.runs.value = []; store.currentRun.value = null
   for (const name of ['preparing', 'submitting', 'deploying', 'stopping']) store[name].value = false
   const context = createContext({
-    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments,
+    ...datasets, ...format, ...compute, ...deployment, ...topology, ...training, ...clouds, ...batching, ...experiments, ...participation,
     computed, reactive, ref, api, errorText, store, trainingEligibility,
-    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, onMounted() {}, onUnmounted() {},
+    LabIcon: {}, StepCard: {}, TopologyGraph: {}, PageHead: {}, RegistrationPanel: {}, ParticipationPanel: {}, DeploymentImportPanel: {}, onMounted() {}, onUnmounted() {},
     watch: (...args) => { const stop = watch(...args); stops.push(stop); return stop },
   })
   runInContext(executable, context)
@@ -147,13 +148,40 @@ function formHarness(status) {
   } }
 }
 
-test('experiment strategy requires a name and preserves trimmed metadata through presets and exported configuration', () => {
+test('the real LAN form requires all approvals for its current configuration and blocks participant launches', () => {
+  const status = { ...registered(), deployment: 'lan', local_machine: 'A' }
+  status.nodes = status.nodes.map((node, index) => ({ ...node, machine: index % 2 ? 'B' : 'A',
+    host: `https://192.168.1.${index % 2 ? 11 : 10}:${9101 + index}` }))
+  const harness = formHarness(status)
+  const previous = store.participation.value
+  try {
+    assert.equal(harness.form.invitationBlockedReason.value, '')
+    assert.match(harness.form.blockedReason.value, /重启/)
+    const config = harness.form.runConfiguration()
+    store.participation.value = { enabled: true, role: 'coordinator', local_machine: 'A', session: {
+      session_id: 'same-settings', config, status: 'pending', ready: false,
+      machines: [{ machine: 'A', state: 'approved' }, { machine: 'B', state: 'pending' }],
+    } }
+    assert.match(harness.form.blockedReason.value, /等待全部/)
+    store.participation.value.session.machines[1].state = 'approved'
+    store.participation.value.session.status = 'ready'
+    store.participation.value.session.ready = true
+    assert.equal(harness.form.blockedReason.value, '')
+    harness.form.form.rounds += 1
+    assert.match(harness.form.blockedReason.value, /当前实验配置/)
+    assert.equal(harness.form.invitationMatches.value, false)
+    store.status.value = { ...status, local_machine: 'B' }
+    assert.match(harness.form.invitationBlockedReason.value, /主控 A/)
+  } finally { store.participation.value = previous; harness.close() }
+})
+
+test('experiment strategy requires a name and preserves trimmed metadata through imported and exported configuration', () => {
   const harness = formHarness(registered())
   try {
     const actual = harness.form
     actual.form.name = '  MNIST 防御对照  '
     actual.form.description = '  观察标签翻转下的准确率。\n保留相同随机种子。  '
-    actual.applyPreset(actual.presets.find(preset => preset.id === 'standard'))
+    actual.applyImportedConfiguration(JSON.stringify({ rounds: 5 }))
     const exported = JSON.parse(JSON.stringify(actual.runConfiguration()))
     assert.equal(exported.name, 'MNIST 防御对照')
     assert.equal(exported.description, '观察标签翻转下的准确率。\n保留相同随机种子。')
@@ -245,20 +273,14 @@ test('store submission refuses insufficient cloud eligibility without making an 
   } finally { api.startRun = previous; harness.close() }
 })
 
-test('deployment defaults, reset and all presets retain only LegoGroth16', () => {
+test('deployment defaults and reset retain LegoGroth16 while imports reject retired proof schemes', () => {
   const harness = formHarness(registered())
   try {
     assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
     assert.equal(harness.form.form.mode, 'dgflow')
-    assert.ok(harness.form.presets.some(preset => preset.id === 'lego'))
-    assert.ok(harness.form.presets.every(preset => preset.id !== '5b'))
-    for (const preset of harness.form.presets) {
-      harness.form.form.proof_suite = 'legacy'
-      harness.form.applyPreset(preset)
-      assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
-      assert.equal(harness.form.form.mode, 'dgflow')
+    for (const suite of ['legacy', 'compact_range_v1', 'compact_norm_v1']) {
+      assert.throws(() => harness.form.applyImportedConfiguration(JSON.stringify({ proof_suite: suite })), /仅支持 LegoGroth16/)
     }
-    harness.form.applyPreset({ id: 'saved-preset', apply: { proof_suite: 'compact_norm_v1' } })
     assert.equal(harness.form.form.proof_suite, 'lego_norm_v1')
     harness.form.form.proof_suite = 'compact_range_v1'
     harness.form.reset()
@@ -266,6 +288,8 @@ test('deployment defaults, reset and all presets retain only LegoGroth16', () =>
     assert.equal(harness.form.form.mode, 'dgflow')
     assert.equal(harness.form.runConfiguration().proof_crs_hash, 'a'.repeat(64))
     const template = parse(source).descriptor.template.content
+    assert.doesNotMatch(template, /快速验证|标准实验|完整数据|LegoGroth16 实验|applyPreset/)
+    assert.match(template, /导入 JSON/)
     assert.doesNotMatch(template, /v-model="form\.proof_suite"|proof-suite-fixed|proofSuiteName\(form\.proof_suite\)/)
     assert.doesNotMatch(template, /v-model="form\.proof_crs_hash"|可信设置摘要|请选择匹配的 CRS|刷新已安装参数/)
   } finally { harness.close() }
@@ -275,16 +299,109 @@ test('new deployments use immutable batches and retain regroup only as an explic
   const harness = formHarness(registered())
   try {
     assert.equal(harness.form.form.batch_strategy, 'fixed')
-    for (const preset of harness.form.presets) {
-      harness.form.applyPreset(preset)
-      assert.equal(harness.form.runConfiguration().batch_strategy, 'fixed')
-    }
-    harness.form.applyPreset({ id: 'saved-config', apply: { batch_strategy: 'regroup' } })
+    harness.form.applyImportedConfiguration(JSON.stringify({ batch_strategy: 'regroup' }))
     assert.equal(harness.form.runConfiguration().batch_strategy, 'regroup')
     harness.form.reset()
     assert.equal(harness.form.runConfiguration().batch_strategy, 'fixed')
     assert.match(source, /不具备论文固定批次的跨轮 MRPL 隐私保证/)
   } finally { harness.close() }
+})
+
+test('JSON imports round-trip exported settings, keep non-default installed models and select local CRS', async () => {
+  const harness = formHarness(registered())
+  try {
+    const view = harness.form
+    view.proofParameters.value.push({ dimension: 1090, bits: 8, crs_hash: 'b'.repeat(64) })
+    const imported = { ...view.runConfiguration(), dataset: 'cifar10', grid: 6, name: '  JSON 实验  ',
+      description: '导入配置\n保留所有数值', train_limit: 40000, non_iid: false,
+      rounds: 7, execution: 'serial', attack: 'targeted_label_flip', malicious_clients: 2,
+      attack_target_class: 3, attack_client_ids: ['client3', 'client1'], min_norm_ratio: 0.2,
+      proof_crs_hash: 'c'.repeat(64) }
+    view.applyImportedConfiguration('\uFEFF' + JSON.stringify(imported))
+    await nextTick()
+    assert.equal(view.selectedModel.value, 'softmax-cifar10-6')
+    assert.deepEqual(JSON.parse(JSON.stringify(view.runConfiguration())), {
+      ...imported, name: 'JSON 实验', proof_crs_hash: 'b'.repeat(64),
+    })
+    const exported = JSON.stringify(view.runConfiguration())
+    view.reset()
+    await nextTick()
+    view.applyImportedConfiguration(exported)
+    await nextTick()
+    assert.equal(JSON.stringify(view.runConfiguration()), exported)
+    assert.equal(view.form.train_limit, 40000)
+    assert.equal(view.form.non_iid, false)
+    assert.equal(view.formErrors.value.length, 0)
+  } finally { harness.close() }
+})
+
+test('invalid JSON and unsupported configuration leave the entire form unchanged', () => {
+  const harness = formHarness(registered())
+  try {
+    const view = harness.form, before = JSON.stringify(view.form)
+    for (const invalid of ['{', 'null', '[]', '{}', '"text"',
+      '{"name":7}', '{"non_iid":"false"}', '{"dataset":null}',
+      '{"rounds":101}', '{"rounds":"5"}', '{"verification":"unknown"}',
+      '{"execution":"auto"}', '{"seed":-1}', '{"batch_size":4}',
+      '{"min_cosine":2}', '{"max_norm_squared":1.5}', '{"max_norm_ratio":1e999}',
+      '{"grid":9}', '{"proof_crs_hash":false}', '{"proof_suite":"legacy"}',
+      '{"name":"changed","typo_rounds":2}', '{"__proto__":{"polluted":true}}',
+      '{"dataset":"cifar10","train_limit":60000}',
+      '{"mode":"plain","backend":"torch","model_name":"paper_cnn_mnist"}']) {
+      assert.throws(() => view.applyImportedConfiguration(invalid), undefined, invalid)
+      assert.equal(JSON.stringify(view.form), before, invalid)
+    }
+  } finally { harness.close() }
+})
+
+test('file picker supports retries and reports read errors without changing configuration', async () => {
+  const harness = formHarness(registered())
+  try {
+    const view = harness.form
+    const select = file => {
+      const target = { files: [file], value: 'selected-file' }
+      return view.importConfigFile({ target }).then(() => assert.equal(target.value, ''))
+    }
+    const file = { name: '实验.JSON', size: 64, text: async () => '{"name":"从文件导入","rounds":9}' }
+    await select(file)
+    assert.equal(view.form.rounds, 9)
+    assert.equal(view.form.name, '从文件导入')
+    assert.match(view.configImportMessage.value, /实验.JSON/)
+    await select({ ...file, text: async () => 'invalid' })
+    assert.match(view.configImportError.value, /JSON 格式/)
+    assert.equal(view.configImportMessage.value, '')
+    assert.equal(view.form.rounds, 9)
+    await select(file)
+    assert.equal(view.configImportError.value, '')
+    await select({ ...file, size: 1024 * 1024 + 1, text: () => assert.fail('oversized files must not be read') })
+    assert.match(view.configImportError.value, /1 MB/)
+    await select({ ...file, name: 'config.txt' })
+    assert.match(view.configImportError.value, /\.json/)
+    await select({ ...file, text: async () => { throw new Error('file unavailable') } })
+    assert.ok(view.configImportError.value)
+    assert.equal(view.importingConfig.value, false)
+  } finally { harness.close() }
+})
+
+test('imports respect locked LAN topology and changed settings require fresh host approval', () => {
+  const status = { ...registered(), deployment: 'lan', local_machine: 'A' }
+  const harness = formHarness(status), previous = store.participation.value
+  try {
+    const view = harness.form, before = JSON.stringify(view.form), config = view.runConfiguration()
+    store.participation.value = { enabled: true, role: 'coordinator', local_machine: 'A', session: {
+      session_id: 'approved-settings', config, status: 'ready', ready: true,
+      machines: [{ machine: 'A', state: 'approved' }, { machine: 'B', state: 'approved' }],
+    } }
+    assert.throws(() => view.applyImportedConfiguration('{"client_count":8}'), /部署已锁定/)
+    assert.equal(JSON.stringify(view.form), before)
+    assert.equal(view.invitationMatches.value, true)
+    view.applyImportedConfiguration('{"rounds":8}')
+    assert.equal(view.invitationMatches.value, false)
+    assert.match(participation.consentError(store.participation.value, view.runConfiguration()), /当前实验配置/)
+    store.submitting.value = true
+    assert.throws(() => view.applyImportedConfiguration('{"rounds":9}'), /当前操作/)
+    assert.equal(view.form.rounds, 8)
+  } finally { store.submitting.value = false; store.participation.value = previous; harness.close() }
 })
 
 test('sigma choices and preview follow declared numeric identities regardless of online or attack membership', () => {
@@ -370,7 +487,7 @@ test('targeted attacks keep the selected class across configuration round trips 
     assert.equal(configuration.attack_target_class, 3)
     harness.form.reset()
     assert.equal(harness.form.form.attack_target_class, 0)
-    harness.form.applyPreset({ id: 'saved-config', apply: configuration })
+    harness.form.applyImportedConfiguration(JSON.stringify(configuration))
     assert.equal(harness.form.runConfiguration().attack_target_class, 3)
     harness.form.form.dataset = 'cifar10'
     await nextTick()
@@ -556,7 +673,7 @@ test('attack identity assignment survives text editing, export, reset and saved 
     harness.form.reset()
     assert.equal(harness.form.form.attack_client_ids, null)
     assert.equal(harness.form.attackClientIdsText.value, '')
-    harness.form.applyPreset({ id: 'saved-config', apply: exported })
+    harness.form.applyImportedConfiguration(JSON.stringify(exported))
     assert.deepEqual(Array.from(harness.form.runConfiguration().attack_client_ids), ['client3', 'client1'])
     harness.form.attackClientIdsText.value = '  '
     assert.equal(harness.form.runConfiguration().attack_client_ids, null)

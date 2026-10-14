@@ -1,5 +1,5 @@
 /** Thin client for the DGFlow control-plane JSON API. */
-import { deploymentPayload, deploymentPayloadError } from './deployment.js'
+import { connectionTestPayload, deploymentPayload, deploymentPayloadError } from './deployment.js'
 
 function deploymentRequest(action, configuration, signal) {
   const error = deploymentPayloadError(configuration)
@@ -43,13 +43,34 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  deploymentInstallations: signal => request('/deployment/installations', { signal }),
+  deploymentRuntime: signal => request('/deployment/runtime', { signal }),
+  importDeployment: (file, signal) => request('/deployment/import', {
+    method: 'POST', body: file, headers: { 'Content-Type': 'application/zip' }, signal }),
+  activateDeployment: (id, signal) => request(`/deployment/installations/${encodeURIComponent(id)}/activate`, {
+    method: 'POST', body: '{}', signal }),
+  operateLocalNodes: (action, signal) => {
+    if (!['start', 'stop'].includes(action)) throw new Error('不支持的节点操作。')
+    return request(`/deployment/local-nodes/${action}`, { method: 'POST', body: '{}', signal })
+  },
   prepareDeployment: (configuration, signal) => deploymentRequest('plans', configuration, signal),
+  testDeploymentConnection: (configuration, signal) => request('/deployment/test-connection', {
+    method: 'POST', body: JSON.stringify(connectionTestPayload(configuration)), signal }),
+  getParticipation: signal => request('/participation', { signal }),
+  inviteParticipation: (config, signal) => request('/participation/invite', { method: 'POST', body: JSON.stringify(config), signal }),
+  respondParticipation: (sessionId, decision, signal) => request('/participation/respond', {
+    method: 'POST', body: JSON.stringify({ session_id: sessionId, decision }), signal }),
+  cancelParticipation: signal => request('/participation/cancel', { method: 'POST', body: '{}', signal }),
   status: signal => request('/status', { signal }),
   tensorBoardStatus: signal => request('/tensorboard/status', { signal }),
   syncTensorBoard: (id, signal) => request(`/runs/${encodeURIComponent(id)}/tensorboard`, { method: 'POST', signal }),
   prepareData: (dataset = 'mnist', signal) => request('/data/prepare', { method: 'POST', body: JSON.stringify({ dataset }), signal }),
   prepareCompute: signal => request('/compute/prepare', { method: 'POST', body: '{}', signal }),
   initializeDeployment: (configuration, signal) => deploymentRequest('init', configuration, signal),
+  operateNodes: (action, nodes, signal) => {
+    if (!['start', 'stop'].includes(action)) throw new Error('不支持的节点操作。')
+    return request(`/deployment/nodes/${action}`, { method: 'POST', body: JSON.stringify({ nodes }), signal })
+  },
   startDeployment: (configuration, signal) => deploymentRequest('start', configuration, signal),  listRuns: signal => request('/runs', { signal }),
   getRun: (id, signal) => request(`/runs/${encodeURIComponent(id)}`, { signal }),
   getMonitor: (id, signal) => request(`/runs/${encodeURIComponent(id)}/monitor`, { signal }),

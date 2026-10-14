@@ -75,6 +75,9 @@ onBeforeUnmount(() => { clearInterval(ageTimer); document.removeEventListener('v
     <div v-if="store.runError.value || store.listError.value || store.operationError.value" class="nb-notice warning" role="alert">{{ store.runError.value || store.listError.value || store.operationError.value }}</div>
     <RecoveryPanel v-if="run && !live && store.recovery.value?.run_id === runId"
       :recovery="store.recovery.value" :busy="store.recovering.value"
+      :participation="store.participation?.value" :participation-error="store.participationError?.value || ''"
+      :inviting="store.participationBusy?.value || false"
+      @invite="store.inviteRecoveryRun()" @cancel="store.cancelParticipation()"
       :disabled="!store.connected.value || store.hasActiveRun.value" @resume="store.resumeRun()" />
     <div v-if="run?.error" class="nb-notice warning" role="alert"><LabIcon name="alert" :size="17" /><div><strong>任务执行说明</strong><p>{{ run.error }}</p></div></div>
     <div v-if="historyIssues" class="nb-notice warning" role="status"><LabIcon name="alert" :size="17" /><div><strong>部分监控历史可能不完整</strong><p>累计缺失事件 {{ snapshot?.summary?.events_missing ?? '未记录' }} 条，日志写入异常 {{ snapshot?.summary?.log_failures ?? '未记录' }} 次。{{ snapshot?.summary?.last_error || '' }}{{ !live && snapshot?.summary?.cleanup_complete === false ? ' 采集收尾未完成。' : '' }}</p></div></div>

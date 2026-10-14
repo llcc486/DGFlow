@@ -2,13 +2,15 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import LabIcon from '../components/LabIcon.vue'
 import RegistrationPanel from '../components/RegistrationPanel.vue'
+import ParticipationPanel from '../components/ParticipationPanel.vue'
+import DeploymentImportPanel from '../components/DeploymentImportPanel.vue'
 import StepCard from '../components/StepCard.vue'
 import TopologyGraph from '../components/TopologyGraph.vue'
 import { consoleStore as store } from '../lib/store'
-import { ATTACKS, MODES, attackName, modeName } from '../lib/format'
+import { ATTACKS, MODES, attackName, modeName, roleName } from '../lib/format'
 import { computeDeviceError, computeDeviceStatus } from '../lib/computeDevices'
 import { api, errorText } from '../lib/api'
-import { DEFAULT_TOPOLOGY, MACHINE_GROUPS, TOPOLOGY_FIELDS, deployedHosts, deployedTopology, deploymentConfigError, deploymentState, deploymentMachines, spreadMachines, lanHosts, lanHostsError, runCompatibilityError, topologyNodeNames, usedMachines, validClientCount } from '../lib/deployment.js'
+import { DEFAULT_TOPOLOGY, MACHINE_GROUPS, TOPOLOGY_FIELDS, connectionTestPayload, deployedHosts, deployedTopology, deploymentConfigError, deploymentState, deploymentMachines, spreadMachines, lanHosts, lanHostsError, runCompatibilityError, topologyNodeNames, usedMachines, validClientCount } from '../lib/deployment.js'
 import { nodesWithAuthorities, previewNodes } from '../lib/topology.js'
 import { trainingBackendError, trainingBackendStatus } from '../lib/trainingBackends.js'
 import { supportsCloudStrategy, withCloudStrategy } from '../lib/cloudStrategies.js'
@@ -16,6 +18,7 @@ import { DATASETS, datasetInfo, datasetReady, installedProofModels, modelConfigu
 import { trainingEligibility } from '../lib/trainingEligibility.js'
 import { batchConfigurationError, batchSizeOptions, fixedBatchPreview } from '../lib/batchGrouping.js'
 import { experimentMetadataError } from '../lib/experiments.js'
+import { consentError, sessionMatches } from '../lib/participation.js'
 
 const emit = defineEmits(['deployed'])
 
@@ -114,6 +117,8 @@ const hosts = ref({})
 const deploymentPlan = ref(null)
 const planning = ref(false)
 const planError = ref('')
+const connectionChecks = reactive({})
+const connectionControllers = new Map()
 const selectedMachineCount = ref(2)
 const machineCountInput = ref(2)
 const machineRows = computed(() => {
@@ -199,6 +204,19 @@ watch(() => JSON.stringify([hosts.value, machineCountInput.value, TOPOLOGY_FIELD
   deploymentPlan.value = null
   planError.value = ''
 }, { flush: 'sync' })
+watch(() => Object.fromEntries(usedMachines(hosts.value).map(machine => [machine, JSON.stringify([
+  TOPOLOGY_FIELDS.map(field => form[field]), machineCountInput.value,
+  store.status.value?.deployment, store.status.value?.deployment_id,
+  Object.entries(hosts.value).filter(([, entry]) => entry.machine === machine),
+])])), (current, previous) => {
+  for (const machine of Object.keys(connectionChecks)) {
+    if (current[machine] !== previous[machine]) {
+      connectionControllers.get(machine)?.abort()
+      connectionControllers.delete(machine)
+      delete connectionChecks[machine]
+    }
+  }
+}, { flush: 'sync' })
 function bundleUrl(machine) {
   if (!layoutLocked.value) return deploymentPlan.value
     ? `/api/deployment/plans/${deploymentPlan.value.plan_id}/bundle/${machine}` : null
@@ -233,6 +251,37 @@ async function prepareDeployment() {
     deploymentPlan.value = await api.prepareDeployment({ ...form, deployment: 'lan', hosts: hosts.value })
   } catch (error) { planError.value = errorText(error) }
   finally { planning.value = false }
+}
+function connectionTestReason(machine) {
+  if (!store.connected.value) return '请先连接后端服务。'
+  if (!machineRows.value.some(row => row.machine === machine)) return '请选择当前配置中的主机。'
+  if (machineCountError.value) return machineCountError.value
+  try { connectionTestPayload({ ...form, deployment: 'lan', hosts: hosts.value, machine }) }
+  catch (error) { return errorText(error) }
+  return ''
+}
+async function testConnection(machine) {
+  if (connectionTestReason(machine) || connectionChecks[machine]?.testing) return
+  connectionChecks[machine] = { testing: true, result: null, error: '' }
+  const state = connectionChecks[machine]
+  const controller = new AbortController()
+  connectionControllers.set(machine, controller)
+  const timeout = window.setTimeout(() => controller.abort(), 30000)
+  try {
+    const result = await api.testDeploymentConnection({ ...form, deployment: 'lan', hosts: hosts.value, machine }, controller.signal)
+    if (connectionControllers.get(machine) !== controller || controller.signal.aborted) return
+    if (result.machines?.length !== 1 || result.machines[0].machine !== machine) throw new Error('连接测试返回的主机不匹配，请重试。')
+    state.result = { ...result.machines[0], level: result.level }
+  } catch (error) {
+    if (connectionControllers.get(machine) === controller) state.error = error.name === 'AbortError'
+      ? `电脑 ${machine} 连接测试超时，请检查节点服务和防火墙后重试。` : errorText(error)
+  } finally {
+    clearTimeout(timeout)
+    if (connectionControllers.get(machine) === controller) {
+      state.testing = false
+      connectionControllers.delete(machine)
+    }
+  }
 }
 function chooseClientCount(count) {
   if (topologyLocked.value) return
@@ -306,20 +355,88 @@ onMounted(() => {
     if (store.connected.value) store.loadRegistration(store.status.value?.local_machine || null)
   })
 })
-onUnmounted(() => { clearInterval(parametersTimer); parametersController?.abort(); gpuController?.abort() })
+onUnmounted(() => {
+  clearInterval(parametersTimer); parametersController?.abort(); gpuController?.abort()
+  for (const controller of connectionControllers.values()) controller.abort()
+  connectionControllers.clear()
+})
 
-const presets = [
-  { id: 'smoke', name: '快速验证', apply: { rounds: 1, train_limit: 1200, test_limit: 400, local_epochs: 1, mode: 'dgflow' } },
-  { id: 'standard', name: '标准实验', apply: { rounds: 5, train_limit: 6000, test_limit: 1000, local_epochs: 1, mode: 'dgflow' } },
-  { id: 'full', name: '完整数据', apply: { rounds: 3, train_limit: 60000, test_limit: 10000, local_epochs: 2, mode: 'dgflow' } },
-  { id: 'lego', name: 'LegoGroth16 实验', apply: { rounds: 1, train_limit: 1200, test_limit: 400,
-    local_epochs: 1, mode: 'dgflow', execution: 'parallel', rpc_workers: 6,
-    proof_suite: 'lego_norm_v1', verification: 'deterministic', verification_workers: 2 } },
-]
-function applyPreset(preset) {
-  Object.assign(form, preset.apply, { proof_suite: 'lego_norm_v1' })
-  form.train_limit = Math.min(form.train_limit, selectedDataset.value.trainCount)
-  if (form.attack !== 'none') form.malicious_clients = Math.max(1, form.malicious_clients)
+const configFileInput = ref(null)
+const importingConfig = ref(false)
+const configImportError = ref('')
+const configImportMessage = ref('')
+const configImportLocked = computed(() => store.hasActiveRun.value || store.submitting.value
+  || store.deploying.value || store.preparing.value || store.participationBusy.value || planning.value || gpuPreparing.value)
+
+// Validate the entire candidate before touching reactive state: an invalid file
+// must not change the name, topology, model, or an already approved invitation.
+function applyImportedConfiguration(text) {
+  if (configImportLocked.value) throw new Error('当前操作完成后才能导入实验配置。')
+  let imported
+  try { imported = JSON.parse(text.replace(/^\uFEFF/, '')) }
+  catch { throw new Error('JSON 格式有误，请检查引号、逗号和括号。') }
+  if (!imported || typeof imported !== 'object' || Array.isArray(imported) || !Object.keys(imported).length) {
+    throw new Error('请选择包含实验参数的 JSON 对象，可使用本页导出的配置文件。')
+  }
+  const allowed = new Set(Object.keys(form))
+  const unknown = Object.keys(imported).filter(key => !allowed.has(key))
+  if (unknown.length) throw new Error(`不支持的配置字段：${unknown.join('、')}。请使用本页导出的实验配置。`)
+  if (imported.proof_crs_hash != null && (typeof imported.proof_crs_hash !== 'string' || !/^[0-9a-f]{64}$/i.test(imported.proof_crs_hash))) {
+    throw new Error('proof_crs_hash 必须为 64 位十六进制摘要或 null。')
+  }
+  const candidate = { ...form, ...imported }
+  const errors = configurationErrors(candidate, false)
+  if (errors.length) throw new Error(errors.join('\n'))
+  if (topologyLocked.value && TOPOLOGY_FIELDS.some(field => candidate[field] !== form[field])) {
+    throw new Error('当前部署已锁定，导入配置中的节点数量和门限必须与当前部署一致。')
+  }
+  if (proofParametersLoading.value) throw new Error('正在读取可用模型，请稍后重新导入。')
+  if (proofParametersError.value) throw new Error(proofParametersError.value)
+  const models = installedProofModels(candidate.dataset, proofParameters.value)
+  if (modelInfo(candidate.model_name) || !models.some(model => model.grid === candidate.grid)) {
+    throw new Error('导入模型不在当前可用模型列表中，请选择本机已安装匹配 CRS 的模型。')
+  }
+  const dimension = modelGeometry(candidate.dataset, candidate.grid).dimension
+  // CRS is local to the installed runtime; a file from another computer never
+  // overrides the automatic selection or introduces a new proof scheme.
+  const crs = proofParameters.value.filter(parameter => parameter?.dimension === dimension && parameter.bits === 8
+    && (parameter.suite == null || parameter.suite === 'lego_norm_v1')
+    && typeof parameter.crs_hash === 'string' && /^[0-9a-f]{64}$/i.test(parameter.crs_hash))
+    .sort((a, b) => a.crs_hash.localeCompare(b.crs_hash))[0]?.crs_hash
+  candidate.name = candidate.name?.trim() || ''
+  candidate.description = candidate.description?.trim() || ''
+  candidate.model_name = null
+  candidate.bits = null
+  candidate.scale = null
+  candidate.proof_crs_hash = candidate.mode === 'plain' ? null : crs
+  candidate.max_norm_squared = candidate.max_norm_squared === '' ? null : candidate.max_norm_squared
+  candidate.min_norm_ratio = candidate.min_norm_ratio === '' ? null : candidate.min_norm_ratio
+  if (TOPOLOGY_FIELDS.some(field => candidate[field] !== form[field])) topologyTouched.value = true
+  // Dataset reconciliation may select a default grid synchronously. Set the
+  // validated grid last so importing a non-default installed model is exact.
+  form.dataset = candidate.dataset
+  Object.assign(form, candidate)
+  configImportError.value = ''
+}
+
+async function importConfigFile(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = '' // Allow selecting the same file again after correcting it.
+  if (!file || importingConfig.value) return
+  configImportError.value = ''
+  configImportMessage.value = ''
+  importingConfig.value = true
+  try {
+    if (!/\.json$/i.test(file.name)) throw new Error('请选择 .json 格式的实验配置文件。')
+    if (file.size > 1024 * 1024) throw new Error('配置文件不能超过 1 MB。')
+    applyImportedConfiguration(await file.text())
+    configImportMessage.value = `已导入 ${file.name}，请检查配置后开始实验。`
+  } catch (error) {
+    configImportError.value = error instanceof Error ? error.message : '无法读取配置文件，请重新选择。'
+  } finally {
+    importingConfig.value = false
+  }
 }
 
 const attackClientIdsText = computed({
@@ -367,26 +484,33 @@ async function prepareGpu() {
   }
 }
 
-const formErrors = computed(() => {
+function configurationErrors(form, requiredName = true) {
   const errors = []
-  const metadataError = experimentMetadataError(form, { required: true })
+  const metadataError = experimentMetadataError(form, { required: requiredName })
   if (metadataError) errors.push(metadataError)
+  if (!DATASETS.some(dataset => dataset.id === form.dataset)) errors.push('请选择 MNIST 或 CIFAR-10 数据集。')
   if (!MODES.some(mode => mode.id === form.mode)) errors.push('请选择无密码保护基线或 DGFlow 完整协议。')
   const modelError = modelConfigurationError(form)
   if (modelError) errors.push(modelError)
-  if (proofParametersLoading.value) errors.push('正在检查可用模型。')
-  else if (proofParametersError.value) errors.push(proofParametersError.value)
-  else if (!availableModels.value.length) errors.push('当前数据集没有可用模型，请准备匹配的模型参数后重试。')
-  else if (!selectedModel.value) errors.push('请选择可用的模型类型。')
-  if (backendError.value) errors.push(backendError.value)
-  if (deviceError.value) errors.push(deviceError.value)
+  for (const [field, values, label] of [
+    ['execution', ['serial', 'parallel'], '执行方式'],
+    ['backend', ['numpy', 'torch'], '训练后端'],
+    ['compute_device', ['cpu', 'gpu'], '密码计算设备'],
+    ['cloud_strategy', ['auto', 'threshold', 'all'], '云聚合方式'],
+    ['verification', ['deterministic', 'randomized'], '验证方式'],
+  ]) {
+    if (!values.includes(form[field])) errors.push(`${label}（${field}）取值无效。`)
+  }
+  if (typeof form.non_iid !== 'boolean') errors.push('数据划分 non_iid 必须为 true 或 false。')
+  if (form.mode === 'plain' && form.compute_device === 'gpu') errors.push('GPU 密码计算仅用于加密实验，请改用 CPU 或 DGFlow 模式。')
   const checkInteger = (value, low, high, label) => {
     if (!Number.isInteger(value) || value < low || value > high) errors.push(`${label}需为 ${low}–${high} 的整数。`)
   }
   checkInteger(form.rounds, 1, 100, '全局训练轮数')
   const topologyError = deploymentConfigError(form)
   if (topologyError) errors.push(topologyError)
-  if (groupingError.value) errors.push(groupingError.value)
+  const batchError = batchConfigurationError(form)
+  if (batchError) errors.push(batchError)
   checkInteger(form.seed, 0, 2147483647, '随机种子')
   checkInteger(form.malicious_clients, 0, form.client_count, '异常客户端数量')
   if (!ATTACKS.some(attack => attack.value === form.attack)) errors.push('请选择支持的异常类型。')
@@ -403,7 +527,7 @@ const formErrors = computed(() => {
     }
   }
   checkInteger(form.offline_aggregators, 0, form.aggregator_count, '本轮排除云服务器数量')
-  checkInteger(form.train_limit, 120, selectedDataset.value?.trainCount ?? 60000, '训练样本上限')
+  checkInteger(form.train_limit, 120, datasetInfo(form.dataset)?.trainCount ?? 60000, '训练样本上限')
   checkInteger(form.test_limit, 100, 10000, '测试样本上限')
   checkInteger(form.local_epochs, 1, 20, '本地训练轮数')
   checkInteger(form.rpc_workers, 1, 24, '并行请求数')
@@ -414,6 +538,19 @@ const formErrors = computed(() => {
   if (form.min_norm_ratio !== null && form.min_norm_ratio !== '' && (!Number.isFinite(form.min_norm_ratio) || form.min_norm_ratio <= 0 || form.min_norm_ratio > 1)) errors.push('最小范数倍率需大于 0 且不超过 1，或留空关闭。')
   if (form.max_norm_squared !== null && form.max_norm_squared !== '' && (!Number.isSafeInteger(form.max_norm_squared) || form.max_norm_squared < 1)) errors.push('平方范数上限需为正整数或留空。')
   if (form.proof_suite !== 'lego_norm_v1') errors.push('当前仅支持 LegoGroth16 证明方案，请重置实验配置。')
+  if (form.attack !== 'none' && form.malicious_clients === 0) errors.push('所选异常场景需要至少一个异常客户端。')
+  if (form.attack === 'none' && form.malicious_clients !== 0) errors.push('无异常场景的异常客户端数量必须为 0。')
+  return errors
+}
+
+const formErrors = computed(() => {
+  const errors = configurationErrors(groupingConfiguration.value)
+  if (proofParametersLoading.value) errors.push('正在检查可用模型。')
+  else if (proofParametersError.value) errors.push(proofParametersError.value)
+  else if (!availableModels.value.length) errors.push('当前数据集没有可用模型，请准备匹配的模型参数后重试。')
+  else if (!selectedModel.value) errors.push('请选择可用的模型类型。')
+  if (backendError.value) errors.push(backendError.value)
+  if (deviceError.value) errors.push(deviceError.value)
   if (form.mode !== 'plain' && !isCnn.value) {
     if (!proofParametersLoading.value && !proofParametersError.value) {
       if (!proofParametersAvailable.value) errors.push('后端缺少 Lego 原生扩展，请安装后重启服务。')
@@ -424,15 +561,15 @@ const formErrors = computed(() => {
     )
     if (unsupported.length) errors.push(`以下节点需要安装 Lego 扩展并重启：${unsupported.map(node => node.id).join('、')}。`)
   }
-  if (form.attack !== 'none' && form.malicious_clients === 0) errors.push('所选异常场景需要至少一个异常客户端。')
   return errors
 })
 
-const blockedReason = computed(() => {
+const invitationBlockedReason = computed(() => {
   if (!store.connected.value) return '请先启动后端服务。'
   if (compatibilityError.value) return compatibilityError.value
   if (store.deploying.value) return '正在应用节点部署。'
   if (store.hasActiveRun.value) return '当前任务结束后可创建下一场实验。'
+  if (store.status.value?.deployment === 'lan' && store.status.value?.local_machine !== 'A') return '本机通过上方通知确认参与，请由主控 A 发起训练。'
   if (deploymentMode.value === 'multi_machine' && !layoutLocked.value) return '生成配置包并在各电脑部署后，在 A 的控制页创建实验。'
   if (deployment.value.error) return `部署配置异常：${deployment.value.error}`
   if (backendError.value) return backendError.value
@@ -445,8 +582,21 @@ const blockedReason = computed(() => {
   if (formErrors.value.length) return formErrors.value[0]
   return ''
 })
+const invitationMatches = computed(() => sessionMatches(store.participation.value?.session, runConfiguration()))
+const blockedReason = computed(() => invitationBlockedReason.value
+  || (deploymentMode.value === 'multi_machine' ? consentError(store.participation.value, runConfiguration(), store.participationError.value) : ''))
+async function inviteTraining() {
+  if (invitationBlockedReason.value || store.participationBusy.value) return
+  await store.inviteParticipation(runConfiguration())
+}
 
 const onlineCount = computed(() => store.connected.value ? store.nodes.value.filter(n => n.status === 'online').length : null)
+const nodeLifecycleReason = computed(() => store.nodeOperationReason.value
+  || (planning.value || gpuPreparing.value ? '当前准备操作结束后可管理节点。' : ''))
+function manageNodes(action, node = null) {
+  if (nodeLifecycleReason.value) return
+  return store.operateNodes(action, node ? [node] : null)
+}
 
 function runConfiguration() {
   const { proof_crs_hash, model_name, bits, scale, ...configuration } = form
@@ -472,6 +622,8 @@ async function launch() {
 }
 
 function reset() {
+  configImportError.value = ''
+  configImportMessage.value = ''
   Object.assign(form, {
     ...(deployment.value.locked ? Object.fromEntries(TOPOLOGY_FIELDS.map(field => [field, form[field]])) : deployment.value.actualTopology ?? DEFAULT_TOPOLOGY),
     name: '', description: '',
@@ -885,6 +1037,7 @@ function exportConfig() {
           </div>
 
           <div v-if="deploymentMode === 'multi_machine'" class="nb-multi-machine" data-testid="multi-machine-hosts">
+            <DeploymentImportPanel />
             <div class="nb-multi-machine-head">
               <label class="nb-field" for="deployment-machine-count">
                 <span>{{ layoutLocked ? '已部署电脑' : '1 · 配置电脑' }}</span>
@@ -899,14 +1052,32 @@ function exportConfig() {
               <span class="nb-note">A 负责主控 · 节点自动均分</span>
             </div>
             <div class="nb-machine-cards">
-              <label v-for="row in machineRows" :key="row.machine" class="nb-machine-card nb-field">
-                <span><strong>电脑 {{ row.machine }}</strong><small>{{ row.machine === 'A' ? '主控 + 节点' : '节点' }}<template v-if="layoutLocked"> · {{ row.online }}/{{ row.nodes.length }} 在线</template></small></span>
-                <input :value="row.host" type="text" :disabled="topologyLocked" :aria-label="`电脑 ${row.machine} 的 IP 地址`"
+              <div v-for="row in machineRows" :key="row.machine" class="nb-machine-card nb-field" :data-machine="row.machine">
+                <div class="nb-machine-card-head"><label :for="`machine-host-${row.machine}`"><strong>电脑 {{ row.machine }}</strong></label><small>{{ row.machine === 'A' ? '主控 + 节点' : '节点' }}<template v-if="layoutLocked"> · {{ row.online }}/{{ row.nodes.length }} 在线</template></small></div>
+                <div class="nb-machine-address">
+                  <input :id="`machine-host-${row.machine}`" :value="row.host" type="text" :disabled="topologyLocked" :aria-label="`电脑 ${row.machine} 的 IP 地址`"
                        :placeholder="row.multipleAddresses ? '多个地址，展开高级分配查看' : '局域网 IP，例如 192.168.1.10'"
                        @input="setMachineHost(row.machine, $event.target.value)" />
+                  <button type="button" class="nb-btn outline small" :aria-label="`测试电脑 ${row.machine} 的连接`"
+                          :disabled="Boolean(connectionTestReason(row.machine)) || connectionChecks[row.machine]?.testing"
+                          :title="connectionTestReason(row.machine) || `仅测试电脑 ${row.machine} 的节点端口与通信`" @click="testConnection(row.machine)">
+                    <span v-if="connectionChecks[row.machine]?.testing" class="nb-spinner"></span><LabIcon v-else name="signal" :size="14" />{{ connectionChecks[row.machine]?.testing ? '测试中…' : '测试连接' }}
+                  </button>
+                </div>
                 <small>客户端 {{ row.clients }} · 边缘 {{ row.authorities }} · 云 {{ row.aggregators }}</small>
-              </label>
+                <p v-if="connectionChecks[row.machine]?.error" class="nb-note text-warn" role="alert">{{ connectionChecks[row.machine].error }}</p>
+                <div v-if="connectionChecks[row.machine]?.result" class="nb-connection-results" :data-testid="`connection-result-${row.machine}`" role="status">
+                  <strong :class="connectionChecks[row.machine].result.ready ? 'text-ok' : 'text-warn'">{{ connectionChecks[row.machine].result.ready ? (connectionChecks[row.machine].result.authenticated ? '身份验证通过，通信正常' : '节点端口可达') : '无法连接或验证未通过' }}</strong>
+                  <p class="nb-note">{{ connectionChecks[row.machine].result.reason }}</p>
+                  <p v-if="connectionChecks[row.machine].result.level === 'tcp'" class="nb-note">端口测试仅检查网络连通；安装配置包并启动节点后，还需核验身份。</p>
+                  <details>
+                    <summary>查看节点检查详情</summary>
+                    <p v-for="node in connectionChecks[row.machine].result.nodes || []" :key="node.node">{{ node.node }} · {{ node.port }}：{{ node.reason || (node.authenticated ? '身份已验证' : node.reachable ? '端口可达' : '无法连接') }}</p>
+                  </details>
+                </div>
+              </div>
             </div>
+            <p class="nb-note">填写各主机 IP 后，可分别测试其节点端口；安装配置包并启动节点后，可验证身份和实际通信。</p>
             <details class="nb-machine-details">
               <summary>高级分配 · {{ hostNames.length }} 个节点</summary>
               <div class="nb-host-scroll"><table class="nb-host-table">
@@ -932,8 +1103,9 @@ function exportConfig() {
             <p v-if="deploymentPlan && !deploymentPlan.proof_parameters.length" class="nb-note text-warn">当前没有可分发的 CRS；这些配置包暂只能运行明文实验。安装所需参数后重新生成。</p>
             <details class="nb-machine-details" :open="planReady && !layoutLocked">
               <summary>3 · 各机启动与连接检查</summary>
-              <p class="nb-note">各电脑使用同一版本源码并安装依赖、准备数据。将各自配置包放入独立运行目录，按包内 README 启动本机节点；仅 A 启动控制页。</p>
+              <p class="nb-note">各电脑准备好同版本环境并打开本地网页。在上方“导入本机配置包 ZIP”选择各自的包，确认电脑编号和 IP 后点击启用；页面会自动启动本机节点并打开多机控制页。</p>
               <p class="nb-note">配置包包含本机身份和共用 CRS。源码、环境和数据另行准备；防火墙需允许节点端口双向通信。启动后在 A 检查各机在线数量。</p>
+              <p class="nb-note">启用成功后，B/C 留在自动打开的多机页面接收邀请。全部同意后，由 A 开始共同训练；可从多机页面返回原部署查看历史记录。</p>
             </details>
             <!-- Registration state for the machine this page runs on. The page
                  reports what this runtime can see rather than assuming another
@@ -942,10 +1114,11 @@ function exportConfig() {
               v-if="layoutLocked && store.registration.value"
               :registration="store.registration.value"
               :busy="store.registrationLoading.value"
+              :web-controls="store.status.value?.capabilities?.web_deployment && store.registration.value.identity_scheme !== 'registered'"
               @refresh="store.loadRegistration()"
               @download="downloadLocalBundle()"
             />
-            <button v-if="layoutLocked" type="button" class="nb-btn primary small nb-generate-plan" :disabled="Boolean(deployment.reason || hostsError)" @click="applyDeployment(true)">
+            <button v-if="layoutLocked && !store.status.value?.capabilities?.web_deployment" type="button" class="nb-btn primary small nb-generate-plan" :disabled="Boolean(deployment.reason || hostsError)" @click="applyDeployment(true)">
               {{ store.deploying.value ? '正在启动…' : `启动本机 ${store.status.value?.local_machine || 'A'} 节点` }}
             </button>
           </div>
@@ -953,9 +1126,44 @@ function exportConfig() {
           <div v-if="deployment.error" class="nb-notice danger" role="alert"><LabIcon name="alert" :size="16" /><div>部署配置异常：{{ deployment.error }}。请检查配置后重新应用部署。</div></div>
           <p v-if="deploymentMode === 'single_machine' || layoutLocked" class="nb-note" :class="{ 'text-warn': deployment.reason || deployment.changed }">{{ deployment.reason || (deployment.changed ? '当前展示待应用规划。应用部署后，真实节点、单归属关系与门限才会更新。' : deployment.ready ? '所选三层拓扑与真实部署一致，全部节点在线。' : deployment.configured ? '拓扑已登记，当前存在离线节点；训练按下方在线门槛判断。' : '初始化身份或直接应用并启动，然后等待实际节点就绪。') }}</p>
           <div v-if="deploymentMode === 'single_machine'" class="nb-deployment-actions"><button type="button" class="nb-btn outline small" :disabled="Boolean(deployment.reason)" @click="applyDeployment(false)">初始化身份</button><button type="button" class="nb-btn primary small" :disabled="Boolean(deployment.reason)" @click="applyDeployment(true)"><span v-if="store.deploying.value" class="nb-spinner"></span><LabIcon v-else name="play" :size="13" />{{ store.deploying.value ? '正在部署…' : '应用并启动三层拓扑' }}</button></div>
+          <div v-if="deploymentMode === 'single_machine' && store.status.value?.deployment === 'single_host' && store.nodes.value.length" class="nb-node-lifecycle">
+            <div class="nb-node-lifecycle-head">
+              <strong>节点资源管理 <small>{{ onlineCount ?? '—' }} / {{ store.nodes.value.length }} 在线</small></strong>
+              <button type="button" class="nb-btn outline small" :disabled="Boolean(nodeLifecycleReason)" @click="manageNodes('stop')">
+                <LabIcon name="stop" :size="13" />释放全部节点
+              </button>
+            </div>
+            <p class="nb-note">释放会停止节点进程并归还其占用的资源，保留身份、数据和实验记录；可单独启动节点，或通过上方按钮启动全部节点。</p>
+            <p v-if="store.nodeOperation.value" class="nb-note" role="status"><span class="nb-spinner"></span>正在{{ store.nodeOperation.value.action === 'stop' ? '释放' : '启动' }} {{ store.nodeOperation.value.nodes.length }} 个节点…</p>
+            <p v-else-if="nodeLifecycleReason" class="nb-note text-warn">{{ nodeLifecycleReason }}</p>
+            <details class="nb-node-process-list">
+              <summary>各节点状态与操作 · {{ store.nodes.value.length }} 个节点</summary>
+              <div class="nb-node-process-scroll">
+                <div v-for="node in store.nodes.value" :key="node.id" class="nb-node-process-row" :data-node-id="node.id">
+                  <div class="nb-node-process-name"><strong>{{ node.id }}</strong><small>{{ roleName(node.role) }}</small></div>
+                  <span class="nb-node-process-state" :class="store.connected.value && node.status === 'online' ? 'text-ok' : 'text-warn'">{{ !store.connected.value ? '未连接' : node.status === 'online' ? '在线' : '离线' }}</span>
+                  <div class="nb-node-process-actions">
+                    <button type="button" class="nb-btn outline small" :aria-label="`启动节点 ${node.id}`" :disabled="Boolean(nodeLifecycleReason) || node.status === 'online'" @click="manageNodes('start', node.id)">启动</button>
+                    <button type="button" class="nb-btn outline small" :aria-label="`释放节点 ${node.id}`" :disabled="Boolean(nodeLifecycleReason)" @click="manageNodes('stop', node.id)">释放</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
         </StepCard>
         <details class="nb-ownership"><summary>客户端的边缘归属 <span>每个客户端仅连接所属边缘</span></summary><div v-for="group in ownershipGroups" :key="group.id"><strong>{{ group.id }}</strong><span>{{ group.clients.length ? group.clients.join('、') : '暂无归属客户端' }}</span></div><p>边缘服务器协作建钥，并与全部云服务器协作。连线表示协议关系，非实时流量。<template v-if="showPreview">规划采用项目默认的轮流分配策略；论文仅要求客户端单归属边缘。</template></p></details>
 
+      <div v-if="deploymentMode === 'multi_machine' && layoutLocked && store.status.value?.local_machine === 'A'" class="nb-training-consent">
+        <ParticipationPanel :participation="store.participation.value" coordinator
+          :busy="store.participationBusy.value" :error="store.participationError.value"
+          @cancel="store.cancelParticipation()" />
+        <p v-if="store.participationError.value && !store.participation.value?.session" class="nb-note text-warn" role="alert">{{ store.participationError.value }}</p>
+        <p v-if="store.participation.value?.session && !invitationMatches" class="nb-note text-warn">当前配置与已发送邀请不同，请重新邀请全部主机确认。</p>
+        <button type="button" class="nb-btn outline small nb-invite-training" :disabled="Boolean(invitationBlockedReason) || store.participationBusy.value" @click="inviteTraining">
+          <span v-if="store.participationBusy.value" class="nb-spinner"></span><LabIcon v-else name="nodes" :size="14" />{{ store.participationBusy.value ? '正在发送…' : store.participation.value?.session ? '重新发送训练邀请' : '发送训练邀请' }}
+        </button>
+        <p class="nb-note">邀请包含当前实验配置，全部主机同意后才能开始；更改配置需要重新确认。</p>
+      </div>
       <div class="nb-card nb-launch-checks">
         <div class="nb-card-head"><h2>启动前检查</h2></div>
         <div class="nb-card-body">
@@ -998,21 +1206,24 @@ function exportConfig() {
       </div>
 
         <div class="nb-stage-toolbar">
+          <p v-if="configImportError" class="config-import-feedback text-danger" role="alert">{{ configImportError }}</p>
+          <p v-else-if="configImportMessage" class="config-import-feedback" role="status">{{ configImportMessage }}</p>
           <button type="button" class="nb-btn ghost small" @click="reset">
             <LabIcon name="refresh" :size="14" />重置
           </button>
           <span class="nb-spacer"></span>
-          <button
-            v-for="preset in presets" :key="preset.id" type="button"
-            class="nb-btn outline small" @click="applyPreset(preset)"
-          >{{ preset.name }}</button>
-          <button type="button" class="nb-icon-btn" title="导出配置 JSON" @click="exportConfig">
+          <input ref="configFileInput" type="file" accept=".json,application/json" hidden aria-label="选择实验配置 JSON 文件" :disabled="configImportLocked || importingConfig" @change="importConfigFile" />
+          <button type="button" class="nb-btn outline small" :disabled="configImportLocked || importingConfig" title="导入本页导出的配置；未提供的参数保留当前值" @click="configFileInput?.click()">
+            <span v-if="importingConfig" class="nb-spinner"></span>
+            <LabIcon v-else name="file" :size="16" />{{ importingConfig ? '正在导入…' : '导入 JSON' }}
+          </button>
+          <button type="button" class="nb-icon-btn" title="导出配置 JSON" aria-label="导出配置 JSON" @click="exportConfig">
             <LabIcon name="download" :size="16" />
           </button>
           <button type="button" class="nb-btn primary" :disabled="Boolean(blockedReason) || store.submitting.value" @click="launch">
             <span v-if="store.submitting.value" class="nb-spinner"></span>
             <LabIcon v-else name="play" :size="16" />
-            {{ store.submitting.value ? '正在创建…' : '运行 DGFlow' }}
+            {{ store.submitting.value ? '正在创建…' : deploymentMode === 'multi_machine' ? '开始共同训练' : '运行 DGFlow' }}
           </button>
         </div>
       </div>
@@ -1023,6 +1234,16 @@ function exportConfig() {
 </template>
 
 <style scoped>
+.nb-node-lifecycle { margin-top: 18px; padding-top: 18px; border-top: 1px solid #dfe5ee; }
+.nb-node-lifecycle-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.nb-node-lifecycle-head strong { font-size: 13px; }.nb-node-lifecycle-head small { margin-left: 8px; color: #8290a6; font-size: 11px; font-weight: 400; }
+.nb-node-process-list { margin-top: 12px; font-size: 12px; }.nb-node-process-list summary { cursor: pointer; color: #426997; }
+.nb-node-process-scroll { margin-top: 10px; max-height: 340px; overflow-y: auto; }
+.nb-node-process-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #e6ecf3; }
+.nb-node-process-name { flex: 1; min-width: 0; display: grid; gap: 3px; }.nb-node-process-name strong { overflow-wrap: anywhere; font-weight: 500; }.nb-node-process-name small { color: #8290a6; }
+.nb-node-process-state { font-size: 11px; white-space: nowrap; }.nb-node-process-actions { display: flex; gap: 6px; }.nb-node-process-actions .nb-btn { padding: 6px 9px; font-size: 11px; }
+.config-import-feedback { flex: 1 0 100%; margin: 0; font-size: 12px; line-height: 1.6; color: #426997; white-space: pre-line; overflow-wrap: anywhere; max-height: 120px; overflow-y: auto; }
+.config-import-feedback.text-danger { color: #b83c4b; }
 .model-choice { grid-column:1 / -1; }
 .experiment-identity { display:grid; gap:15px; margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid #dfe5ee; }
 .identity-required { margin-left:auto; font-size:10px; color:#778aa4; font-weight:400; }
@@ -1077,11 +1298,13 @@ function exportConfig() {
 .nb-mode-arrow:focus-visible { outline: 2px solid #426997; outline-offset: 3px; }
 .nb-mode-arrow:disabled { opacity: .35; cursor: default; }
 .nb-multi-machine { margin-top: 12px; padding: 14px; border: 1px solid #e2e8f1; border-radius: 8px; background: #fbfcfe; }
-.nb-machine-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.nb-connection-results { padding-top: 10px; border-top: 1px solid #e0e7ef; min-width: 0; overflow-wrap: anywhere; }.nb-connection-results > strong { font-size: 12px; }.nb-connection-results details { font-size: 11px; color: var(--nb-muted); }.nb-connection-results summary { cursor: pointer; }.nb-connection-results details p { margin: 6px 0; }.nb-training-consent { flex-shrink: 0; }.nb-training-consent :deep(.nb-participation) { margin-top: 0; }.nb-invite-training { width: 100%; }
+.nb-machine-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 10px; align-items: start; }
 .nb-machine-card { padding: 12px; border: 1px solid #e2e8f1; border-radius: 8px; background: #fff; min-width: 0; }
-.nb-machine-card > span { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.nb-machine-card-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .nb-machine-card small { color: #74859b; font-size: 11px; }
 .nb-machine-card input { min-width: 0; width: 100%; box-sizing: border-box; }
+.nb-machine-address { display: flex; align-items: stretch; gap: 8px; min-width: 0; }.nb-machine-address input { flex: 1; width: 0; }.nb-machine-address .nb-btn { flex: none; padding: 8px 10px; white-space: nowrap; }
 .nb-machine-details { margin-top: 14px; font-size: 12px; color: #596f8c; }
 .nb-machine-details summary { cursor: pointer; }
 .nb-host-scroll { max-height: 260px; overflow: auto; margin-top: 10px; }
@@ -1113,6 +1336,7 @@ function exportConfig() {
   .nb-deployment-layout > .nb-deploy-stage { display: contents; }
   .nb-deployment-layout > .nb-steps { order: 1; }
   .nb-deployment-layout .nb-launch-checks { order: 2; }
+  .nb-deployment-layout .nb-training-consent { order: 2; }
   .nb-deployment-layout .nb-stage-toolbar { order: 3; }
 }
 @media (max-width: 600px) {

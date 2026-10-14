@@ -808,6 +808,9 @@ table.nb-table tbody tr:hover td { background: #fafbfd; }
 
 @media (max-width: 600px) {
   .nb-container { padding: 0 14px; }
+  .nb-hero-mark { gap: 14px; }
+  .nb-hero-mark svg { width: 56px; height: 56px; flex-shrink: 0; }
+  .nb-hero-wordmark { font-size: clamp(28px, 9vw, 48px); letter-spacing: 4px; }
   .nb-page { padding-top: 25px; }
   .nb-card-head { flex-wrap: wrap; padding: 16px; }
   .nb-card-body, .nb-card-body.tight { padding: 16px; }

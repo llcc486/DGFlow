@@ -8,6 +8,7 @@ import { trainingBackendError, trainingBackendStatus } from './trainingBackends.
 import { datasetName, datasetReady as isDatasetReady, modelConfigurationError, withPreparedDataset } from './datasets.js'
 import { trainingEligibility } from './trainingEligibility.js'
 import { experimentMetadataError } from './experiments.js'
+import { participantLocked, consentError } from './participation.js'
 
 const status = ref(null)
 const connected = ref(false)
@@ -27,6 +28,7 @@ const preparing = ref(false)
 const selectedDataset = ref('mnist')
 const submitting = ref(false)
 const deploying = ref(false)
+const nodeOperation = ref(null)
 const stopping = ref(false)
 const stopRequestedId = ref('')
 const recovery = ref(null)
@@ -34,6 +36,11 @@ const recovering = ref(false)
 const registration = ref(null)
 const registrationMachine = ref(null)
 const registrationLoading = ref(false)
+const participation = ref(null)
+const participationError = ref('')
+const participationBusy = ref(false)
+let participationRequest = 0
+let participationController = null
 /** One idempotency key per selected run: repeating the request reuses the execution. */
 const resumeKeys = new Map()
 
@@ -52,11 +59,68 @@ let pollCount = 0
 let listLoaded = false
 
 const hasActiveRun = computed(() =>
-  Boolean(status.value?.active_run_id) || isActiveRun(currentRun.value) || runs.value.some(isActiveRun),
+  participantLocked(participation.value) || Boolean(status.value?.active_run_id) || isActiveRun(currentRun.value) || runs.value.some(isActiveRun),
 )
 
 const datasetReady = computed(() => isDatasetReady(status.value, selectedDataset.value))
 const nodes = computed(() => status.value?.nodes || [])
+const nodeOperationReason = computed(() => {
+  if (!connected.value) return '请先连接后端服务。'
+  if (status.value?.deployment !== 'single_host') return '节点释放仅用于当前单机部署。'
+  if (status.value?.capabilities?.node_lifecycle !== true) return '请重启控制服务以启用节点启动与释放。'
+  if (hasActiveRun.value) return '实验运行中，请先停止实验并等待结束，再释放节点。'
+  if (deploying.value || submitting.value || preparing.value || stopping.value || participationBusy.value) return '当前操作尚未完成，请稍后再试。'
+  if (status.value?.data_preparation?.state === 'preparing') return '正在准备数据，请稍后再试。'
+  if (status.value?.capabilities?.compute?.preparation?.state === 'initializing') return 'GPU 正在初始化，请稍后再试。'
+  return ''
+})
+
+async function loadParticipation(signal) {
+  if (status.value?.capabilities?.participation !== true) {
+    participation.value = null
+    participationError.value = ''
+    return
+  }
+  const request = ++participationRequest
+  try {
+    const reading = await api.getParticipation(signal)
+    if (request === participationRequest && !signal?.aborted) {
+      participation.value = reading
+      participationError.value = ''
+    }
+  } catch (error) {
+    if (request !== participationRequest || signal?.aborted) return
+    participationError.value = errorText(error)
+  }
+}
+
+async function participationAction(action) {
+  if (participationBusy.value || !connected.value) return false
+  participationBusy.value = true
+  participationError.value = ''
+  participationRequest += 1
+  const controller = new AbortController()
+  participationController = controller
+  const timeout = window.setTimeout(() => controller.abort(), 30000)
+  try {
+    await action(controller.signal)
+    await loadParticipation(controller.signal)
+    return !controller.signal.aborted && !participationError.value
+  } catch (error) {
+    if (!stopped) participationError.value = error.name === 'AbortError' ? '参与请求超时，请刷新确认状态后重试。' : errorText(error)
+    return false
+  } finally {
+    clearTimeout(timeout)
+    participationBusy.value = false
+  }
+}
+const inviteParticipation = config => participationAction(signal => api.inviteParticipation(config, signal))
+const respondParticipation = decision => {
+  const id = participation.value?.session?.session_id
+  if (!id) return Promise.resolve(false)
+  return participationAction(signal => api.respondParticipation(id, decision, signal))
+}
+const cancelParticipation = () => participationAction(signal => api.cancelParticipation(signal))
 
 function defaultRunId(activeRunId) {
   if (activeRunId) return activeRunId
@@ -122,6 +186,12 @@ async function resumeRun() {
   if (!run || run.run_id !== selectedRunId.value || recovering.value || submitting.value
     || deploying.value || preparing.value || hasActiveRun.value || !connected.value
     || recovery.value?.run_id !== run.run_id || !recovery.value?.resumable) return
+  if (recovery.value.participation_required) {
+    const reason = !recovery.value.participation_config
+      ? recovery.value.participation_reason || '无法读取恢复训练配置，请刷新后重试。'
+      : consentError(participation.value, recovery.value.participation_config, participationError.value)
+    if (reason) { operationError.value = reason; return }
+  }
   recovering.value = true
   operationError.value = ''
   notification.value = ''
@@ -150,6 +220,15 @@ async function resumeRun() {
   }
 }
 
+async function inviteRecoveryRun() {
+  const reading = recovery.value
+  if (!connected.value || hasActiveRun.value || recovering.value || submitting.value || deploying.value
+    || preparing.value || participationBusy.value || !reading?.resumable
+    || reading.run_id !== selectedRunId.value || currentRun.value?.run_id !== reading.run_id
+    || !reading.participation_required || !reading.participation_config) return false
+  return inviteParticipation(reading.participation_config)
+}
+
 async function refreshRuns(signal) {
   try {
     const data = await api.listRuns(signal)
@@ -172,6 +251,7 @@ async function poll() {
     status.value = data
     connected.value = true
     connectionError.value = ''
+    await loadParticipation(signal)
     if (!listLoaded || pollCount % 5 === 0) await refreshRuns(signal)
     if (!selectedRunId.value) selectedRunId.value = defaultRunId(data.active_run_id)
     if (selectedRunId.value) {
@@ -228,6 +308,8 @@ function stop() {
   pollController?.abort()
   actionController?.abort()
   registrationController?.abort()
+  participationController?.abort()
+  participationRequest += 1
   recoveryRequest += 1
 }
 
@@ -324,8 +406,62 @@ async function deployNodes(configuration, startNodes = true) {
   }
 }
 
+async function operateNodes(action, selectedNodes = null) {
+  if (nodeOperationReason.value) { operationError.value = nodeOperationReason.value; return false }
+  if (!['start', 'stop'].includes(action)) { operationError.value = '不支持的节点操作。'; return false }
+  const selected = selectedNodes ?? nodes.value.map(node => node.id)
+  if (!Array.isArray(selected) || !selected.length || new Set(selected).size !== selected.length
+    || selected.some(id => !nodes.value.some(node => node.id === id))) {
+    operationError.value = '请选择当前部署中的有效节点。'; return false
+  }
+  deploying.value = true
+  nodeOperation.value = { action, nodes: [...selected] }
+  clearMessages()
+  const controller = new AbortController()
+  actionController = controller
+  const timeout = window.setTimeout(() => controller.abort(), 120000)
+  let result = null
+  try {
+    result = await api.operateNodes(action, selectedNodes, controller.signal)
+  } catch (error) {
+    operationError.value = error.name === 'AbortError'
+      ? '节点操作超时，正在重新确认实际状态。'
+      : `节点操作失败：${errorText(error)}`
+  } finally {
+    clearTimeout(timeout)
+    // A partial failure may have stopped some processes. Always read reality;
+    // never mark a role offline based only on the user's requested selection.
+    const refreshController = new AbortController()
+    const refreshTimeout = window.setTimeout(() => refreshController.abort(), 10000)
+    try { await refreshStatus(refreshController.signal) }
+    catch {
+      connected.value = false
+      connectionError.value = '节点状态暂未确认，正在自动重试。'
+      operationError.value ||= '操作已返回，但节点状态暂未确认，请等待重新连接。'
+    } finally {
+      clearTimeout(refreshTimeout)
+      nodeOperation.value = null
+      deploying.value = false
+    }
+  }
+  if (!result || operationError.value) return false
+  if (action === 'stop') {
+    const stillOnline = nodes.value.filter(node => selected.includes(node.id) && node.status === 'online')
+    if (stillOnline.length) {
+      operationError.value = `以下节点仍在线，资源释放未确认：${stillOnline.map(node => node.id).join('、')}。`
+      return false
+    }
+    notification.value = `已释放 ${result.stopped?.length || 0} 个节点，所选节点均已离线；身份、数据和实验记录已保留。`
+  } else notification.value = '节点启动请求已完成，正在等待健康检查；在线状态以后端实际结果为准。'
+  return true
+}
+
 async function startRun(config) {
   if (submitting.value || deploying.value) return null
+  if (status.value?.deployment === 'lan') {
+    const reason = consentError(participation.value, config, participationError.value)
+    if (reason) { operationError.value = reason; return null }
+  }
   const metadataError = experimentMetadataError(config)
   if (metadataError) { operationError.value = metadataError; return null }
   const modelError = modelConfigurationError(config)
@@ -377,10 +513,13 @@ export const consoleStore = {
   status, connected, connectionError, initialLoading,
   runs, listError, selectedRunId, inspectionRound, currentRun, loadingRun, runError,
   lastUpdated, operationError, notification,
-  preparing, selectedDataset, submitting, deploying, stopping, stopRequestedId,
+  preparing, selectedDataset, submitting, deploying, stopping, stopRequestedId, nodeOperation, nodeOperationReason,
   recovery, recovering,
   registration, registrationMachine, registrationLoading,
+  participation, participationError, participationBusy,
   hasActiveRun, datasetReady, nodes, runCache,
-  start, stop, chooseRun, refreshRuns, refreshStatus, deployNodes, prepareData, startRun, stopRun,
+  start, stop, chooseRun, refreshRuns, refreshStatus, deployNodes, operateNodes, prepareData, startRun, stopRun,
   resumeRun, loadRecovery, loadRegistration, clearMessages,
+  loadParticipation, inviteParticipation, respondParticipation, cancelParticipation,
+  inviteRecoveryRun,
 }

@@ -379,6 +379,8 @@ def choose_participants(online,mode,excluded_clouds,*,batch_strategy='regroup',b
 class RunManager:
     def __init__(self,runtime):
         self.runtime=Path(runtime).resolve(); self.runtime.mkdir(parents=True,exist_ok=True)
+        from dgfl.participation import Participation
+        self.participation=Participation(self.runtime)
         self.lock=threading.RLock(); self.active=None; self.stop_event=threading.Event(); self.records={}
         # Stop bookkeeping: when the request arrived, which stage honoured it, and
         # which stage the run is in now. Kept separately from the event so the
@@ -596,6 +598,7 @@ class RunManager:
         on the new execution rather than re-derived, so the continuation provably
         begins from the checkpoint a reader can inspect.
         """
+        consent_config=dict(config)
         config={key:value for key,value in normalize_metadata(config).items()
                 if key not in ('model_name','model_descriptor','bits','scale') or value is not None}
         if resume_from:
@@ -731,9 +734,14 @@ class RunManager:
                 record['evidence']['proof_parameters']=crs_evidence
                 record['evidence']['proof_settings'].pop('proof_block_size',None)
                 record['evidence']['proof_settings']['proof_crs_hash']=config['proof_crs_hash']
+            session_id=(self.participation.begin(consent_config,run_id) if cluster.get('deployment')=='lan' else None)
+            if session_id:
+                record['evidence']['participation']={'session_id':session_id,'all_hosts_approved':True}
             try:
                 self._save(record)
             except Exception as exc:
+                record['status']='failed'; record['error']='任务初始记录无法保存，任务未启动'
+                self._publish_participation(record)
                 raise ValueError('任务初始记录无法保存，任务未启动：'+self._failure_detail(exc)) from exc
             self.records[run_id]=record; self.active=run_id; self.stop_event.clear()
             # The stop bookkeeping belongs to the run, not to the manager: a previous
@@ -758,8 +766,19 @@ class RunManager:
                     record['events'][-1]['message']=record['error']
                 finally:
                     self.active=None
+                    self._publish_participation(record)
                 raise ValueError(record['error']) from exc
             return {'run_id':run_id,'name':record['name'],'description':record['description'],'status':'queued'}
+
+    def _publish_participation(self,record):
+        if not record.get('evidence',{}).get('participation'):
+            return
+        try:
+            self.participation.publish(record)
+        except (ValueError,OSError,RuntimeError,httpx.HTTPError) as exc:
+            # A terminal record remains authoritative even if a host disconnects.
+            # The control worker retries its last public state while it is alive.
+            record.setdefault('evidence',{})['participation_sync_error']=type(exc).__name__
 
     def checkpoints(self,run_id):
         """Public summaries of a run's checkpoints, without any model vector."""
@@ -1748,3 +1767,4 @@ class RunManager:
                     self._monitors.pop(record['run_id'],None)
                     self._node_monitors.pop(record['run_id'],None)
                     if self.active==record['run_id']: self.active=None
+            self._publish_participation(record)

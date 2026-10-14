@@ -5,6 +5,8 @@ import { createContext, runInContext } from 'node:vm'
 import { compileScript, parse } from '@vue/compiler-sfc'
 import * as vue from 'vue'
 import { renderToString } from '@vue/server-renderer'
+import * as participation from '../src/lib/participation.js'
+import { modeName } from '../src/lib/format.js'
 
 /**
  * The recovery panel must never present an absent checkpoint as resumable.
@@ -33,7 +35,11 @@ function component(name, dependencies = {}) {
   return context.component
 }
 
+const ParticipationPanel = component('ParticipationPanel', {
+  ...participation, modeName, LabIcon: { props: ['name'], template: '<svg></svg>' },
+})
 const RecoveryPanel = component('RecoveryPanel', {
+  ...participation, ParticipationPanel,
   LabIcon: { props: ['name'], template: '<svg></svg>' },
 })
 
@@ -99,4 +105,35 @@ test('continuations already created for this run are named', async () => {
   })
   assert.match(html, /run-2/)
   assert.match(html, /run-3/)
+})
+
+test('LAN recovery invites the checkpoint configuration and waits for every current approval', async () => {
+  const config = { name: '恢复三机实验', mode: 'plain', rounds: 5 }
+  const recovery = { ...readable, participation_required: true, participation_config: config }
+  const reading = { enabled: true, role: 'coordinator', local_machine: 'A', session: {
+    session_id: 'restore-invite', config, status: 'pending', ready: false,
+    machines: [{ machine: 'A', state: 'approved' }, { machine: 'B', state: 'pending' }],
+  } }
+  const pending = await render({ recovery, participation: reading })
+  assert.match(pending, /邀请各主机确认恢复训练/)
+  assert.match(pending, /等待全部主机同意/)
+  assert.match(pending, /data-testid="resume-button"[^>]*disabled/)
+  reading.session.status = 'ready'; reading.session.ready = true
+  reading.session.machines[1].state = 'approved'
+  const ready = await render({ recovery, participation: reading })
+  assert.doesNotMatch(ready, /data-testid="resume-button"[^>]*disabled/)
+  assert.match(ready, /所有主机已同意/)
+  assert.doesNotMatch(ready, /查看本次实验设置|训练 \/ 测试样本/)
+  reading.session.config = { ...config, rounds: 6 }
+  const mismatch = await render({ recovery, participation: reading })
+  assert.match(mismatch, /当前实验配置/)
+  assert.match(mismatch, /data-testid="resume-button"[^>]*disabled/)
+})
+
+test('unavailable normalized recovery configuration never offers an invitation or resume', async () => {
+  const html = await render({ recovery: { ...readable, participation_required: true,
+    participation_config: null, participation_reason: '历史模型配置无法用于新训练' } })
+  assert.match(html, /历史模型配置无法用于新训练/)
+  assert.doesNotMatch(html, /invite-recovery-button/)
+  assert.match(html, /data-testid="resume-button"[^>]*disabled/)
 })
